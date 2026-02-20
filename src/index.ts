@@ -8,7 +8,7 @@ const EXBO_POSTS_BASE_URL =
 
 const DEFAULT_EXBO_AUTHORS = ["Marxont", "dolgodoomal", "zubzalinaza", "Kommynist", "Mediocree", "ZIV", 
   "Furgon", "pinkDog", "Slyshashchii", "barmeh34", "normist", "_Emelasha_", "ooveronika", "6eximmortal", 
-  "AngryKitty", "grin_d", "nastexe", "Erildorian"];
+  "AngryKitty", "grin_d", "nastexe", "Erildorian", "litrkerasina", "psychosociaI"];
 
 /** Exbo forum usernames to poll for new comments. Loaded from state file, falls back to DEFAULT_EXBO_AUTHORS. */
 let exboAuthors: string[] = [...DEFAULT_EXBO_AUTHORS];
