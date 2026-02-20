@@ -1,78 +1,78 @@
-# Telegram Exbo announcer bot
+# tg-bot-sc-announcer
 
-A Node.js Telegram bot that polls the Exbo forum API at a configurable interval and posts new comments to configured Telegram channels.
+Telegram bot that polls the [Exbo forum](https://forum.exbo.ru) API for new comments by configured authors and posts them to one or more Telegram channels or groups.
 
-## What you need
+## What it does
 
-- **Node.js 18+**
-- A **Telegram bot token** from [@BotFather](https://t.me/BotFather): create a bot with `/newbot`, copy the token.
-- **Channel IDs** (or chat IDs) where the bot should post. Add the bot to the channel as an admin with permission to post messages.
+- Polls Exbo forum comments for a list of usernames at a configurable interval
+- Sends new comments to Telegram as formatted messages (author, date, snippet, link)
+- Persists “last seen” post IDs so only new comments are announced
+- Supports admin-only Telegram commands to list/add/remove tracked authors
+- Optional HTTP health-check server (e.g. for PaaS readiness probes)
+
+## Stack
+
+- **Runtime:** Node.js 18+
+- **Language:** TypeScript
+- **Telegram:** [Telegraf](https://telegraf.js.org/)
+- **Config:** `dotenv` + environment variables
+
+## Prerequisites
+
+- Node.js 18 or higher
+- A [Telegram Bot](https://t.me/BotFather) token
+- One or more Telegram channel/group IDs where the bot can post (and is added as admin)
 
 ## Setup
 
-1. **Create a Telegram bot**
+```bash
+# Clone and install
+git clone https://github.com/Falxns/tg-bot-sc-announcer.git
+cd tg-bot-sc-announcer
+npm install
 
-   - Open [@BotFather](https://t.me/BotFather) in Telegram.
-   - Send `/newbot`, follow the prompts, and copy the **token** (this is `TELEGRAM_BOT_TOKEN`).
+# Copy env example and fill in your values
+cp .env.example .env
+```
 
-2. **Add the bot to your channel and get the channel ID**
+Edit `.env`:
 
-   - Add the bot to your channel as an **administrator** with permission to **post messages**.
-   - Channel IDs are usually negative numbers (e.g. `-1001234567890`). To get the ID: send `/chatid` to the bot from that chat (or forward a message from the channel to [@userinfobot](https://t.me/userinfobot)).
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TELEGRAM_BOT_TOKEN` | Yes | Bot token from [@BotFather](https://t.me/BotFather) |
+| `TELEGRAM_CHANNEL_IDS` | Yes | Comma-separated chat IDs (e.g. `-1001234567890`) |
+| `POLL_INTERVAL_MS` | No | Poll interval in ms (default: 300000 = 5 min), clamped 1 min–24 h |
+| `AUTHOR_REQUEST_DELAY_MS` | No | Delay between Exbo API requests per author (default: 1000) |
+| `LAST_SEEN_STATE_FILE` | No | Path to JSON state file (default: `last-seen-posts.json`) |
+| `ADMIN_USER_IDS` | No | Comma-separated Telegram user IDs; if empty, all users can use admin commands |
+| `PORT` | No | If set, starts an HTTP server on this port that responds `ok` (for health checks) |
+| `LOG_LEVEL` | No | `info` (default), `debug`, or `warn` |
 
-3. **Configure the project**
+See `.env.example` for more optional variables.
 
-   ```bash
-   npm install
-   cp .env.example .env
-   ```
+## Run
 
-   Edit `.env`:
+```bash
+# Build and run
+npm run build
+npm start
+```
 
-   - `TELEGRAM_BOT_TOKEN` – your Telegram bot token (required).
-   - `TELEGRAM_CHANNEL_IDS` – comma-separated chat/channel IDs, e.g. `-1001234567890,-1009876543210` (required).
-   - `POLL_INTERVAL_MS` – optional; milliseconds between polls (default: 300000 = 5 minutes).
-   - Authors to poll can be managed via bot commands (see below) or loaded from the state file.
+Development (run without building):
 
-   **Optional env vars:**
+```bash
+npm run dev
+```
 
-   - `AUTHOR_REQUEST_DELAY_MS` – delay between Exbo API requests per author (default: 1000).
-   - `TELEGRAM_SEND_DELAY_MS` – delay between sending messages to channels (default: 500).
-   - `LAST_SEEN_STATE_FILE` – path to JSON state file (default: `last-seen-posts.json`).
-   - `POSTS_PER_AUTHOR` – max number of post IDs to keep per author (default: 5).
-   - `MAX_SNIPPET_LEN` – max length of post snippet in characters (default: 1000).
-   - `LOG_LEVEL` – `info`, `warn`, or `error`; reduces log noise when set to `warn` or `error` (default: `info`).
-   - `SKIP_SEND_POST_OLDER_THAN_MS` – if set > 0, posts older than this many ms are not sent to Telegram on first run or restart; they are only saved in state. Default: 3600000 (1 hour). Set 0 to disable.
-   - `ADMIN_USER_IDS` – comma-separated Telegram user IDs allowed to use `/addauthor`, `/removeauthor`, `/listauthors`, `/chatid`. If empty, anyone can use them.
+## Telegram commands (admin)
 
-4. **Build and run**
+- `/chatid` — Reply with the current chat ID (useful to get channel/group IDs for `TELEGRAM_CHANNEL_IDS`)
+- `/listauthors` — List tracked Exbo usernames
+- `/addauthor <username>` — Start tracking an Exbo user
+- `/removeauthor <username>` — Stop tracking an Exbo user
 
-   ```bash
-   npm run build
-   npm start
-   ```
+Author list and “last seen” state are saved to the state file and restored on restart.
 
-   Or in development:
+## License
 
-   ```bash
-   npm run dev
-   ```
-
-## How it works
-
-- On startup, the bot loads state from `LAST_SEEN_STATE_FILE` (if present), then starts long polling for Telegram updates and runs the first Exbo forum poll immediately.
-- Every `POLL_INTERVAL_MS` milliseconds it fetches the Exbo posts API for each tracked author, parses new posts (skipping ones already seen), and sends formatted messages (HTML) to each chat in `TELEGRAM_CHANNEL_IDS`.
-- The bot listens for **commands**: `/chatid` (get current chat ID), `/listauthors`, `/addauthor <username>`, `/removeauthor <username>`. Use these to manage the list of Exbo authors and to discover channel IDs.
-
-## Scripts
-
-- `npm run build` – compile TypeScript to `dist/`
-- `npm start` – run the compiled bot
-- `npm run dev` – run with ts-node (no build step)
-
-## Free hosting (Render, Fly.io, Railway)
-
-- Set **environment variables** in the host’s dashboard (no `.env` on the server): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_IDS`, and any optional vars above.
-- **Build**: `npm install && npm run build`. **Start**: `node dist/index.js` (or `npm start`).
-- If the host sets `PORT` (e.g. Render), the bot starts a small **health-check HTTP server** on that port (GET `/` returns 200). Use an uptime monitor (e.g. UptimeRobot) to hit that URL so the service stays awake on Render’s free tier.
-- **State file**: On **ephemeral** disks (e.g. Render free tier), `last-seen-posts.json` is lost on restart; the bot will resend the last few posts after deploy. For **persistent state**, use **Fly.io** with a [volume](https://fly.io/docs/volumes/) and set `LAST_SEEN_STATE_FILE` to a path on the volume (e.g. `/data/last-seen-posts.json`), or use an external store (e.g. Redis) and adapt the code to read/write state there.
+MIT
