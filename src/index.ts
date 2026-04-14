@@ -6,9 +6,27 @@ import { Telegraf } from "telegraf";
 const EXBO_POSTS_BASE_URL =
   "https://forum.exbo.ru/api/posts?filter%5Btype%5D=comment&page%5Boffset%5D=0&page%5Blimit%5D=5&sort=-createdAt";
 
-const DEFAULT_EXBO_AUTHORS = ["Marxont", "dolgodoomal", "zubzalinaza", "Kommynist", "Mediocree", "ZIV", 
-  "Furgon", "pinkDog", "Slyshashchii", "barmeh34", "normist", "_Emelasha_", "ooveronika", "6eximmortal", 
-  "AngryKitty", "grin_d", "nastexe", "Erildorian", "litrkerasina", "psychosociaI"];
+const DEFAULT_EXBO_AUTHORS = [
+  "Marxont",
+  "dolgodoomal",
+  "zubzalinaza",
+  "Kommynist",
+  "Mediocree",
+  "ZIV",
+  "Furgon",
+  "pinkDog",
+  "barmeh34",
+  "normist",
+  "_Emelasha_",
+  "ooveronika",
+  "6eximmortal",
+  "AngryKitty",
+  "grin_d",
+  "nastexe",
+  "Erildorian",
+  "litrkerasina",
+  "psychosociaI",
+];
 
 /** Exbo forum usernames to poll for new comments. Loaded from state file, falls back to DEFAULT_EXBO_AUTHORS. */
 let exboAuthors: string[] = [...DEFAULT_EXBO_AUTHORS];
@@ -117,10 +135,7 @@ bot.command("removeauthor", async (ctx) => {
 });
 
 function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 async function sendToTelegramChannels(messages: string[]): Promise<void> {
@@ -257,7 +272,10 @@ async function loadState(path: string): Promise<void> {
       }
     }
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT" && (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn")) {
+    if (
+      (err as NodeJS.ErrnoException).code !== "ENOENT" &&
+      (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn")
+    ) {
       console.warn("Could not load state, starting fresh:", err);
     }
   }
@@ -284,7 +302,7 @@ function parseExboPostsResponse(
   data: unknown,
   knownIds: Set<string> | undefined,
   authorDisplayName: string,
-  skipSendIfOlderThanMs: number
+  skipSendIfOlderThanMs: number,
 ): { messages: string[]; newIds: string[] } {
   if (data === null || typeof data !== "object") return { messages: [], newIds: [] };
   const obj = data as Record<string, unknown>;
@@ -327,19 +345,20 @@ function parseExboPostsResponse(
     const rels = (p.relationships as Record<string, unknown>) ?? {};
     const discussionData = (rels.discussion as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
     const discussionId = discussionData?.id as string | undefined;
-    const slug = discussionId ? discussionSlugById.get(String(discussionId)) ?? discussionId : "?";
+    const slug = discussionId ? (discussionSlugById.get(String(discussionId)) ?? discussionId) : "?";
     const number = (attrs.number as number) ?? "?";
     const createdAt = (attrs.createdAt as string) ?? "";
     const createdAtMs = createdAt ? new Date(createdAt).getTime() : 0;
     const isOld =
-      skipSendIfOlderThanMs > 0 &&
-      (Number.isNaN(createdAtMs) || Date.now() - createdAtMs > skipSendIfOlderThanMs);
+      skipSendIfOlderThanMs > 0 && (Number.isNaN(createdAtMs) || Date.now() - createdAtMs > skipSendIfOlderThanMs);
     if (isOld) {
       newIds.push(postId);
       continue;
     }
     const contentHtml = (attrs.contentHtml as string) ?? "";
-    const dateStr = createdAt ? new Date(createdAt).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" }).replace("T", " ").slice(0, 20) : "";
+    const dateStr = createdAt
+      ? new Date(createdAt).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" }).replace("T", " ").slice(0, 20)
+      : "";
     const link = discussionId ? `${baseUrl}/d/${discussionId}-${slug}/${number}` : "";
     let snippetLen = MAX_SNIPPET_LEN;
     let line: string;
@@ -353,9 +372,7 @@ function parseExboPostsResponse(
     }
     const imageUrls = getImageUrlsFromHtml(contentHtml);
     if (imageUrls.length > 0 && line.length <= MAX_MESSAGE_LEN) {
-      const imageLinks = imageUrls
-        .map((url) => `<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>`)
-        .join("\n");
+      const imageLinks = imageUrls.map((url) => `<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>`).join("\n");
       const imageBlock = "\n\nImage: " + imageLinks;
       if (line.length + imageBlock.length <= MAX_MESSAGE_LEN) line += imageBlock;
     }
@@ -446,18 +463,26 @@ if (PORT) {
   });
 }
 
-bot.launch(async () => {
-  await loadState(LAST_SEEN_STATE_FILE);
-  if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
-    console.log("Bot started.");
-    console.log("Polling Exbo forum every", POLL_INTERVAL_MS / 1000, "seconds. Sending to", chatIds.length, "Telegram chat(s).");
-  }
-  pollExboAndAnnounce();
-  pollIntervalId = setInterval(pollExboAndAnnounce, POLL_INTERVAL_MS);
-}).catch((err) => {
-  console.error("Bot failed to start:", err);
-  process.exit(1);
-});
+bot
+  .launch(async () => {
+    await loadState(LAST_SEEN_STATE_FILE);
+    if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
+      console.log("Bot started.");
+      console.log(
+        "Polling Exbo forum every",
+        POLL_INTERVAL_MS / 1000,
+        "seconds. Sending to",
+        chatIds.length,
+        "Telegram chat(s).",
+      );
+    }
+    pollExboAndAnnounce();
+    pollIntervalId = setInterval(pollExboAndAnnounce, POLL_INTERVAL_MS);
+  })
+  .catch((err) => {
+    console.error("Bot failed to start:", err);
+    process.exit(1);
+  });
 
 process.once("SIGINT", () => void shutdown());
 process.once("SIGTERM", () => void shutdown());
