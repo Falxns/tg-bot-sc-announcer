@@ -5,7 +5,7 @@ Telegram bot that polls the [Exbo forum](https://forum.exbo.ru) API for new comm
 ## What it does
 
 - Polls Exbo forum comments for a list of usernames at a configurable interval
-- Sends new comments to Telegram as formatted messages (author, date, snippet, link)
+- Sends new comments as structured HTML: bell line with linked author, stacked “{name} написал:” quote blocks (nested replies first), then “{author} ответил:” with one blockquote where `/u/…` mentions become `@name` profile links, inline image links, author hashtag, and “🔗 Ссылка на сообщение” when the post URL exists (no italic formatting)
 - Persists “last seen” post IDs so only new comments are announced
 - Supports admin-only Telegram commands to list/add/remove tracked authors
 - Optional HTTP health-check server (e.g. for PaaS readiness probes)
