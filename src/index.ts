@@ -208,6 +208,10 @@ function exboApiPostUrl(postId: string): string {
   return `${EXBO_FORUM_BASE}/api/posts/${id}?include=user`;
 }
 
+function exboApiDiscussionUrl(discussionId: string): string {
+  return `${EXBO_FORUM_BASE}/api/discussions/${encodeURIComponent(discussionId)}`;
+}
+
 function forumProfileUrl(username: string): string {
   return `${EXBO_FORUM_BASE}/u/${encodeURIComponent(username)}`;
 }
@@ -430,6 +434,58 @@ async function fetchExboPostJson(postId: string): Promise<unknown | null> {
   return null;
 }
 
+function parseFlarumDiscussionResource(json: unknown): string | null {
+  if (json === null || typeof json !== "object") return null;
+  const obj = json as Record<string, unknown>;
+  const data = obj.data as Record<string, unknown> | undefined;
+  if (!data || String(data.type) !== "discussions") return null;
+  const attrs = data.attributes as Record<string, unknown> | undefined;
+  const title = (attrs?.title as string)?.trim();
+  return title || null;
+}
+
+async function fetchExboDiscussionJson(discussionId: string): Promise<unknown | null> {
+  const url = exboApiDiscussionUrl(discussionId);
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= EXBO_FETCH_RETRIES; attempt++) {
+    if (attempt > 0) await sleep(EXBO_FETCH_RETRY_DELAY_MS);
+    try {
+      const res = await fetch(url);
+      if (res.ok) return (await res.json()) as unknown;
+      lastErr = new Error(`${res.status} ${res.statusText}`);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
+    console.warn("Discussion fetch failed for", discussionId, lastErr);
+  }
+  return null;
+}
+
+/**
+ * Resolves discussion title: `included` map first, else GET /api/discussions/:id (cached per batch).
+ */
+async function getDiscussionTitle(
+  discussionId: string | undefined,
+  discussionTitleById: Map<string, string>,
+  discussionFetchCache: Map<string, Promise<string | null>>,
+): Promise<string | null> {
+  if (!discussionId) return null;
+  const id = String(discussionId);
+  const fromIncluded = discussionTitleById.get(id)?.trim();
+  if (fromIncluded) return fromIncluded;
+  let p = discussionFetchCache.get(id);
+  if (!p) {
+    p = (async () => {
+      const json = await fetchExboDiscussionJson(id);
+      return parseFlarumDiscussionResource(json);
+    })();
+    discussionFetchCache.set(id, p);
+  }
+  return await p;
+}
+
 /** Truncates forum HTML for a synthetic quote block (plain cap; keeps short HTML when under cap). */
 function truncateForumHtmlForMentionQuote(html: string, maxPlainChars: number): string {
   const withImg = replaceImgTagsWithAnchors(html);
@@ -586,16 +642,22 @@ function injectQuotePostMentionPlaceholders(
  * Formats Exbo comment HTML for Telegram: bell header, quoted blocks (Name написал + blockquote),
  * author reply (написал if no quotes else ответил). Top-level blockquotes use depth-aware parsing so
  * nested `<blockquote>` stays inside one quote. PostMentions inside quotes resolve to @display profile links.
- * No <i>. See parseBlockquoteSegments.
+ * Optional `discussionTitle` is shown after the bell header as `В теме: ` plus a bold title when the comment body is non-empty;
+ * snippet truncation budget for `middle` is reduced by that line’s visible length. No <i>. See parseBlockquoteSegments.
  */
 async function formatCommentTelegramHtml(
   authorDisplayName: string,
   contentHtml: string,
   maxLen: number,
   postCache: Map<string, Promise<ParsedFlarumPost | null>>,
+  discussionTitle: string | null | undefined,
 ): Promise<string> {
   const profileUrl = forumProfileUrl(authorDisplayName);
-  const header = `<b>🔔 Новый комментарий от <a href="${escapeHtml(profileUrl)}">${escapeHtml(authorDisplayName)}</a></b>`;
+  const header = `🔔 Новый комментарий от <b><a href="${escapeHtml(profileUrl)}">${escapeHtml(authorDisplayName)}</a></b>`;
+  const titleTrimmed = discussionTitle?.trim();
+  const titleLine = titleTrimmed ? `в теме: <b>${escapeHtml(titleTrimmed)}</b>` : "";
+  const titleVisibleLen = titleLine ? visibleTextLength(titleLine) : 0;
+  const effectiveMaxLen = Math.max(0, maxLen - titleVisibleLen);
 
   const withImgs = replaceImgTagsWithAnchors(contentHtml);
   const { guarded, restores } = guardImageAnchorLinks(withImgs);
@@ -660,13 +722,14 @@ async function formatCommentTelegramHtml(
     return header;
   }
 
-  if (visibleTextLength(middle) > maxLen) {
+  if (visibleTextLength(middle) > effectiveMaxLen) {
     const plain = stripHtml(withImgs);
-    const truncated = plain.length > maxLen ? plain.slice(0, maxLen) + "…" : plain;
+    const cap = effectiveMaxLen;
+    const truncated = plain.length > cap ? plain.slice(0, cap) + "…" : plain;
     middle = telegramBlockquote(escapeHtml(truncated));
   }
 
-  let full = `${header}\n\n${middle}`;
+  let full = titleLine ? `${header} ${titleLine}\n\n${middle}` : `${header}\n\n${middle}`;
   full = unguardMentionAnchorLinks(full, mentionRestores);
   full = unguardImageAnchorLinks(full, restores);
   return full;
@@ -815,6 +878,7 @@ async function parseExboPostsResponse(
   if (!Array.isArray(dataArr) || dataArr.length === 0) return { messages: [], newIds: [] };
 
   const discussionSlugById = new Map<string, string>();
+  const discussionTitleById = new Map<string, string>();
   for (const inc of included) {
     const item = inc as Record<string, unknown>;
     if (item.type === "discussions") {
@@ -822,12 +886,15 @@ async function parseExboPostsResponse(
       const attrs = item.attributes as Record<string, unknown> | undefined;
       const slug = (attrs?.slug as string) ?? id;
       discussionSlugById.set(id, String(slug));
+      const title = (attrs?.title as string)?.trim();
+      if (title) discussionTitleById.set(id, title);
     }
   }
 
   const messages: string[] = [];
   const newIds: string[] = [];
   const postMentionCache = new Map<string, Promise<ParsedFlarumPost | null>>();
+  const discussionFetchCache = new Map<string, Promise<string | null>>();
 
   // Oldest first so when we send to the channel, time flow matches reality (old posts appear before new)
   const sorted = [...dataArr].sort((a, b) => {
@@ -865,10 +932,17 @@ async function parseExboPostsResponse(
     const tagLine = telegramHashtagFromAuthor(authorDisplayName);
     const linkAnchor = link ? `<a href="${escapeHtml(link)}">🔗 Ссылка на сообщение</a>` : "";
     const footer = [tagLine, linkAnchor].filter(Boolean).join("\n");
+    const discussionTitle = await getDiscussionTitle(discussionId, discussionTitleById, discussionFetchCache);
     let snippetLen = MAX_SNIPPET_LEN;
     let line: string;
     while (true) {
-      const bodyHtml = await formatCommentTelegramHtml(authorDisplayName, contentHtml, snippetLen, postMentionCache);
+      const bodyHtml = await formatCommentTelegramHtml(
+        authorDisplayName,
+        contentHtml,
+        snippetLen,
+        postMentionCache,
+        discussionTitle,
+      );
       line = footer ? `${bodyHtml}\n\n${footer}` : bodyHtml;
       if (line.length <= MAX_MESSAGE_LEN || snippetLen <= 0) break;
       snippetLen = Math.max(0, snippetLen - 200);

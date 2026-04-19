@@ -5,7 +5,7 @@ Telegram bot that polls the [Exbo forum](https://forum.exbo.ru) API for new comm
 ## What it does
 
 - Polls Exbo forum comments for a list of usernames at a configurable interval
-- Sends new comments as structured HTML: bell line with linked author, stacked “{name} написал:” quote blocks (nested replies first), then “{author} ответил:” with one blockquote where `/u/…` mentions become `@name` profile links, inline image links, author hashtag, and “🔗 Ссылка на сообщение” when the post URL exists (no italic formatting)
+- Sends new comments as Telegram HTML: one opening line `🔔 Новый комментарий от` with a **bold** linked forum author; if the discussion title is resolved (from the API `included` data or `GET /api/discussions/:id`), the **same line** adds `в теме:` plus a **bold** title (plain prefix, bold title only). Then a blank line and the body—stacked `{name} написал:` headers each followed by an **expandable** blockquote for quoted content (nested forum `<blockquote>` pairs are kept inside one quote). Then `{author} написал:` or `{author} ответил:` with an expandable blockquote for the new text (`/u/…` → `@Display` profile links, `/d/…` kept as links, uploads as `Изображение` links). Footer: author hashtag and `🔗 Ссылка на сообщение` when the post URL exists. Snippet budget subtracts the discussion line’s visible length. No italic markup; optional logging and mention/title fetch limits—see `.env.example`.
 - Persists “last seen” post IDs so only new comments are announced
 - Supports admin-only Telegram commands to list/add/remove tracked authors
 - Optional HTTP health-check server (e.g. for PaaS readiness probes)
