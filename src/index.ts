@@ -164,29 +164,70 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-async function sendToTelegramChannels(messages: string[]): Promise<void> {
-  if (messages.length === 0) return;
+/** One announcement: HTML text plus forum image URLs to send as Telegram photos (same order as `Изображение N` in text). */
+type AnnouncePayload = {
+  textHtml: string;
+  imageUrls: string[];
+};
+
+const TELEGRAM_MEDIA_GROUP_MAX = 10;
+
+async function sendWith429Retry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err: unknown) {
+    const code = (err as { code?: number })?.code;
+    if (code === 429) {
+      await sleep(5000);
+      return await fn();
+    }
+    throw err;
+  }
+}
+
+async function sendAnnouncementPhotosToChat(chatId: string, urls: string[]): Promise<void> {
+  if (urls.length === 0) return;
+  let offset = 0;
+  while (offset < urls.length) {
+    if (offset > 0) await sleep(TELEGRAM_SEND_DELAY_MS);
+    const rest = urls.length - offset;
+    if (rest === 1) {
+      const u = urls[offset]!;
+      await sendWith429Retry(() => bot.telegram.sendPhoto(chatId, u));
+      offset += 1;
+      continue;
+    }
+    const take = Math.min(TELEGRAM_MEDIA_GROUP_MAX, rest);
+    const chunk = urls.slice(offset, offset + take);
+    const media = chunk.map((url) => ({ type: "photo" as const, media: url }));
+    await sendWith429Retry(() => bot.telegram.sendMediaGroup(chatId, media));
+    offset += take;
+  }
+}
+
+async function sendToTelegramChannels(announcements: AnnouncePayload[]): Promise<void> {
+  if (announcements.length === 0) return;
   const sendOptions = {
     parse_mode: "HTML" as const,
     link_preview_options: { is_disabled: true },
   };
   for (const chatId of chatIds) {
     try {
-      for (let i = 0; i < messages.length; i++) {
+      for (let i = 0; i < announcements.length; i++) {
         if (i > 0) await sleep(TELEGRAM_SEND_DELAY_MS);
+        const payload = announcements[i];
         try {
-          await bot.telegram.sendMessage(chatId, messages[i], sendOptions);
+          await sendWith429Retry(() => bot.telegram.sendMessage(chatId, payload.textHtml, sendOptions));
         } catch (sendErr: unknown) {
-          const code = (sendErr as { code?: number })?.code;
-          if (code === 429) {
-            await sleep(5000);
-            await bot.telegram.sendMessage(chatId, messages[i], sendOptions);
-          } else {
-            throw sendErr;
-          }
+          throw sendErr;
+        }
+        try {
+          await sendAnnouncementPhotosToChat(chatId, payload.imageUrls);
+        } catch (photoErr) {
+          console.error("Failed to send Telegram photos for chat", chatId, photoErr);
         }
       }
-      if (messages.length > 0) await sleep(TELEGRAM_SEND_DELAY_MS);
+      if (announcements.length > 0) await sleep(TELEGRAM_SEND_DELAY_MS);
     } catch (err) {
       console.error("Failed to send to Telegram chat", chatId, err);
     }
@@ -227,19 +268,33 @@ function telegramHashtagFromAuthor(name: string): string {
   return tag ? `#${tag}` : "";
 }
 
-/** Replaces each <img src="..."> with a Telegram HTML image link (label Изображение). */
-function replaceImgTagsWithAnchors(html: string): string {
+/** Replaces each `<img src>` with `<a href>Изображение N</a>` in document order (`N` = 1.. over valid `src`). */
+function replaceImgTagsWithNumberedAnchors(html: string): string {
+  let n = 0;
   return html.replace(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi, (_m, src: string) => {
-    const url = String(src).replace(/\s+/g, "").trim();
-    if (!url) return "";
-    return `<a href="${escapeHtml(url)}">Изображение</a>`;
+    const raw = String(src).replace(/\s+/g, "").trim();
+    if (!raw) return "";
+    const url = resolveAbsForumUrl(raw);
+    n += 1;
+    return `<a href="${escapeHtml(url)}">Изображение ${n}</a>`;
   });
 }
 
-/** Temporarily removes image <a> tags so plain-HTML processing does not strip their hrefs. */
+/** Collects `href`s of image placeholder anchors (`Изображение` + optional number) in HTML order. */
+function extractImageUrlsFromAnnouncementHtml(html: string): string[] {
+  const urls: string[] = [];
+  const re = /<a\s+href=["']([^"']+)["'][^>]*>\s*Изображение(?:\s+\d+)?\s*<\/a>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    urls.push(resolveAbsForumUrl(m[1]));
+  }
+  return urls;
+}
+
+/** Temporarily removes image `<a>` tags so plain-HTML processing does not strip their hrefs. */
 function guardImageAnchorLinks(html: string): { guarded: string; restores: string[] } {
   const restores: string[] = [];
-  const guarded = html.replace(/<a\s+href=["']([^"']+)["']\s*>\s*Изображение\s*<\/a>/gi, (full) => {
+  const guarded = html.replace(/<a\s+href=["']([^"']+)["'][^>]*>\s*Изображение(?:\s+\d+)?\s*<\/a>/gi, (full) => {
     restores.push(full);
     return `\x7fI${restores.length - 1}I\x7f`;
   });
@@ -486,11 +541,10 @@ async function getDiscussionTitle(
   return await p;
 }
 
-/** Truncates forum HTML for a synthetic quote block (plain cap; keeps short HTML when under cap). */
+/** Truncates forum HTML for a synthetic quote block (plain cap; keeps `<img>` when under cap for global image pass). */
 function truncateForumHtmlForMentionQuote(html: string, maxPlainChars: number): string {
-  const withImg = replaceImgTagsWithAnchors(html);
-  const plain = stripHtml(withImg);
-  if (plain.length <= maxPlainChars) return withImg.trim();
+  const plain = stripHtml(html);
+  if (plain.length <= maxPlainChars) return html.trim();
   return `${escapeHtml(plain.slice(0, maxPlainChars))}…`;
 }
 
@@ -651,7 +705,7 @@ async function formatCommentTelegramHtml(
   maxLen: number,
   postCache: Map<string, Promise<ParsedFlarumPost | null>>,
   discussionTitle: string | null | undefined,
-): Promise<string> {
+): Promise<AnnouncePayload> {
   const profileUrl = forumProfileUrl(authorDisplayName);
   const header = `🔔 Новый комментарий от <b><a href="${escapeHtml(profileUrl)}">${escapeHtml(authorDisplayName)}</a></b>`;
   const titleTrimmed = discussionTitle?.trim();
@@ -659,7 +713,7 @@ async function formatCommentTelegramHtml(
   const titleVisibleLen = titleLine ? visibleTextLength(titleLine) : 0;
   const effectiveMaxLen = Math.max(0, maxLen - titleVisibleLen);
 
-  const withImgs = replaceImgTagsWithAnchors(contentHtml);
+  const withImgs = replaceImgTagsWithNumberedAnchors(contentHtml);
   const { guarded, restores } = guardImageAnchorLinks(withImgs);
   const segments = parseBlockquoteSegments(guarded);
   const quoteInners: string[] = [];
@@ -719,7 +773,7 @@ async function formatCommentTelegramHtml(
   middle += authorReply;
 
   if (!middle.trim()) {
-    return header;
+    return { textHtml: header, imageUrls: [] };
   }
 
   if (visibleTextLength(middle) > effectiveMaxLen) {
@@ -732,7 +786,8 @@ async function formatCommentTelegramHtml(
   let full = titleLine ? `${header} ${titleLine}\n\n${middle}` : `${header}\n\n${middle}`;
   full = unguardMentionAnchorLinks(full, mentionRestores);
   full = unguardImageAnchorLinks(full, restores);
-  return full;
+  const imageUrls = extractImageUrlsFromAnnouncementHtml(full);
+  return { textHtml: full, imageUrls };
 }
 
 type BlockSegment = { type: "text" | "quote"; html: string };
@@ -869,7 +924,7 @@ async function parseExboPostsResponse(
   knownIds: Set<string> | undefined,
   authorDisplayName: string,
   skipSendIfOlderThanMs: number,
-): Promise<{ messages: string[]; newIds: string[] }> {
+): Promise<{ messages: AnnouncePayload[]; newIds: string[] }> {
   if (data === null || typeof data !== "object") return { messages: [], newIds: [] };
   const obj = data as Record<string, unknown>;
   const dataArr = obj.data as unknown[] | undefined;
@@ -891,7 +946,7 @@ async function parseExboPostsResponse(
     }
   }
 
-  const messages: string[] = [];
+  const messages: AnnouncePayload[] = [];
   const newIds: string[] = [];
   const postMentionCache = new Map<string, Promise<ParsedFlarumPost | null>>();
   const discussionFetchCache = new Map<string, Promise<string | null>>();
@@ -935,21 +990,22 @@ async function parseExboPostsResponse(
     const discussionTitle = await getDiscussionTitle(discussionId, discussionTitleById, discussionFetchCache);
     let snippetLen = MAX_SNIPPET_LEN;
     let line: string;
+    let bodyPayload: AnnouncePayload;
     while (true) {
-      const bodyHtml = await formatCommentTelegramHtml(
+      bodyPayload = await formatCommentTelegramHtml(
         authorDisplayName,
         contentHtml,
         snippetLen,
         postMentionCache,
         discussionTitle,
       );
-      line = footer ? `${bodyHtml}\n\n${footer}` : bodyHtml;
+      line = footer ? `${bodyPayload.textHtml}\n\n${footer}` : bodyPayload.textHtml;
       if (line.length <= MAX_MESSAGE_LEN || snippetLen <= 0) break;
       snippetLen = Math.max(0, snippetLen - 200);
     }
     logExboHtmlDebug("Telegram formatted", authorDisplayName, postId, line);
     if (line.length <= MAX_MESSAGE_LEN) {
-      messages.push(line);
+      messages.push({ textHtml: line, imageUrls: bodyPayload.imageUrls });
       newIds.push(postId);
     }
   }
@@ -961,7 +1017,7 @@ async function pollExboAndAnnounce(): Promise<void> {
   if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
     console.log("Polling Exbo forum for new posts... ", new Date().toLocaleTimeString());
   }
-  const allMessages: string[] = [];
+  const allMessages: AnnouncePayload[] = [];
   let anyNewIds = false;
   for (let i = 0; i < exboAuthors.length; i++) {
     if (i > 0) await sleep(AUTHOR_REQUEST_DELAY_MS);
