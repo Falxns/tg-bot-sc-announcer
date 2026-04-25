@@ -2,6 +2,7 @@ import "dotenv/config";
 import { createServer } from "http";
 import { readFile, writeFile } from "fs/promises";
 import { Telegraf } from "telegraf";
+import { enqueueTelegramSend, flushTelegramSendQueue } from "./telegramSendQueue";
 
 const EXBO_POSTS_BASE_URL =
   "https://forum.exbo.ru/api/posts?filter%5Btype%5D=comment&page%5Boffset%5D=0&page%5Blimit%5D=5&sort=-createdAt";
@@ -1017,8 +1018,6 @@ async function pollExboAndAnnounce(): Promise<void> {
   if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
     console.log("Polling Exbo forum for new posts... ", new Date().toLocaleTimeString());
   }
-  const allMessages: AnnouncePayload[] = [];
-  let anyNewIds = false;
   for (let i = 0; i < exboAuthors.length; i++) {
     if (i > 0) await sleep(AUTHOR_REQUEST_DELAY_MS);
     const author = exboAuthors[i];
@@ -1046,7 +1045,6 @@ async function pollExboAndAnnounce(): Promise<void> {
       }
       const data = (await res.json()) as unknown;
       const { messages, newIds } = await parseExboPostsResponse(data, knownIds, author, SKIP_SEND_POST_OLDER_THAN_MS);
-      allMessages.push(...messages);
       // Append in oldest-first order so list stays [oldest, ..., newest] and shift() evicts the oldest
       for (let j = 0; j < newIds.length; j++) {
         const id = newIds[j];
@@ -1057,19 +1055,19 @@ async function pollExboAndAnnounce(): Promise<void> {
         }
         list.push(id);
         while (list.length > POSTS_PER_AUTHOR) list.shift();
-        anyNewIds = true;
+      }
+      if (messages.length > 0) {
+        enqueueTelegramSend(() => sendToTelegramChannels(messages));
+      }
+      // Persist after each author with new IDs so a crash later in the poll does not drop
+      // completed authors from disk (reduces duplicate Telegram risk on restart). Queued sends
+      // for this author may still be in flight; a crash right after save can mark seen without delivery.
+      if (newIds.length > 0) {
+        await saveState(LAST_SEEN_STATE_FILE);
       }
     } catch (err) {
       console.error("Failed to fetch or parse Exbo API for", author, ":", err);
     }
-  }
-
-  if (anyNewIds) {
-    await saveState(LAST_SEEN_STATE_FILE);
-  }
-
-  if (allMessages.length > 0) {
-    await sendToTelegramChannels(allMessages);
   }
 }
 
@@ -1077,6 +1075,7 @@ let pollIntervalId: ReturnType<typeof setInterval> | undefined;
 
 async function shutdown(): Promise<void> {
   if (pollIntervalId !== undefined) clearInterval(pollIntervalId);
+  await flushTelegramSendQueue();
   await saveState(LAST_SEEN_STATE_FILE);
   await bot.stop();
   process.exit(0);
