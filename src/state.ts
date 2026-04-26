@@ -37,6 +37,8 @@ export const DEFAULT_EXBO_AUTHORS = [
   "HiPPiE",
   "Opisth",
   "heheckler",
+  "WWtddw",
+  "Targgot",
 ];
 
 /** Exbo forum usernames to poll for new comments. Loaded from state file, falls back to DEFAULT_EXBO_AUTHORS. */
