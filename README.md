@@ -51,9 +51,13 @@ Edit `.env`:
 | `DISCORD_GUILD_ID` | Yes | Discord guild/server ID where slash commands are registered |
 | `POLL_INTERVAL_MS` | No | Poll interval in ms (default: 300000 = 5 min), clamped 1 min–24 h |
 | `AUTHOR_REQUEST_DELAY_MS` | No | Delay between Exbo API requests per author (default: 1000) |
-| `LAST_SEEN_STATE_FILE` | No | Path to JSON state file (default: `last-seen-posts.json`) |
+| `STATE_BACKEND` | No | State storage backend: `file` (default) or `upstash` |
+| `LAST_SEEN_STATE_FILE` | No | Path to JSON state file when `STATE_BACKEND=file` (default: `last-seen-posts.json`) |
+| `UPSTASH_REDIS_REST_URL` | No | Upstash Redis REST URL (required when `STATE_BACKEND=upstash`) |
+| `UPSTASH_REDIS_REST_TOKEN` | No | Upstash Redis REST token (required when `STATE_BACKEND=upstash`) |
+| `UPSTASH_STATE_KEY` | No | Redis key for serialized state JSON (default: `tg-bot-sc-announcer:state`) |
 | `ADMIN_USER_IDS` | No | Comma-separated Telegram user IDs; if empty, all users can use admin commands |
-| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post` and `/rolepanel` (when empty, any member who passes Discord’s command permissions may use them) |
+| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/rolepanel`, and `/linkpanel` (when empty, any member who passes Discord’s command permissions may use them) |
 | `DISCORD_ROLE_PANEL_CHANNEL_ID` | No | Restrict `/rolepanel` usage to one channel |
 | `DISCORD_BLOCK_INVITE_LINKS_GLOBAL` | No | `1`/`0` toggle for global Discord invite-link filtering |
 | `DISCORD_INVITE_ALLOWED_ROLE_IDS` | No | Roles allowed to bypass invite-link filter |
@@ -92,9 +96,10 @@ Author list and “last seen” state are saved to the state file and restored o
 ## Discord commands (admin/mod roles)
 
 - `/post channel:<channel> [image] [embed_*]` — optional **`embed_title`**, **`embed_description`**, **`embed_url`**, **`embed_color`** (`#RRGGBB` or decimal); optionally attach **one** file on the command, then a **modal** for optional body text (can be empty if you only send an attachment/embed); embed and file attach to the **first** posted message
-- `/rolepanel channel:<channel> role1:<role> [label1…label6] [role2…role6] [message] [embed_*]` — required **`channel`** + **`role1`** first (Discord rule); then optional extra roles/labels, **`message`**, and same **`embed_*`** as `/post**
+- `/rolepanel channel:<channel> role1:<role> [label1…label6] [role2…role6] [embed_*]` — required **`channel`** + **`role1`** first (Discord rule); then optional extra roles/labels and same **`embed_*`** as `/post`; command opens a modal for optional multiline message text
+- `/linkpanel channel:<channel> url1:<https://...> [label1…label5] [url2…url5] [embed_*]` — creates message buttons that open URLs (no role toggle), then opens a modal for optional multiline message text
 
-Role-panel definitions and moderation warning counters are saved in the same state file and restored on restart.
+Role-panel definitions and moderation warning counters are saved in shared bot state (`file` or Upstash, depending on `STATE_BACKEND`) and restored on restart.
 
 ## License
 

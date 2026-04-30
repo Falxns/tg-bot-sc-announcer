@@ -1,6 +1,6 @@
-import { readFile, writeFile } from "fs/promises";
 import { LOG_LEVEL, POSTS_PER_AUTHOR } from "./config";
 import type { DiscordRolePanelState } from "./discord/types";
+import { createStateStore } from "./stateStore";
 
 export const DEFAULT_EXBO_AUTHORS = [
   "Marxont",
@@ -42,7 +42,7 @@ export const DEFAULT_EXBO_AUTHORS = [
   "Targgot",
 ];
 
-/** Exbo forum usernames to poll for new comments. Loaded from state file, falls back to DEFAULT_EXBO_AUTHORS. */
+/** Exbo forum usernames to poll for new comments. Loaded from state storage, falls back to DEFAULT_EXBO_AUTHORS. */
 export let exboAuthors: string[] = [...DEFAULT_EXBO_AUTHORS];
 
 /** Replace the tracked author list (e.g. after /removeauthor). */
@@ -82,7 +82,9 @@ export function incrementDiscordWarning(guildId: string, userId: string): number
 
 export async function loadState(path: string): Promise<void> {
   try {
-    const data = await readFile(path, "utf-8");
+    const store = createStateStore(path);
+    const data = await store.readState();
+    if (!data) return;
     const parsed = JSON.parse(data) as unknown;
     if (Array.isArray(parsed)) {
       // Old format: plain array of ids – no per-author info, start with empty lastSeenByAuthor
@@ -146,13 +148,14 @@ export async function loadState(path: string): Promise<void> {
 
 export async function saveState(path: string): Promise<boolean> {
   try {
+    const store = createStateStore(path);
     const state = {
       lastSeenByAuthor: Object.fromEntries(lastSeenByAuthor),
       authors: exboAuthors,
       discordRolePanels: Object.fromEntries(discordRolePanels),
       discordModerationWarnings: Object.fromEntries(discordModerationWarnings),
     };
-    await writeFile(path, JSON.stringify(state, null, 2), "utf-8");
+    await store.writeState(JSON.stringify(state, null, 2));
     return true;
   } catch (err) {
     console.error("Failed to save state:", err);

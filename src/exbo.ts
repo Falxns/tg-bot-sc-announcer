@@ -761,6 +761,7 @@ export async function pollExboAndAnnounce(bot: Telegraf): Promise<void> {
   if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
     console.log("Polling Exbo forum for new posts... ", new Date().toLocaleTimeString());
   }
+  let stateDirty = false;
   for (let i = 0; i < exboAuthors.length; i++) {
     if (i > 0) await sleep(AUTHOR_REQUEST_DELAY_MS);
     const author = exboAuthors[i];
@@ -802,14 +803,14 @@ export async function pollExboAndAnnounce(bot: Telegraf): Promise<void> {
       if (messages.length > 0) {
         enqueueTelegramSend(() => sendToTelegramChannels(bot, messages));
       }
-      // Persist after each author with new IDs so a crash later in the poll does not drop
-      // completed authors from disk (reduces duplicate Telegram risk on restart). Queued sends
-      // for this author may still be in flight; a crash right after save can mark seen without delivery.
       if (newIds.length > 0) {
-        await saveState(LAST_SEEN_STATE_FILE);
+        stateDirty = true;
       }
     } catch (err) {
       console.error("Failed to fetch or parse Exbo API for", author, ":", err);
     }
+  }
+  if (stateDirty) {
+    await saveState(LAST_SEEN_STATE_FILE);
   }
 }
