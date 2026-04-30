@@ -1,7 +1,16 @@
 import "dotenv/config";
 import { createServer } from "http";
 import { Telegraf } from "telegraf";
-import { chatIds, LAST_SEEN_STATE_FILE, LOG_LEVEL, POLL_INTERVAL_MS, TELEGRAM_BOT_TOKEN } from "./config";
+import {
+  chatIds,
+  DISCORD_BOT_TOKEN,
+  DISCORD_GUILD_ID,
+  LAST_SEEN_STATE_FILE,
+  LOG_LEVEL,
+  POLL_INTERVAL_MS,
+  TELEGRAM_BOT_TOKEN,
+} from "./config";
+import { startDiscordBot, stopDiscordBot } from "./discord/bot";
 import { pollExboAndAnnounce } from "./exbo";
 import { loadState, saveState } from "./state";
 import { registerAdminCommands } from "./telegramCommands";
@@ -9,6 +18,14 @@ import { flushTelegramSendQueue } from "./telegramSendQueue";
 
 if (!TELEGRAM_BOT_TOKEN) {
   console.error("Missing TELEGRAM_BOT_TOKEN in environment. Set it in .env");
+  process.exit(1);
+}
+if (!DISCORD_BOT_TOKEN) {
+  console.error("Missing DISCORD_BOT_TOKEN in environment. Set it in .env");
+  process.exit(1);
+}
+if (!DISCORD_GUILD_ID) {
+  console.error("Missing DISCORD_GUILD_ID in environment. Set it in .env");
   process.exit(1);
 }
 
@@ -22,6 +39,7 @@ async function shutdown(): Promise<void> {
   if (pollIntervalId !== undefined) clearInterval(pollIntervalId);
   await flushTelegramSendQueue();
   await saveState(LAST_SEEN_STATE_FILE);
+  await stopDiscordBot();
   await bot.stop();
   process.exit(0);
 }
@@ -41,6 +59,7 @@ if (PORT) {
 bot
   .launch(async () => {
     await loadState(LAST_SEEN_STATE_FILE);
+    await startDiscordBot();
     if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
       console.log("Bot started.");
       console.log(
@@ -50,6 +69,7 @@ bot
         chatIds.length,
         "Telegram chat(s).",
       );
+      console.log("Discord bot is running in the same process.");
     }
     void pollExboAndAnnounce(bot);
     pollIntervalId = setInterval(() => void pollExboAndAnnounce(bot), POLL_INTERVAL_MS);

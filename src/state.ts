@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "fs/promises";
 import { LOG_LEVEL, POSTS_PER_AUTHOR } from "./config";
+import type { DiscordRolePanelState } from "./discord/types";
 
 export const DEFAULT_EXBO_AUTHORS = [
   "Marxont",
@@ -51,6 +52,33 @@ export function replaceExboAuthors(next: string[]): void {
 
 /** Per-author: list of last seen post IDs (oldest first). At most POSTS_PER_AUTHOR per author. */
 export const lastSeenByAuthor = new Map<string, string[]>();
+/** Persisted role panel definitions keyed by Discord message ID. */
+export const discordRolePanels = new Map<string, DiscordRolePanelState>();
+/** Per-user moderation warning counters keyed by `${guildId}:${userId}`. */
+export const discordModerationWarnings = new Map<string, number>();
+
+function warningKey(guildId: string, userId: string): string {
+  return `${guildId}:${userId}`;
+}
+
+export function setDiscordRolePanel(panel: DiscordRolePanelState): void {
+  discordRolePanels.set(panel.messageId, panel);
+}
+
+export function getDiscordRolePanel(messageId: string): DiscordRolePanelState | undefined {
+  return discordRolePanels.get(messageId);
+}
+
+export function deleteDiscordRolePanel(messageId: string): void {
+  discordRolePanels.delete(messageId);
+}
+
+export function incrementDiscordWarning(guildId: string, userId: string): number {
+  const key = warningKey(guildId, userId);
+  const next = (discordModerationWarnings.get(key) ?? 0) + 1;
+  discordModerationWarnings.set(key, next);
+  return next;
+}
 
 export async function loadState(path: string): Promise<void> {
   try {
@@ -74,6 +102,37 @@ export async function loadState(path: string): Promise<void> {
         const strAuthors = authors.filter((x): x is string => typeof x === "string");
         if (strAuthors.length > 0) exboAuthors = strAuthors;
       }
+      const panels = obj.discordRolePanels;
+      if (panels && typeof panels === "object" && !Array.isArray(panels)) {
+        for (const [messageId, value] of Object.entries(panels as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const panel = value as Record<string, unknown>;
+          const guildId = typeof panel.guildId === "string" ? panel.guildId : "";
+          const channelId = typeof panel.channelId === "string" ? panel.channelId : "";
+          const buttonsRaw = Array.isArray(panel.buttons) ? panel.buttons : [];
+          const buttons = buttonsRaw
+            .filter((x): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x))
+            .map((x) => ({
+              customId: typeof x.customId === "string" ? x.customId : "",
+              roleId: typeof x.roleId === "string" ? x.roleId : "",
+              label: typeof x.label === "string" ? x.label : "",
+            }))
+            .filter((x) => x.customId.startsWith("role:") && x.roleId.length > 0)
+            .map((x) => ({
+              ...x,
+              label: x.label.trim().length > 0 ? x.label.trim() : "\u200b",
+            }));
+          if (!guildId || !channelId || buttons.length === 0) continue;
+          discordRolePanels.set(messageId, { messageId, guildId, channelId, buttons });
+        }
+      }
+      const warnings = obj.discordModerationWarnings;
+      if (warnings && typeof warnings === "object" && !Array.isArray(warnings)) {
+        for (const [key, value] of Object.entries(warnings as Record<string, unknown>)) {
+          if (typeof value !== "number" || !Number.isFinite(value) || value < 1) continue;
+          discordModerationWarnings.set(key, Math.floor(value));
+        }
+      }
     }
   } catch (err) {
     if (
@@ -90,6 +149,8 @@ export async function saveState(path: string): Promise<boolean> {
     const state = {
       lastSeenByAuthor: Object.fromEntries(lastSeenByAuthor),
       authors: exboAuthors,
+      discordRolePanels: Object.fromEntries(discordRolePanels),
+      discordModerationWarnings: Object.fromEntries(discordModerationWarnings),
     };
     await writeFile(path, JSON.stringify(state, null, 2), "utf-8");
     return true;

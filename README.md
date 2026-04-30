@@ -1,6 +1,6 @@
 # tg-bot-sc-announcer
 
-Telegram bot that polls the [Exbo forum](https://forum.exbo.ru) API for new comments by configured authors and posts them to one or more Telegram channels or groups.
+Telegram + Discord bot service that polls the [Exbo forum](https://forum.exbo.ru) API for new comments by configured authors and posts them to Telegram channels while also running Discord moderation/role tooling in the same process.
 
 ## What it does
 
@@ -8,6 +8,10 @@ Telegram bot that polls the [Exbo forum](https://forum.exbo.ru) API for new comm
 - Sends new comments as Telegram HTML: one opening line `🔔 Новый комментарий от` with a **bold** linked forum author; if the discussion title is resolved (from the API `included` data or `GET /api/discussions/:id`), the **same line** adds `в теме:` plus a **bold** title (plain prefix, bold title only). Then a blank line and the body—stacked `{name} написал:` headers each followed by an **expandable** blockquote for quoted content (nested forum `<blockquote>` pairs are kept inside one quote). Then `{author} написал:` or `{author} ответил:` with an expandable blockquote for the new text (`/u/…` → `@Display` profile links, `/d/…` kept as links). Inline forum images become numbered links `Изображение 1`, `Изображение 2`, … in order; after the text message the bot sends those images as Telegram **photos** (albums of up to 10 per `sendMediaGroup`, single image via `sendPhoto`). Footer: author hashtag and `🔗 Ссылка на сообщение` when the post URL exists. Snippet budget subtracts the discussion line’s visible length. No italic markup; optional logging and mention/title fetch limits—see `.env.example`.
 - Persists “last seen” post IDs so only new comments are announced
 - Supports admin-only Telegram commands to list/add/remove tracked authors
+- Runs a Discord bot in the same process with:
+  - admin slash command `/post` (post as bot to a target channel)
+  - role assignment message buttons via `/rolepanel`
+  - channel-aware moderation rules (invite filtering, attachment/text restrictions, blocked keywords, warning + timeout escalation)
 - Optional HTTP health-check server (e.g. for PaaS readiness probes)
 
 ## Stack
@@ -15,6 +19,7 @@ Telegram bot that polls the [Exbo forum](https://forum.exbo.ru) API for new comm
 - **Runtime:** Node.js 18+
 - **Language:** TypeScript
 - **Telegram:** [Telegraf](https://telegraf.js.org/)
+- **Discord:** [discord.js](https://discord.js.org/)
 - **Config:** `dotenv` + environment variables
 
 ## Prerequisites
@@ -22,6 +27,7 @@ Telegram bot that polls the [Exbo forum](https://forum.exbo.ru) API for new comm
 - Node.js 18 or higher
 - A [Telegram Bot](https://t.me/BotFather) token
 - One or more Telegram channel/group IDs where the bot can post (and is added as admin)
+- A Discord bot token, target guild ID, and bot permissions for message management, role management, timeout moderation, and **Attach Files** (for `/post` images)
 
 ## Setup
 
@@ -41,10 +47,20 @@ Edit `.env`:
 |----------|----------|-------------|
 | `TELEGRAM_BOT_TOKEN` | Yes | Bot token from [@BotFather](https://t.me/BotFather) |
 | `TELEGRAM_CHANNEL_IDS` | Yes | Comma-separated chat IDs (e.g. `-1001234567890`) |
+| `DISCORD_BOT_TOKEN` | Yes | Discord bot token from the Discord Developer Portal |
+| `DISCORD_GUILD_ID` | Yes | Discord guild/server ID where slash commands are registered |
 | `POLL_INTERVAL_MS` | No | Poll interval in ms (default: 300000 = 5 min), clamped 1 min–24 h |
 | `AUTHOR_REQUEST_DELAY_MS` | No | Delay between Exbo API requests per author (default: 1000) |
 | `LAST_SEEN_STATE_FILE` | No | Path to JSON state file (default: `last-seen-posts.json`) |
 | `ADMIN_USER_IDS` | No | Comma-separated Telegram user IDs; if empty, all users can use admin commands |
+| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post` and `/rolepanel` (when empty, any member who passes Discord’s command permissions may use them) |
+| `DISCORD_ROLE_PANEL_CHANNEL_ID` | No | Restrict `/rolepanel` usage to one channel |
+| `DISCORD_BLOCK_INVITE_LINKS_GLOBAL` | No | `1`/`0` toggle for global Discord invite-link filtering |
+| `DISCORD_INVITE_ALLOWED_ROLE_IDS` | No | Roles allowed to bypass invite-link filter |
+| `DISCORD_WARNINGS_BEFORE_TIMEOUT` | No | Violations before automatic timeout (default: 3) |
+| `DISCORD_TIMEOUT_MS` | No | Timeout duration in ms after threshold (default: 600000) |
+| `DISCORD_WARNING_MESSAGE_TTL_MS` | No | Auto-delete delay for warning notices (default: 12000) |
+| `DISCORD_CHANNEL_POLICIES_JSON` | No | Channel policy map for video/image/text/keyword moderation rules |
 | `PORT` | No | If set, starts an HTTP server on this port that responds `ok` (for health checks) |
 | `LOG_LEVEL` | No | `info` (default), `debug`, or `warn` |
 
@@ -72,6 +88,13 @@ npm run dev
 - `/removeauthor <username>` — Stop tracking an Exbo user
 
 Author list and “last seen” state are saved to the state file and restored on restart.
+
+## Discord commands (admin/mod roles)
+
+- `/post channel:<channel> [image] [embed_*]` — optional **`embed_title`**, **`embed_description`**, **`embed_url`**, **`embed_color`** (`#RRGGBB` or decimal); optionally attach **one** file on the command, then a **modal** for optional body text (can be empty if you only send an attachment/embed); embed and file attach to the **first** posted message
+- `/rolepanel channel:<channel> role1:<role> [label1…label6] [role2…role6] [message] [embed_*]` — required **`channel`** + **`role1`** first (Discord rule); then optional extra roles/labels, **`message`**, and same **`embed_*`** as `/post**
+
+Role-panel definitions and moderation warning counters are saved in the same state file and restored on restart.
 
 ## License
 
