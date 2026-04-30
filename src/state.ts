@@ -57,6 +57,9 @@ export const discordRolePanels = new Map<string, DiscordRolePanelState>();
 /** Per-user moderation warning counters keyed by `${guildId}:${userId}`. */
 export const discordModerationWarnings = new Map<string, number>();
 
+const ROLE_BUTTON_PREFIX = "role:";
+const ROLE_BUTTON_SINGLE_PREFIX = "roleone:";
+
 function warningKey(guildId: string, userId: string): string {
   return `${guildId}:${userId}`;
 }
@@ -111,6 +114,7 @@ export async function loadState(path: string): Promise<void> {
           const panel = value as Record<string, unknown>;
           const guildId = typeof panel.guildId === "string" ? panel.guildId : "";
           const channelId = typeof panel.channelId === "string" ? panel.channelId : "";
+          const singleRole = panel.singleRole === true;
           const buttonsRaw = Array.isArray(panel.buttons) ? panel.buttons : [];
           const buttons = buttonsRaw
             .filter((x): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x))
@@ -119,13 +123,17 @@ export async function loadState(path: string): Promise<void> {
               roleId: typeof x.roleId === "string" ? x.roleId : "",
               label: typeof x.label === "string" ? x.label : "",
             }))
-            .filter((x) => x.customId.startsWith("role:") && x.roleId.length > 0)
+            .filter(
+              (x) =>
+                (x.customId.startsWith(ROLE_BUTTON_PREFIX) || x.customId.startsWith(ROLE_BUTTON_SINGLE_PREFIX)) &&
+                x.roleId.length > 0,
+            )
             .map((x) => ({
               ...x,
               label: x.label.trim().length > 0 ? x.label.trim() : "\u200b",
             }));
           if (!guildId || !channelId || buttons.length === 0) continue;
-          discordRolePanels.set(messageId, { messageId, guildId, channelId, buttons });
+          discordRolePanels.set(messageId, { messageId, guildId, channelId, buttons, singleRole });
         }
       }
       const warnings = obj.discordModerationWarnings;

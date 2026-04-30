@@ -40,6 +40,8 @@ const DISCORD_MESSAGE_CONTENT_MAX = 2000;
 const DISCORD_TEXT_INPUT_LABEL_MAX = 45;
 /** Discord `Button` label max length. */
 const DISCORD_BUTTON_LABEL_MAX = 80;
+const ROLE_BUTTON_PREFIX = "role:";
+const ROLE_BUTTON_SINGLE_PREFIX = "roleone:";
 function memberRoleIds(member: GuildMember | APIInteractionGuildMember | null): string[] {
   if (!member) return [];
   if (member instanceof GuildMember) return [...member.roles.cache.keys()];
@@ -168,7 +170,13 @@ const rolePanelCommand = appendSharedPanelEmbedOptions(
     .addRoleOption((opt) => opt.setName("role5").setDescription("Роль №5"))
     .addStringOption((opt) => opt.setName("label5").setDescription("Подпись кнопки для роли №5").setMaxLength(80))
     .addRoleOption((opt) => opt.setName("role6").setDescription("Роль №6"))
-    .addStringOption((opt) => opt.setName("label6").setDescription("Подпись кнопки для роли №6").setMaxLength(80)),
+    .addStringOption((opt) => opt.setName("label6").setDescription("Подпись кнопки для роли №6").setMaxLength(80))
+    .addBooleanOption((opt) =>
+      opt
+        .setName("single_role")
+        .setDescription("Разрешить только одну роль из этой панели (взаимоисключающие роли)")
+        .setRequired(false),
+    ),
 ).setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles);
 
 const LINK_BUTTON_URL_MAX = 512;
@@ -210,9 +218,13 @@ export async function registerGuildCommands(guild: Guild): Promise<void> {
   await guild.commands.set([postCommand.toJSON(), rolePanelCommand.toJSON(), linkPanelCommand.toJSON()]);
 }
 
-function buildButtonsFromInteraction(interaction: ChatInputCommandInteraction): DiscordRolePanelButton[] {
+function buildButtonsFromInteraction(
+  interaction: ChatInputCommandInteraction,
+  options?: { singleRole?: boolean },
+): DiscordRolePanelButton[] {
   const buttons: DiscordRolePanelButton[] = [];
   const usedRoles = new Set<string>();
+  const prefix = options?.singleRole ? ROLE_BUTTON_SINGLE_PREFIX : ROLE_BUTTON_PREFIX;
   for (let i = 1; i <= 6; i++) {
     const role = interaction.options.getRole(`role${i}`);
     if (!role) continue;
@@ -220,7 +232,7 @@ function buildButtonsFromInteraction(interaction: ChatInputCommandInteraction): 
     usedRoles.add(role.id);
     const labelRaw = interaction.options.getString(`label${i}`)?.trim();
     const label = labelRaw && labelRaw.length > 0 ? labelRaw : role.name;
-    buttons.push({ customId: `role:${role.id}`, roleId: role.id, label });
+    buttons.push({ customId: `${prefix}${role.id}`, roleId: role.id, label });
   }
   return buttons;
 }
@@ -638,7 +650,8 @@ async function handleRolePanel(interaction: ChatInputCommandInteraction): Promis
     });
     return;
   }
-  const buttons = buildButtonsFromInteraction(interaction);
+  const singleRole = interaction.options.getBoolean("single_role") ?? false;
+  const buttons = buildButtonsFromInteraction(interaction, { singleRole });
   if (buttons.length === 0) {
     await interaction.reply({ content: "Укажите хотя бы одну роль.", flags: MessageFlags.Ephemeral });
     return;
@@ -649,6 +662,7 @@ async function handleRolePanel(interaction: ChatInputCommandInteraction): Promis
     channelId: channel.id,
     userId: interaction.user.id,
     buttons,
+    singleRole,
     ...slashEmbedOptionsToPendingFields(embedOpts),
   });
   const modal = new ModalBuilder().setCustomId(`rolepanel:${nonce}`).setTitle("Панель ролей — текст сообщения");
@@ -725,6 +739,7 @@ async function handleRolePanelModalSubmit(interaction: ModalSubmitInteraction): 
         channelId: pending.channelId,
         messageId: sent.id,
         buttons: pending.buttons,
+        singleRole: pending.singleRole ?? false,
       });
     } else {
       let firstMessageId: string | undefined;
@@ -743,6 +758,7 @@ async function handleRolePanelModalSubmit(interaction: ModalSubmitInteraction): 
           channelId: pending.channelId,
           messageId: firstMessageId,
           buttons: pending.buttons,
+          singleRole: pending.singleRole ?? false,
         });
       }
     }

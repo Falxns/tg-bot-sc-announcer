@@ -3,6 +3,19 @@ import { LAST_SEEN_STATE_FILE, LOG_LEVEL } from "../config";
 import { getDiscordRolePanel, saveState, setDiscordRolePanel } from "../state";
 import type { DiscordRolePanelButton, DiscordRolePanelState } from "./types";
 
+const ROLE_BUTTON_PREFIX = "role:";
+const ROLE_BUTTON_SINGLE_PREFIX = "roleone:";
+
+function parseRoleButtonCustomId(customId: string): { roleId: string; singleRole: boolean } | null {
+  if (customId.startsWith(ROLE_BUTTON_PREFIX)) {
+    return { roleId: customId.slice(ROLE_BUTTON_PREFIX.length).trim(), singleRole: false };
+  }
+  if (customId.startsWith(ROLE_BUTTON_SINGLE_PREFIX)) {
+    return { roleId: customId.slice(ROLE_BUTTON_SINGLE_PREFIX.length).trim(), singleRole: true };
+  }
+  return null;
+}
+
 /**
  * Rebuild role-panel state from a message the bot sent, using current button components.
  * Used after restarts when JSON state was lost but the Discord message still exists.
@@ -13,14 +26,17 @@ export function parseRolePanelStateFromMessage(message: Message, botUserId: stri
   const rows = message.components;
   if (!rows?.length) return null;
   const buttons: DiscordRolePanelButton[] = [];
+  let singleRole = false;
   for (const row of rows) {
     if (row.type !== ComponentType.ActionRow) continue;
     for (const comp of row.components) {
       if (comp.type !== ComponentType.Button) continue;
       const customId = comp.customId ?? "";
-      if (!customId.startsWith("role:")) continue;
-      const roleId = customId.slice("role:".length).trim();
+      const parsed = parseRoleButtonCustomId(customId);
+      if (!parsed) continue;
+      const { roleId } = parsed;
       if (!roleId) continue;
+      if (parsed.singleRole) singleRole = true;
       const labelRaw = comp.label?.trim() ?? "";
       buttons.push({
         customId,
@@ -35,6 +51,7 @@ export function parseRolePanelStateFromMessage(message: Message, botUserId: stri
     guildId: message.guildId,
     channelId: message.channelId,
     buttons,
+    singleRole,
   };
 }
 
