@@ -9,6 +9,7 @@ export type DiscordRolePanelState = {
   channelId: string;
   messageId: string;
   buttons: DiscordRolePanelButton[];
+  singleRole?: boolean;
 };
 
 export type DiscordChannelPolicy = {

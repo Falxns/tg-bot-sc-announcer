@@ -2,6 +2,13 @@ import { ButtonInteraction, GuildMember, MessageFlags, PermissionFlagsBits, Role
 import { stripAllCustomDiscordEmojiMarkup } from "./buttonEmoji";
 import { getOrRehydrateRolePanel } from "./rolePanelHydrate";
 
+const ROLE_BUTTON_PREFIX = "role:";
+const ROLE_BUTTON_SINGLE_PREFIX = "roleone:";
+
+function isRoleButtonCustomId(customId: string): boolean {
+  return customId.startsWith(ROLE_BUTTON_PREFIX) || customId.startsWith(ROLE_BUTTON_SINGLE_PREFIX);
+}
+
 function buildRoleToggleDiagnostics(me: GuildMember, target: GuildMember, role: Role): Record<string, unknown> {
   const botHigh = me.roles.highest;
   const targetHigh = target.roles.highest;
@@ -54,7 +61,7 @@ function discordApiRoleHint(err: unknown): string {
 
 export async function handleRoleButtonInteraction(interaction: ButtonInteraction): Promise<boolean> {
   if (!interaction.inGuild() || !interaction.guild) return false;
-  if (!interaction.customId.startsWith("role:")) return false;
+  if (!isRoleButtonCustomId(interaction.customId)) return false;
   const guild = interaction.guild;
   const panel = await getOrRehydrateRolePanel(interaction);
   if (!panel) {
@@ -114,6 +121,14 @@ export async function handleRoleButtonInteraction(interaction: ButtonInteraction
       await member.roles.remove(button.roleId);
       await interaction.reply({ content: `Роль снята: ${labelForReply}`, flags: MessageFlags.Ephemeral });
     } else {
+      if (panel.singleRole) {
+        const otherRoleIds = panel.buttons
+          .map((b) => b.roleId)
+          .filter((roleId) => roleId !== button.roleId && member.roles.cache.has(roleId));
+        if (otherRoleIds.length > 0) {
+          await member.roles.remove(otherRoleIds);
+        }
+      }
       await member.roles.add(button.roleId);
       await interaction.reply({ content: `Роль выдана: ${labelForReply}`, flags: MessageFlags.Ephemeral });
     }

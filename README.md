@@ -96,7 +96,7 @@ Author list and “last seen” state are saved to the state file and restored o
 ## Discord commands (admin/mod roles)
 
 - `/post channel:<channel> [image] [embed_*]` — optional **`embed_title`**, **`embed_description`**, **`embed_url`**, **`embed_color`** (`#RRGGBB` or decimal); optionally attach **one** file on the command, then a **modal** for optional body text (can be empty if you only send an attachment/embed); embed and file attach to the **first** posted message
-- `/rolepanel channel:<channel> role1:<role> [label1…label6] [role2…role6] [embed_*]` — required **`channel`** + **`role1`** first (Discord rule); then optional extra roles/labels and same **`embed_*`** as `/post`; command opens a modal for optional multiline message text
+- `/rolepanel channel:<channel> role1:<role> [label1…label6] [role2…role6] [single_role] [embed_*]` — required **`channel`** + **`role1`** first (Discord rule); optional `single_role:true` makes panel roles mutually exclusive (user keeps only one role from that panel); also supports same **`embed_*`** as `/post`; command opens a modal for optional multiline message text
 - `/linkpanel channel:<channel> url1:<https://...> [label1…label5] [url2…url5] [embed_*]` — creates message buttons that open URLs (no role toggle), then opens a modal for optional multiline message text
 
 Role-panel definitions and moderation warning counters are saved in shared bot state (`file` or Upstash, depending on `STATE_BACKEND`) and restored on restart.

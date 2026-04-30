@@ -46,6 +46,7 @@ export type PendingRolePanelPayload = PanelEmbedFields & {
   channelId: string;
   userId: string;
   buttons: DiscordRolePanelButton[];
+  singleRole?: boolean;
   expiresAt: number;
 };
 
