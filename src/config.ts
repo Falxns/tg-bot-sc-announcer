@@ -1,4 +1,4 @@
-import type { DiscordChannelPolicyMap } from "./discord/types";
+import type { DiscordChannelPolicy, DiscordChannelPolicyMap, ViolationSeverity } from "./discord/types";
 
 export function clampParseInt(value: string, min: number, max: number): number {
   const n = parseInt(value, 10);
@@ -56,17 +56,55 @@ export const DISCORD_INVITE_ALLOWED_ROLE_IDS = (process.env.DISCORD_INVITE_ALLOW
 export const DISCORD_BLOCK_INVITE_LINKS_GLOBAL = !/^0|false$/i.test(
   process.env.DISCORD_BLOCK_INVITE_LINKS_GLOBAL ?? "0",
 );
+/** @deprecated No longer used; minor mutes use DISCORD_MINOR_TIMEOUT_LADDER_MS. */
 export const DISCORD_WARNINGS_BEFORE_TIMEOUT = clampParseInt(
   process.env.DISCORD_WARNINGS_BEFORE_TIMEOUT ?? "3",
   1,
   20,
 );
+/** @deprecated No longer used. */
 export const DISCORD_TIMEOUT_MS = clampParseInt(process.env.DISCORD_TIMEOUT_MS ?? "600000", 60_000, 604800_000);
 export const DISCORD_WARNING_MESSAGE_TTL_MS = clampParseInt(
   process.env.DISCORD_WARNING_MESSAGE_TTL_MS ?? "12000",
   1000,
   600_000,
 );
+
+const DEFAULT_MINOR_LADDER_MS = [3_600_000, 21_600_000, 43_200_000, 86_400_000] as const;
+const DEFAULT_MAJOR_LADDER_MS = [86_400_000, 259_200_000, 604_800_000] as const;
+
+function parseMsLadder(raw: string | undefined, fallback: readonly number[]): number[] {
+  const s = raw?.trim();
+  if (!s) return [...fallback];
+  const parts = s
+    .split(",")
+    .map((x) => parseInt(x.trim(), 10))
+    .filter((n) => Number.isFinite(n) && n >= 60_000 && n <= 2_419_200_000);
+  return parts.length > 0 ? parts : [...fallback];
+}
+
+export const DISCORD_MINOR_TIMEOUT_LADDER_MS = parseMsLadder(
+  process.env.DISCORD_MINOR_TIMEOUT_LADDER_MS,
+  DEFAULT_MINOR_LADDER_MS,
+);
+export const DISCORD_MAJOR_TIMEOUT_LADDER_MS = parseMsLadder(
+  process.env.DISCORD_MAJOR_TIMEOUT_LADDER_MS,
+  DEFAULT_MAJOR_LADDER_MS,
+);
+
+/** No violations for this long → reset minor warnings + mute tiers (default 3 days). */
+export const DISCORD_MODERATION_DECAY_MS = clampParseInt(
+  process.env.DISCORD_MODERATION_DECAY_MS ?? "259200000",
+  60_000,
+  2_419_200_000,
+);
+
+export const DISCORD_MODERATION_LOG_CHANNEL_ID = (process.env.DISCORD_MODERATION_LOG_CHANNEL_ID ?? "").trim();
+
+function parseSeverity(raw: unknown, fallback: ViolationSeverity): ViolationSeverity {
+  if (raw === "major" || raw === "minor") return raw;
+  return fallback;
+}
 
 function parseDiscordChannelPolicies(raw: string): DiscordChannelPolicyMap {
   if (!raw.trim()) return {};
@@ -77,11 +115,13 @@ function parseDiscordChannelPolicies(raw: string): DiscordChannelPolicyMap {
     for (const [channelId, v] of Object.entries(parsed as Record<string, unknown>)) {
       if (!v || typeof v !== "object" || Array.isArray(v)) continue;
       const row = v as Record<string, unknown>;
-      out[channelId] = {
+      const policy: DiscordChannelPolicy = {
         blockInviteLinks: row.blockInviteLinks === true,
         allowInviteRoleIds: Array.isArray(row.allowInviteRoleIds)
           ? row.allowInviteRoleIds.filter((x): x is string => typeof x === "string")
           : [],
+        allowDiscordInvites: row.allowDiscordInvites === true,
+        inviteViolationSeverity: parseSeverity(row.inviteViolationSeverity, "major"),
         blockVideos: row.blockVideos === true,
         blockImages: row.blockImages === true,
         blockText: row.blockText === true,
@@ -91,7 +131,10 @@ function parseDiscordChannelPolicies(raw: string): DiscordChannelPolicyMap {
               .map((x) => x.trim().toLowerCase())
               .filter(Boolean)
           : [],
+        keywordViolationSeverity: parseSeverity(row.keywordViolationSeverity, "minor"),
+        mediaViolationSeverity: parseSeverity(row.mediaViolationSeverity, "minor"),
       };
+      out[channelId] = policy;
     }
     return out;
   } catch {
@@ -99,6 +142,39 @@ function parseDiscordChannelPolicies(raw: string): DiscordChannelPolicyMap {
     return {};
   }
 }
+
+function parseDomainBlacklist(raw: string): string[] {
+  const s = raw.trim();
+  if (!s) return [];
+  if (s.startsWith("[")) {
+    try {
+      const j = JSON.parse(s) as unknown;
+      if (!Array.isArray(j)) return [];
+      return j
+        .filter((x): x is string => typeof x === "string")
+        .map((x) => x.trim().toLowerCase().replace(/^\.+/, ""))
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+  return s
+    .split(",")
+    .map((x) => x.trim().toLowerCase().replace(/^\.+/, ""))
+    .filter(Boolean);
+}
+
+export const DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST = parseDomainBlacklist(
+  process.env.DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST ?? "",
+);
+
+/** Channel/thread IDs where duplicate-message (same author, consecutive) spam filter runs. Empty = disabled. */
+export const DISCORD_SPAM_FILTER_CHANNEL_IDS: ReadonlySet<string> = new Set(
+  (process.env.DISCORD_SPAM_FILTER_CHANNEL_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
 
 export const chatIds = TELEGRAM_CHANNEL_IDS.split(",")
   .map((id) => id.trim())

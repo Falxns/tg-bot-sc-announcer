@@ -19,6 +19,13 @@ import {
 } from "discord.js";
 import { DISCORD_ADMIN_ROLE_IDS, DISCORD_ROLE_PANEL_CHANNEL_ID, LAST_SEEN_STATE_FILE, LOG_LEVEL } from "../config";
 import { saveState, setDiscordRolePanel } from "../state";
+import {
+  handleModerationSlashCommand,
+  muteSlashCommand,
+  unmuteSlashCommand,
+  unwarnSlashCommand,
+  warnSlashCommand,
+} from "./moderationCommands";
 import { peelFirstCustomDiscordEmojiFromLabel, type ParsedButtonEmoji } from "./buttonEmoji";
 import {
   createPendingLinkPanel,
@@ -215,7 +222,15 @@ const linkPanelCommand = appendSharedPanelEmbedOptions(
 ).setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
 export async function registerGuildCommands(guild: Guild): Promise<void> {
-  await guild.commands.set([postCommand.toJSON(), rolePanelCommand.toJSON(), linkPanelCommand.toJSON()]);
+  await guild.commands.set([
+    postCommand.toJSON(),
+    rolePanelCommand.toJSON(),
+    linkPanelCommand.toJSON(),
+    muteSlashCommand.toJSON(),
+    unmuteSlashCommand.toJSON(),
+    warnSlashCommand.toJSON(),
+    unwarnSlashCommand.toJSON(),
+  ]);
 }
 
 function buildButtonsFromInteraction(
@@ -788,6 +803,10 @@ export async function handleDiscordCommand(interaction: ChatInputCommandInteract
   }
   if (!isElevated(interaction.member)) {
     await interaction.reply({ content: "У вас нет прав на эту команду.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (interaction.commandName === "mute" || interaction.commandName === "unmute" || interaction.commandName === "warn" || interaction.commandName === "unwarn") {
+    await handleModerationSlashCommand(interaction);
     return;
   }
   if (interaction.commandName === "post") {
