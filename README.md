@@ -11,7 +11,7 @@ Telegram + Discord bot service that polls the [Exbo forum](https://forum.exbo.ru
 - Runs a Discord bot in the same process with:
   - admin slash command `/post` (post as bot to a target channel)
   - role assignment message buttons via `/rolepanel`
-  - channel-aware moderation rules (invite filtering, attachment/text restrictions, blocked keywords, warning + timeout escalation)
+  - channel-aware moderation (minor/major severity, per-channel warnings, guild mute ladders, 3-day decay, DM + channel fallback, optional log channel, staff `/mute` `/unmute` `/warn` `/unwarn`, optional external-link domain blacklist)
 - Optional HTTP health-check server (e.g. for PaaS readiness probes)
 
 ## Stack
@@ -57,14 +57,18 @@ Edit `.env`:
 | `UPSTASH_REDIS_REST_TOKEN` | No | Upstash Redis REST token (required when `STATE_BACKEND=upstash`) |
 | `UPSTASH_STATE_KEY` | No | Redis key for serialized state JSON (default: `tg-bot-sc-announcer:state`) |
 | `ADMIN_USER_IDS` | No | Comma-separated Telegram user IDs; if empty, all users can use admin commands |
-| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/rolepanel`, and `/linkpanel` (when empty, any member who passes Discord’s command permissions may use them) |
+| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/rolepanel`, `/linkpanel`, `/mute`, `/unmute`, `/warn`, `/unwarn` (when empty, any member who passes Discord’s command permissions may use them) |
 | `DISCORD_ROLE_PANEL_CHANNEL_ID` | No | Restrict `/rolepanel` usage to one channel |
 | `DISCORD_BLOCK_INVITE_LINKS_GLOBAL` | No | `1`/`0` toggle for global Discord invite-link filtering |
 | `DISCORD_INVITE_ALLOWED_ROLE_IDS` | No | Roles allowed to bypass invite-link filter |
-| `DISCORD_WARNINGS_BEFORE_TIMEOUT` | No | Violations before automatic timeout (default: 3) |
-| `DISCORD_TIMEOUT_MS` | No | Timeout duration in ms after threshold (default: 600000) |
-| `DISCORD_WARNING_MESSAGE_TTL_MS` | No | Auto-delete delay for warning notices (default: 12000) |
-| `DISCORD_CHANNEL_POLICIES_JSON` | No | Channel policy map for video/image/text/keyword moderation rules |
+| `DISCORD_MINOR_TIMEOUT_LADDER_MS` | No | Comma-separated minor mute durations (ms); default `3600000,21600000,43200000,86400000` (1h, 6h, 12h, 1d) |
+| `DISCORD_MAJOR_TIMEOUT_LADDER_MS` | No | Comma-separated major mute durations (ms); default `86400000,259200000,604800000` (1d, 3d, 7d) |
+| `DISCORD_MODERATION_DECAY_MS` | No | No violations for this long resets minor warnings + tiers (default: 259200000 = 3 days) |
+| `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for moderation audit embeds |
+| `DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST` | No | Comma-separated or JSON array of hosts; non-invite `http(s)` URLs matching these trigger a **major** hit (empty = disabled) |
+| `DISCORD_SPAM_FILTER_CHANNEL_IDS` | No | Comma-separated channel/thread IDs where **consecutive near-duplicate text** from the **same user** (vs previous message in channel via API) counts as **minor** spam: strict normalized equality, or same **letter/digit skeleton** with similar length, or (for long text only) high **Levenshtein similarity**; empty disables. Bot needs **Read Message History** there. |
+| `DISCORD_WARNING_MESSAGE_TTL_MS` | No | Auto-delete delay for ephemeral-style channel notices (default: 12000) |
+| `DISCORD_CHANNEL_POLICIES_JSON` | No | Per-channel policies: `blockInviteLinks`, `allowDiscordInvites`, `inviteViolationSeverity`, `blockVideos` / `blockImages` / `blockText`, `mediaViolationSeverity`, `blockedKeywords`, `keywordViolationSeverity`, `allowInviteRoleIds` |
 | `PORT` | No | If set, starts an HTTP server on this port that responds `ok` (for health checks) |
 | `LOG_LEVEL` | No | `info` (default), `debug`, or `warn` |
 
@@ -98,8 +102,16 @@ Author list and “last seen” state are saved to the state file and restored o
 - `/post channel:<channel> [image] [embed_*]` — optional **`embed_title`**, **`embed_description`**, **`embed_url`**, **`embed_color`** (`#RRGGBB` or decimal); optionally attach **one** file on the command, then a **modal** for optional body text (can be empty if you only send an attachment/embed); embed and file attach to the **first** posted message
 - `/rolepanel channel:<channel> role1:<role> [label1…label6] [role2…role6] [single_role] [embed_*]` — required **`channel`** + **`role1`** first (Discord rule); optional `single_role:true` makes panel roles mutually exclusive (user keeps only one role from that panel); also supports same **`embed_*`** as `/post`; command opens a modal for optional multiline message text
 - `/linkpanel channel:<channel> url1:<https://...> [label1…label5] [url2…url5] [embed_*]` — creates message buttons that open URLs (no role toggle), then opens a modal for optional multiline message text
+- `/mute user:<user> [minutes] [reason]` — manual timeout (does **not** advance auto minor/major ladder tiers)
+- `/unmute user:<user>` — clears Discord timeout
+- `/warn user:<user> [channel] [amount] [reason]` — increments per-channel minor warning counter for staff workflow
+- `/unwarn user:<user> [channel] [amount] [clear]` — decrements or clears per-channel minor warnings
 
-Role-panel definitions and moderation warning counters are saved in shared bot state (`file` or Upstash, depending on `STATE_BACKEND`) and restored on restart.
+Role-panel definitions and moderation state (per-channel minor warnings, guild minor/major mute tiers, last-violation timestamps) are saved in shared bot state (`file` or Upstash, depending on `STATE_BACKEND`) and restored on restart. Legacy `discordModerationWarnings` (`guildId:userId`) in old JSON files is migrated into a `legacy` scope bucket and merged on first per-channel write.
+
+### Discord AutoMod (recommended)
+
+Semantic rules (slurs, cheats, 18+, marketplace phrases) are best handled with **Discord Server Settings → AutoMod** (keyword lists, block/alert, log to a channel). This bot complements AutoMod with mechanical checks (invites, attachments, keyword lists you map in `DISCORD_CHANNEL_POLICIES_JSON`, optional domain blacklist) and staff slash commands.
 
 ## License
 
