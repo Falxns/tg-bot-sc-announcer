@@ -6,7 +6,8 @@ import {
   PermissionFlagsBits,
   SlashCommandBuilder,
 } from "discord.js";
-import { LAST_SEEN_STATE_FILE } from "../config";
+import type { Message } from "discord.js";
+import { DISCORD_MODERATION_LOG_CHANNEL_ID, LAST_SEEN_STATE_FILE } from "../config";
 import { logModerationEvent } from "./moderationLog";
 import { adjustMinorWarningCount, getMinorWarningCount, saveState, setMinorWarningCount } from "../state";
 
@@ -19,19 +20,68 @@ function warningScopeChannelIdFromInteraction(interaction: ChatInputCommandInter
   return ch.id;
 }
 
+const MUTE_DURATION_CHOICES: { name: string; value: string }[] = [
+  { name: "1 час", value: "60" },
+  { name: "6 часов", value: "360" },
+  { name: "12 часов", value: "720" },
+  { name: "1 день", value: "1440" },
+  { name: "3 дня", value: "4320" },
+  { name: "7 дней", value: "10080" },
+  { name: "14 дней", value: "20160" },
+  { name: "28 дней", value: "40320" },
+];
+
+async function tryPinTargetRecentMessage(
+  interaction: ChatInputCommandInteraction,
+  targetUserId: string,
+): Promise<{ url?: string; error?: string }> {
+  const ch = interaction.channel;
+  if (!ch?.isTextBased() || !("messages" in ch)) {
+    return { error: "В этом канале нельзя закреплять сообщения." };
+  }
+  try {
+    const batch = await ch.messages.fetch({ limit: 100 });
+    let best: Message | null = null;
+    let bestTs = 0;
+    for (const m of batch.values()) {
+      if (m.author.id !== targetUserId || m.system) continue;
+      const t = m.createdTimestamp;
+      if (t >= bestTs) {
+        bestTs = t;
+        best = m;
+      }
+    }
+    if (!best) {
+      return { error: "Нет сообщений пользователя среди последних 100 в канале." };
+    }
+    await best.pin();
+    return { url: best.url };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export const muteSlashCommand = new SlashCommandBuilder()
   .setName("mute")
   .setDescription("Выдать таймаут пользователю (без изменения авто-лестниц).")
   .addUserOption((o) => o.setName("user").setDescription("Пользователь").setRequired(true))
-  .addIntegerOption((o) =>
+  .addStringOption((o) =>
     o
-      .setName("minutes")
-      .setDescription("Длительность в минутах (1–40320, макс. 28 дней)")
-      .setMinValue(1)
-      .setMaxValue(40320)
-      .setRequired(false),
+      .setName("duration")
+      .setDescription("Длительность таймаута")
+      .setRequired(true)
+      .addChoices(...MUTE_DURATION_CHOICES),
   )
   .addStringOption((o) => o.setName("reason").setDescription("Причина").setMaxLength(450).setRequired(false))
+  .addAttachmentOption((o) =>
+    o.setName("screenshot").setDescription("Скриншот нарушения — приложится к записи в лог модерации").setRequired(false),
+  )
+  .addBooleanOption((o) =>
+    o
+      .setName("pin_last_message")
+      .setDescription("Закрепить последнее сообщение пользователя в этом канале (до 100 сообщений истории)")
+      .setRequired(false),
+  )
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
 export const unmuteSlashCommand = new SlashCommandBuilder()
@@ -112,10 +162,17 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
   const name = interaction.commandName;
   if (name === "mute") {
     const target = interaction.options.getUser("user", true);
-    const minutes = interaction.options.getInteger("minutes") ?? 60;
+    const durationRaw = interaction.options.getString("duration", true);
+    const minutes = parseInt(durationRaw, 10);
     const reason = interaction.options.getString("reason")?.trim() || "Ручной мут модератором";
+    const screenshot = interaction.options.getAttachment("screenshot");
+    const pinLast = interaction.options.getBoolean("pin_last_message") === true;
     if (target.bot) {
       await interaction.reply({ content: "Нельзя замутить бота.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 40320) {
+      await interaction.reply({ content: "Некорректная длительность.", flags: MessageFlags.Ephemeral });
       return;
     }
     let member: GuildMember;
@@ -140,6 +197,26 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       return;
     }
     await saveState(LAST_SEEN_STATE_FILE);
+
+    let pinnedEvidenceUrl: string | undefined;
+    let pinNote = "";
+    if (pinLast) {
+      const pinResult = await tryPinTargetRecentMessage(interaction, target.id);
+      if (pinResult.url) {
+        pinnedEvidenceUrl = pinResult.url;
+        pinNote = `\nЗакреплено сообщение: ${pinResult.url}`;
+      } else {
+        pinNote = `\nЗакрепление: не удалось — ${pinResult.error ?? "неизвестно"}`;
+      }
+    }
+
+    const logFiles =
+      screenshot?.url && screenshot.name
+        ? [{ url: screenshot.url, name: screenshot.name }]
+        : screenshot?.url
+          ? [{ url: screenshot.url, name: "screenshot" }]
+          : undefined;
+
     await logModerationEvent(guild, {
       title: "Staff: /mute",
       color: 0x9966cc,
@@ -149,8 +226,21 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       reason,
       staffUserId: interaction.user.id,
       timeoutMs: ms,
+      ...(logFiles ? { logFiles } : {}),
+      ...(pinnedEvidenceUrl ? { pinnedEvidenceUrl } : {}),
     });
-    await interaction.editReply({ content: `Таймаут ${minutes} мин. для <@${target.id}>.` });
+
+    const durLabel = MUTE_DURATION_CHOICES.find((c) => c.value === String(minutes))?.name ?? `${minutes} мин`;
+    let shotNote = "";
+    if (screenshot) {
+      shotNote = DISCORD_MODERATION_LOG_CHANNEL_ID
+        ? "\nСкриншот добавлен к записи в лог модерации."
+        : "\nСкриншот не попадёт в лог: не задан DISCORD_MODERATION_LOG_CHANNEL_ID.";
+    }
+
+    await interaction.editReply({
+      content: `Таймаут **${durLabel}** (<@${target.id}>).${pinNote}${shotNote}`,
+    });
     return;
   }
 

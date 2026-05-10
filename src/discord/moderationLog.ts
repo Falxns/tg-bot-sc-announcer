@@ -18,6 +18,10 @@ export type ModerationLogPayload = {
   messageId?: string;
   messageExcerpt?: string;
   staffUserId?: string;
+  /** Remote attachment(s) for the log message (e.g. /mute screenshot). */
+  logFiles?: { url: string; name: string }[];
+  /** Link to a message pinned as evidence (e.g. /mute pin_last_message). */
+  pinnedEvidenceUrl?: string;
 };
 
 export async function logModerationEvent(guild: Guild, payload: ModerationLogPayload): Promise<void> {
@@ -70,13 +74,20 @@ export async function logModerationEvent(guild: Guild, payload: ModerationLogPay
   if (payload.messageExcerpt) {
     embed.addFields({ name: "Фрагмент", value: payload.messageExcerpt.slice(0, 1000), inline: false });
   }
+  if (payload.pinnedEvidenceUrl) {
+    embed.addFields({ name: "Закреплённое сообщение", value: payload.pinnedEvidenceUrl.slice(0, 500), inline: false });
+  }
   if (payload.staffUserId) {
     embed.addFields({ name: "Модератор", value: `<@${payload.staffUserId}>`, inline: false });
   }
   if (payload.color !== undefined) embed.setColor(payload.color);
   embed.setTimestamp(new Date());
 
-  await ch.send({ embeds: [embed] }).catch((err) => {
+  const files = payload.logFiles?.length
+    ? payload.logFiles.map((f) => ({ attachment: f.url, name: f.name.slice(0, 80) || "file" }))
+    : undefined;
+
+  await ch.send({ embeds: [embed], ...(files?.length ? { files } : {}) }).catch((err) => {
     console.error("Moderation log channel send failed:", err);
   });
 }
