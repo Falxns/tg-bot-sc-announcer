@@ -508,6 +508,23 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const lines: string[] = [];
     lines.push(modTxt.modstatusIntro(userId));
     lines.push("");
+
+    let discordTimeoutLine: string = modTxt.modstatusDiscordTimeoutUnknown;
+    try {
+      const member = await guild.members.fetch({ user: userId });
+      const until = member.communicationDisabledUntil;
+      if (until !== null && until.getTime() > Date.now()) {
+        const endUnixSec = Math.floor(until.getTime() / 1000);
+        discordTimeoutLine = modTxt.modstatusDiscordTimeoutActive(endUnixSec);
+      } else {
+        discordTimeoutLine = modTxt.modstatusDiscordTimeoutInactive;
+      }
+    } catch {
+      discordTimeoutLine = modTxt.modstatusDiscordTimeoutUnknown;
+    }
+    lines.push(discordTimeoutLine);
+    lines.push("");
+
     lines.push(
       modTxt.modstatusMinorLadder(
         minorTier,

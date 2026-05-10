@@ -260,6 +260,10 @@ export const discordModerationCommands = {
   screenshotFileFallback: "Скриншот",
   modstatusBot: "Для ботов статус не показывается.",
   modstatusIntro: (userId: string) => `**Статус модерации** — <@${userId}>`,
+  modstatusDiscordTimeoutActive: (endUnixSec: number) =>
+    `**Таймаут Discord**: **есть** — снимется <t:${endUnixSec}:F> · <t:${endUnixSec}:R>`,
+  modstatusDiscordTimeoutInactive: "**Таймаут Discord**: **нет**.",
+  modstatusDiscordTimeoutUnknown: "**Таймаут Discord:** не удалось проверить.",
   modstatusMinorLadder: (tier: number, nextDur: string, ladderSteps: number, threshold: number) =>
     `**Лёгкая лестница** (автотаймаут при **${threshold}** предупреждениях в канале): номер следующего шага **${tier}** / ${ladderSteps}, следующая длительность **${nextDur}**.`,
   modstatusMajorLadder: (tier: number, nextDur: string, ladderSteps: number) =>
