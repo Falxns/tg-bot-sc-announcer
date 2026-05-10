@@ -26,13 +26,13 @@ function warningScopeChannelIdFromInteraction(interaction: ChatInputCommandInter
   return ch.id;
 }
 
-async function tryPinTargetRecentMessage(
+async function findTargetRecentMessage(
   interaction: ChatInputCommandInteraction,
   targetUserId: string,
-): Promise<{ url?: string; error?: string }> {
+): Promise<{ message?: Message; error?: string }> {
   const ch = interaction.channel;
   if (!ch?.isTextBased() || !("messages" in ch)) {
-    return { error: modTxt.pinChannelUnsupported };
+    return { error: modTxt.lastMessageChannelUnsupported };
   }
   try {
     const batch = await ch.messages.fetch({ limit: 100 });
@@ -47,13 +47,32 @@ async function tryPinTargetRecentMessage(
       }
     }
     if (!best) {
-      return { error: modTxt.pinNoMessage };
+      return { error: modTxt.lastMessageNotFound };
     }
-    await best.pin();
-    return { url: best.url };
+    return { message: best };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** Plaintext snapshot for mod log (does not render embeds). */
+function formatMutedUserMessageSnapshot(msg: Message): string {
+  const parts: string[] = [];
+  const text = msg.content?.trim() ?? "";
+  if (text.length > 0) parts.push(text);
+  if (msg.attachments.size > 0) {
+    parts.push(
+      [...msg.attachments.values()]
+        .map((a) => `${a.name}: ${a.url}`)
+        .join("\n"),
+    );
+  }
+  const meta: string[] = [];
+  if (msg.embeds.length > 0) meta.push(`embed ×${msg.embeds.length}`);
+  if (msg.stickers.size > 0) meta.push(`стикер ×${msg.stickers.size}`);
+  if (meta.length > 0) parts.push(meta.join(", "));
+  if (parts.length === 0) return modTxt.muteSnapshotEmpty;
+  return parts.join("\n\n");
 }
 
 export const muteSlashCommand = new SlashCommandBuilder()
@@ -74,10 +93,7 @@ export const muteSlashCommand = new SlashCommandBuilder()
     o.setName("screenshot").setDescription(slashModTxt.mute.screenshot).setRequired(false),
   )
   .addBooleanOption((o) =>
-    o
-      .setName("pin_last_message")
-      .setDescription(slashModTxt.mute.pinLastMessage)
-      .setRequired(false),
+    o.setName("log_last_message").setDescription(slashModTxt.mute.logLastMessage).setRequired(false),
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
@@ -167,7 +183,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const minutes = parseInt(durationRaw, 10);
     const reason = interaction.options.getString("reason")?.trim() || modTxt.defaultMuteReason;
     const screenshot = interaction.options.getAttachment("screenshot");
-    const pinLast = interaction.options.getBoolean("pin_last_message") === true;
+    const logLastMessage = interaction.options.getBoolean("log_last_message") === true;
     if (target.bot) {
       await interaction.reply({ content: modTxt.muteBot, flags: MessageFlags.Ephemeral });
       return;
@@ -199,15 +215,17 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     }
     await saveState(LAST_SEEN_STATE_FILE);
 
-    let pinnedEvidenceUrl: string | undefined;
-    let pinNote = "";
-    if (pinLast) {
-      const pinResult = await tryPinTargetRecentMessage(interaction, target.id);
-      if (pinResult.url) {
-        pinnedEvidenceUrl = pinResult.url;
-        pinNote = modTxt.pinSuccessNote(pinResult.url);
+    let evidenceMessageId: string | undefined;
+    let evidenceExcerpt: string | undefined;
+    let lastMsgNote = "";
+    if (logLastMessage) {
+      const found = await findTargetRecentMessage(interaction, target.id);
+      if (found.message) {
+        evidenceMessageId = found.message.id;
+        evidenceExcerpt = formatMutedUserMessageSnapshot(found.message);
+        lastMsgNote = DISCORD_MODERATION_LOG_CHANNEL_ID ? modTxt.lastMessageLoggedNote : modTxt.lastMessageNoLogEnv;
       } else {
-        pinNote = modTxt.pinFailNote(pinResult.error ?? modTxt.unknownError);
+        lastMsgNote = modTxt.lastMessageFailNote(found.error ?? modTxt.unknownError);
       }
     }
 
@@ -228,7 +246,9 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       staffUserId: interaction.user.id,
       timeoutMs: ms,
       ...(logFiles ? { logFiles } : {}),
-      ...(pinnedEvidenceUrl ? { pinnedEvidenceUrl } : {}),
+      ...(evidenceMessageId !== undefined && evidenceExcerpt !== undefined
+        ? { messageId: evidenceMessageId, messageExcerpt: evidenceExcerpt }
+        : {}),
     });
 
     const durLabel =
@@ -239,7 +259,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     }
 
     await interaction.editReply({
-      content: modTxt.muteDone(durLabel, target.id, pinNote, shotNote),
+      content: modTxt.muteDone(durLabel, target.id, lastMsgNote, shotNote),
     });
     return;
   }

@@ -24,8 +24,6 @@ export type ModerationLogPayload = {
   staffUserId?: string;
   /** Remote attachment(s) for the log message (e.g. /mute screenshot). */
   logFiles?: { url: string; name: string }[];
-  /** Link to a message pinned as evidence (e.g. /mute pin_last_message). */
-  pinnedEvidenceUrl?: string;
 };
 
 export async function logModerationEvent(guild: Guild, payload: ModerationLogPayload): Promise<void> {
@@ -90,13 +88,6 @@ export async function logModerationEvent(guild: Guild, payload: ModerationLogPay
     embed.addFields({
       name: discordModerationLogFields.excerpt,
       value: payload.messageExcerpt.slice(0, 1000),
-      inline: false,
-    });
-  }
-  if (payload.pinnedEvidenceUrl) {
-    embed.addFields({
-      name: discordModerationLogFields.pinnedMessage,
-      value: payload.pinnedEvidenceUrl.slice(0, 500),
       inline: false,
     });
   }

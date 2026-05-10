@@ -53,7 +53,8 @@ export const discordSlashModeration = {
     duration: "Длительность таймаута",
     reason: "Причина",
     screenshot: "Скриншот нарушения — приложится к записи в лог модерации",
-    pinLastMessage: "Закрепить последнее сообщение пользователя в этом канале (до 100 сообщений истории)",
+    logLastMessage:
+      "Добавить в лог модерации копию последнего сообщения пользователя в этом канале (до 100 сообщений истории), со ссылкой — оригинал можно удалить",
   },
   unmute: {
     commandDescription: "Снять таймаут с пользователя.",
@@ -102,7 +103,6 @@ export const discordModerationLogFields = {
   timeoutMinutes: (m: number) => `${m} мин`,
   message: "Сообщение",
   excerpt: "Фрагмент",
-  pinnedMessage: "Закреплённое сообщение",
   moderator: "Модератор",
 } as const;
 
@@ -223,14 +223,18 @@ export const discordModerationCommands = {
   unmuteDone: (userId: string) => `Таймаут снят с <@${userId}>.`,
   warnCounts: (userId: string, scopeId: string, before: number, after: number) =>
     `Предупреждения <@${userId}> в <#${scopeId}>: ${before} → ${after}.`,
-  pinChannelUnsupported: "В этом канале нельзя закреплять сообщения.",
-  pinNoMessage: "Нет сообщений пользователя среди последних 100 в канале.",
-  pinSuccessNote: (url: string) => `\nЗакреплено сообщение: ${url}`,
-  pinFailNote: (err: string) => `\nЗакрепление: не удалось — ${err}`,
+  lastMessageChannelUnsupported: "В этом канале нельзя прочитать историю сообщений для копии.",
+  lastMessageNotFound: "Нет сообщений пользователя среди последних 100 в канале.",
+  lastMessageLoggedNote:
+    "\nВ лог модерации добавлены ссылка и копия последнего сообщения пользователя.",
+  lastMessageNoLogEnv:
+    "\nКопия сообщения не попадёт в лог: не задан DISCORD_MODERATION_LOG_CHANNEL_ID.",
+  lastMessageFailNote: (err: string) => `\nНе удалось добавить копию сообщения в лог — ${err}`,
   screenshotLogged: "\nСкриншот добавлен к записи в лог модерации.",
   screenshotNoLogEnv: "\nСкриншот не попадёт в лог: не задан DISCORD_MODERATION_LOG_CHANNEL_ID.",
-  muteDone: (durLabel: string, userId: string, pinNote: string, shotNote: string) =>
-    `Таймаут **${durLabel}** (<@${userId}>).${pinNote}${shotNote}`,
+  muteSnapshotEmpty: "(нет текста; есть только вложения/embed/стикеры — см. ссылку на сообщение)",
+  muteDone: (durLabel: string, userId: string, evidenceNote: string, shotNote: string) =>
+    `Таймаут **${durLabel}** (<@${userId}>).${evidenceNote}${shotNote}`,
   minutesFallback: (n: number) => `${n} мин`,
   screenshotFileFallback: "screenshot",
 } as const;
