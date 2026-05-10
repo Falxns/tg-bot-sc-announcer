@@ -9,7 +9,7 @@ Telegram + Discord bot service that polls the [Exbo forum](https://forum.exbo.ru
 - Persists “last seen” post IDs so only new comments are announced
 - Supports admin-only Telegram commands to list/add/remove tracked authors
 - Runs a Discord bot in the same process with:
-  - admin slash command `/post` (post as bot to a target channel)
+  - admin slash commands `/post` and `/edit` (post or edit bot messages in a target channel)
   - role assignment message buttons via `/rolepanel`
   - channel-aware moderation (minor/major severity, per-channel warnings, guild mute ladders, 3-day decay, DM + channel fallback, optional log channel, staff `/mute` `/unmute` `/warn` `/unwarn`, optional external-link domain blacklist)
 - Optional HTTP health-check server (e.g. for PaaS readiness probes)
@@ -27,7 +27,7 @@ Telegram + Discord bot service that polls the [Exbo forum](https://forum.exbo.ru
 - Node.js 18 or higher
 - A [Telegram Bot](https://t.me/BotFather) token
 - One or more Telegram channel/group IDs where the bot can post (and is added as admin)
-- A Discord bot token, target guild ID, and bot permissions for message management, role management, timeout moderation, and **Attach Files** (for `/post` images and files attached to moderation log posts)
+- A Discord bot token, target guild ID, and bot permissions for message management, role management, timeout moderation, and **Attach Files** (for `/post` / `/edit` images and files attached to moderation log posts)
 
 ## Setup
 
@@ -57,7 +57,7 @@ Edit `.env`:
 | `UPSTASH_REDIS_REST_TOKEN` | No | Upstash Redis REST token (required when `STATE_BACKEND=upstash`) |
 | `UPSTASH_STATE_KEY` | No | Redis key for serialized state JSON (default: `tg-bot-sc-announcer:state`) |
 | `ADMIN_USER_IDS` | No | Comma-separated Telegram user IDs; if empty, all users can use admin commands |
-| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/rolepanel`, `/linkpanel`, `/mute`, `/unmute`, `/warn`, `/unwarn` (when empty, any member who passes Discord’s command permissions may use them) |
+| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/edit`, `/rolepanel`, `/linkpanel`, `/mute`, `/unmute`, `/warn`, `/unwarn` (when empty, any member who passes Discord’s command permissions may use them) |
 | `DISCORD_ROLE_PANEL_CHANNEL_ID` | No | Restrict `/rolepanel` usage to one channel |
 | `DISCORD_BLOCK_INVITE_LINKS_GLOBAL` | No | `1`/`0` toggle for global Discord invite-link filtering |
 | `DISCORD_INVITE_ALLOWED_ROLE_IDS` | No | Roles allowed to bypass invite-link filter |
@@ -101,6 +101,7 @@ Author list and “last seen” state are saved to the state file and restored o
 ## Discord commands (admin/mod roles)
 
 - `/post channel:<channel> [image] [embed_*]` — optional **`embed_title`**, **`embed_description`**, **`embed_url`**, **`embed_color`** (`#RRGGBB` or decimal); optionally attach **one** file on the command, then a **modal** for optional body text (can be empty if you only send an attachment/embed); embed and file attach to the **first** posted message
+- `/edit channel:<channel> message_id:<snowflake> [image] [embed_*]` — edit **one** existing message **sent by this bot** in that channel (copy message ID with Developer Mode → right‑click → Copy ID); same embed/file options as `/post`; modal sets new body text up to **2000** characters (single Discord message); optional **`image`** replaces attachments when provided
 - `/rolepanel channel:<channel> role1:<role> [label1…label6] [role2…role6] [single_role] [embed_*]` — required **`channel`** + **`role1`** first (Discord rule); optional `single_role:true` makes panel roles mutually exclusive (user keeps only one role from that panel); also supports same **`embed_*`** as `/post`; command opens a modal for optional multiline message text
 - `/linkpanel channel:<channel> url1:<https://...> [label1…label5] [url2…url5] [embed_*]` — creates message buttons that open URLs (no role toggle), then opens a modal for optional multiline message text
 - `/mute user:<user> duration:<choice> [reason] [screenshot] [log_last_message]` — manual timeout (does **not** advance auto minor/major ladder tiers); **`duration`** is one of: 1 hour, 6 hours, 12 hours, 1 day, 3 days, 7 days, 14 days, 28 days; optional **`screenshot`** attaches to the moderation log message when **`DISCORD_MODERATION_LOG_CHANNEL_ID`** is set; optional **`log_last_message`** copies the user’s most recent message in the current channel (among the last **100** messages) into the mod log as **text** — nothing is pinned; staff can delete the original in-channel afterward

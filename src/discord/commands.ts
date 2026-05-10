@@ -17,6 +17,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from "discord.js";
+import type { Message } from "discord.js";
 import { DISCORD_ADMIN_ROLE_IDS, DISCORD_ROLE_PANEL_CHANNEL_ID, LAST_SEEN_STATE_FILE, LOG_LEVEL } from "../config";
 import { saveState, setDiscordRolePanel } from "../state";
 import {
@@ -28,13 +29,17 @@ import {
 } from "./moderationCommands";
 import { peelFirstCustomDiscordEmojiFromLabel, type ParsedButtonEmoji } from "./buttonEmoji";
 import {
+  createPendingEdit,
   createPendingLinkPanel,
   createPendingPost,
   createPendingRolePanel,
+  takePendingEdit,
   takePendingLinkPanel,
   takePendingPost,
   takePendingRolePanel,
   type PendingAttachmentRef,
+  type PendingEditBaselineEmbed,
+  type PendingEditPayload,
   type PendingLinkPanelPayload,
   type PendingPostPayload,
   type PendingRolePanelPayload,
@@ -44,6 +49,7 @@ import {
   discordCommonReplies as com,
   discordFmtAttachmentPrepFail,
   discordFmtChannelSendFail,
+  discordFmtEditDone,
   discordFmtLinkPanelDone,
   discordFmtPostPublished,
   discordFmtRolePanelCreated,
@@ -51,6 +57,7 @@ import {
   discordLinkPanelErrors as linkErr,
   discordRolePanelErrors as roleErr,
   discordSlashEmbedOptions as emb,
+  discordSlashEdit as editTxt,
   discordSlashLinkPanel as lp,
   discordSlashPost as postTxt,
   discordSlashRolePanel as rp,
@@ -76,6 +83,10 @@ function isElevated(member: GuildMember | APIInteractionGuildMember | null): boo
   if (allowed.length === 0) return true;
   const roleIds = memberRoleIds(member);
   return roleIds.some((id) => allowed.includes(id));
+}
+
+function isDiscordSnowflake(id: string): boolean {
+  return /^\d{17,20}$/.test(id.trim());
 }
 
 const postCommand = new SlashCommandBuilder()
@@ -126,7 +137,64 @@ const postCommand = new SlashCommandBuilder()
     opt.setName("image").setDescription(postTxt.image).setRequired(false),
   );
 
+const editCommand = new SlashCommandBuilder()
+  .setName("edit")
+  .setDescription(editTxt.commandDescription)
+  .addChannelOption((opt) =>
+    opt
+      .setName("channel")
+      .setDescription(editTxt.channel)
+      .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+      .setRequired(true),
+  )
+  .addStringOption((opt) =>
+    opt
+      .setName("message_id")
+      .setDescription(editTxt.messageId)
+      .setRequired(true)
+      .setMinLength(17)
+      .setMaxLength(22),
+  )
+  .addStringOption((opt) =>
+    opt.setName("embed_title").setDescription(emb.embedTitle).setMaxLength(256).setRequired(false),
+  )
+  .addStringOption((opt) =>
+    opt.setName("embed_description").setDescription(emb.embedDescription).setMaxLength(4000).setRequired(false),
+  )
+  .addStringOption((opt) =>
+    opt.setName("embed_url").setDescription(emb.embedUrl).setMaxLength(2000).setRequired(false),
+  )
+  .addStringOption((opt) =>
+    opt
+      .setName("embed_color")
+      .setDescription(emb.embedColor)
+      .setMaxLength(32)
+      .setRequired(false),
+  )
+  .addStringOption((opt) =>
+    opt.setName("embed_thumbnail_url").setDescription(emb.embedThumbnailUrl).setMaxLength(2000),
+  )
+  .addStringOption((opt) =>
+    opt.setName("embed_image_url").setDescription(emb.embedImageUrl).setMaxLength(2000),
+  )
+  .addStringOption((opt) =>
+    opt.setName("embed_footer").setDescription(emb.embedFooter).setMaxLength(2048),
+  )
+  .addStringOption((opt) =>
+    opt.setName("embed_footer_icon_url").setDescription(emb.embedFooterIconUrl).setMaxLength(2000),
+  )
+  .addStringOption((opt) =>
+    opt.setName("embed_author_name").setDescription(emb.embedAuthorName).setMaxLength(256),
+  )
+  .addStringOption((opt) =>
+    opt.setName("embed_author_icon_url").setDescription(emb.embedAuthorIconUrl).setMaxLength(2000),
+  )
+  .addAttachmentOption((opt) =>
+    opt.setName("image").setDescription(editTxt.image).setRequired(false),
+  );
+
 postCommand.setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
+editCommand.setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
 /** Embed options shared by `/rolepanel` and `/linkpanel`. */
 function appendSharedPanelEmbedOptions(cmd: unknown): SlashCommandBuilder {
@@ -239,6 +307,7 @@ const linkPanelCommand = appendSharedPanelEmbedOptions(
 export async function registerGuildCommands(guild: Guild): Promise<void> {
   await guild.commands.set([
     postCommand.toJSON(),
+    editCommand.toJSON(),
     rolePanelCommand.toJSON(),
     linkPanelCommand.toJSON(),
     muteSlashCommand.toJSON(),
@@ -512,6 +581,38 @@ function buildEmbedsFromPending(p: PendingPostPayload): EmbedBuilder[] | undefin
   });
 }
 
+function extractBaselineEmbedFromMessage(message: Message): PendingEditBaselineEmbed | undefined {
+  const e = message.embeds[0];
+  if (!e) return undefined;
+  return {
+    embedTitle: e.title ?? undefined,
+    embedDescription: e.description ?? undefined,
+    embedUrl: e.url ?? undefined,
+    embedColor: e.color ?? undefined,
+    embedThumbnailUrl: e.thumbnail?.url ?? undefined,
+    embedImageUrl: e.image?.url ?? undefined,
+    embedFooter: e.footer?.text ?? undefined,
+    embedFooterIconUrl: e.footer?.iconURL ?? undefined,
+    embedAuthorName: e.author?.name ?? undefined,
+    embedAuthorIconUrl: e.author?.iconURL ?? undefined,
+  };
+}
+
+function mergeEditEmbedFields(baseline: PendingEditBaselineEmbed | undefined, pending: PendingEditPayload): SlashEmbedOptions {
+  return {
+    title: pending.embedTitle ?? baseline?.embedTitle,
+    description: pending.embedDescription ?? baseline?.embedDescription,
+    url: pending.embedUrl ?? baseline?.embedUrl,
+    color: pending.embedColor ?? baseline?.embedColor,
+    thumbnailUrl: pending.embedThumbnailUrl ?? baseline?.embedThumbnailUrl,
+    imageUrl: pending.embedImageUrl ?? baseline?.embedImageUrl,
+    footerText: pending.embedFooter ?? baseline?.embedFooter,
+    footerIconUrl: pending.embedFooterIconUrl ?? baseline?.embedFooterIconUrl,
+    authorName: pending.embedAuthorName ?? baseline?.embedAuthorName,
+    authorIconUrl: pending.embedAuthorIconUrl ?? baseline?.embedAuthorIconUrl,
+  };
+}
+
 async function handlePost(interaction: ChatInputCommandInteraction): Promise<void> {
   const channelRef = interaction.options.getChannel("channel", true);
   const channel = await interaction.guild!.channels.fetch(channelRef.id);
@@ -655,10 +756,168 @@ async function handlePostModalSubmit(interaction: ModalSubmitInteraction): Promi
   });
 }
 
+async function handleEdit(interaction: ChatInputCommandInteraction): Promise<void> {
+  const rawId = interaction.options.getString("message_id", true).trim();
+  if (!isDiscordSnowflake(rawId)) {
+    await interaction.reply({ content: editTxt.invalidMessageId, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const channelRef = interaction.options.getChannel("channel", true);
+  const channel = await interaction.guild!.channels.fetch(channelRef.id);
+  if (!channel || !channel.isTextBased() || !("messages" in channel)) {
+    await interaction.reply({ content: com.channelNotText, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  let existing: Message;
+  try {
+    existing = await channel.messages.fetch(rawId);
+    if (existing.author.id !== interaction.client.user!.id) {
+      await interaction.reply({ content: editTxt.notBotsMessage, flags: MessageFlags.Ephemeral });
+      return;
+    }
+  } catch {
+    await interaction.reply({ content: editTxt.messageNotFound, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const baselineEmbed = extractBaselineEmbedFromMessage(existing);
+  const attachments = collectPostAttachmentRefs(interaction);
+  const embedOpts = collectSlashEmbedOptions(interaction);
+  const nonce = createPendingEdit({
+    guildId: interaction.guildId!,
+    channelId: channel.id,
+    messageId: rawId,
+    userId: interaction.user.id,
+    attachments: attachments.length > 0 ? attachments : undefined,
+    baselineEmbed,
+    embedTitle: embedOpts.title,
+    embedDescription: embedOpts.description,
+    embedUrl: embedOpts.url,
+    embedColor: embedOpts.color,
+    embedThumbnailUrl: embedOpts.thumbnailUrl,
+    embedImageUrl: embedOpts.imageUrl,
+    embedFooter: embedOpts.footerText,
+    embedFooterIconUrl: embedOpts.footerIconUrl,
+    embedAuthorName: embedOpts.authorName,
+    embedAuthorIconUrl: embedOpts.authorIconUrl,
+  });
+  const bodyInput = new TextInputBuilder()
+    .setCustomId("content")
+    .setLabel(editTxt.modalBodyLabel.slice(0, DISCORD_TEXT_INPUT_LABEL_MAX))
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(false)
+    .setMinLength(0)
+    .setMaxLength(4000);
+  const initialBody = existing.content ?? "";
+  if (initialBody.length > 0) {
+    bodyInput.setValue(initialBody.slice(0, 4000));
+  }
+  const modal = new ModalBuilder().setCustomId(`edit:${nonce}`).setTitle(editTxt.modalTitle);
+  modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(bodyInput));
+  await interaction.showModal(modal);
+}
+
+async function handleEditModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+  const nonce = interaction.customId.slice("edit:".length);
+  const pending = takePendingEdit(nonce);
+  if (!pending) {
+    await interaction.reply({
+      content: com.modalStaleEdit,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  if (!interaction.inGuild() || interaction.guildId !== pending.guildId) {
+    await interaction.reply({ content: com.wrongGuild, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (interaction.user.id !== pending.userId) {
+    await interaction.reply({ content: com.modalWrongInvokerEdit, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (!isElevated(interaction.member)) {
+    await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const raw = interaction.fields.getTextInputValue("content").replace(/\r\n/g, "\n");
+  const contentTrimmed = raw.trim();
+  const attachmentRefs = pending.attachments ?? [];
+  const hasAttachments = attachmentRefs.length > 0;
+  const mergedEmbedOpts = mergeEditEmbedFields(pending.baselineEmbed, pending);
+  const embedsFirst = buildEmbedsFromOptions(mergedEmbedOpts);
+  const hasEmbed = !!embedsFirst?.length;
+
+  if (!contentTrimmed && !hasAttachments && !hasEmbed) {
+    await interaction.reply({
+      content: com.postModalNeedsContent,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  if (contentTrimmed.length > DISCORD_MESSAGE_CONTENT_MAX) {
+    await interaction.reply({ content: editTxt.bodyTooLong, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const channel = await interaction.guild!.channels.fetch(pending.channelId);
+  if (!channel || !channel.isTextBased() || !("messages" in channel)) {
+    await interaction.editReply({ content: com.channelUnavailable });
+    return;
+  }
+
+  let msg;
+  try {
+    msg = await channel.messages.fetch(pending.messageId);
+  } catch {
+    await interaction.editReply({ content: editTxt.messageNotFound });
+    return;
+  }
+  if (msg.author.id !== interaction.client.user!.id) {
+    await interaction.editReply({ content: editTxt.notBotsMessage });
+    return;
+  }
+
+  let fileBuilders: AttachmentBuilder[] = [];
+  try {
+    if (hasAttachments) {
+      fileBuilders = await buildDiscordAttachmentBuilders(attachmentRefs);
+    }
+  } catch (err) {
+    console.error("/edit attachment download failed:", err);
+    await interaction.editReply({
+      content: discordFmtAttachmentPrepFail(err),
+    });
+    return;
+  }
+
+  try {
+    await msg.edit({
+      content: contentTrimmed.length > 0 ? contentTrimmed : null,
+      embeds: hasEmbed ? embedsFirst! : [],
+      ...(hasAttachments && fileBuilders.length > 0 ? { files: fileBuilders } : {}),
+    });
+  } catch (err) {
+    console.error("/edit message.edit failed:", err);
+    await interaction.editReply({
+      content: discordFmtChannelSendFail(err),
+    });
+    return;
+  }
+
+  await interaction.editReply({
+    content: discordFmtEditDone(interaction.guild!.id, pending.channelId, pending.messageId),
+  });
+}
+
 export async function handleDiscordModal(interaction: ModalSubmitInteraction): Promise<void> {
   const id = interaction.customId;
   if (id.startsWith("post:")) {
     await handlePostModalSubmit(interaction);
+    return;
+  }
+  if (id.startsWith("edit:")) {
+    await handleEditModalSubmit(interaction);
     return;
   }
   if (id.startsWith("rolepanel:")) {
@@ -829,6 +1088,10 @@ export async function handleDiscordCommand(interaction: ChatInputCommandInteract
   }
   if (interaction.commandName === "post") {
     await handlePost(interaction);
+    return;
+  }
+  if (interaction.commandName === "edit") {
+    await handleEdit(interaction);
     return;
   }
   if (interaction.commandName === "rolepanel") {

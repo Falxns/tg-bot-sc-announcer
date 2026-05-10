@@ -26,6 +26,19 @@ export const discordSlashPost = {
   modalBodyLabel: "Текст сообщения",
 } as const;
 
+export const discordSlashEdit = {
+  commandDescription: "Изменить существующее сообщение. Указанные поля embed заменяются, остальные сохраняются.",
+  channel: "Канал с сообщением",
+  messageId: "ID сообщения (ПКМ по сообщению → Копировать ID; включите режим разработчика в Discord)",
+  image: "Новый файл (необязательно; заменит вложения, если указан)",
+  modalTitle: "Редактирование сообщения",
+  modalBodyLabel: "Новый текст сообщения",
+  messageNotFound: "Сообщение не найдено или недоступно.",
+  notBotsMessage: "Редактировать можно только сообщения, отправленные этим ботом.",
+  invalidMessageId: "Некорректный ID сообщения.",
+  bodyTooLong: "Текст длиннее 2000 символов — это одно сообщение Discord; сократите текст.",
+} as const;
+
 export const discordSlashRolePanel = {
   commandDescription: "Сообщение с кнопками выдачи ролей.",
   channel: "Канал для публикации",
@@ -118,9 +131,11 @@ export const discordCommonReplies = {
   wrongGuild: "Неверный сервер.",
   channelNotText: "Этот канал не подходит для текстовых сообщений.",
   modalStalePost: "Форма устарела или уже использована. Запустите `/post` снова.",
+  modalStaleEdit: "Форма устарела или уже использована. Запустите `/edit` снова.",
   modalStaleRolePanel: "Форма устарела или уже использована. Запустите `/rolepanel` снова.",
   modalStaleLinkPanel: "Форма устарела или уже использована. Запустите `/linkpanel` снова.",
   modalWrongInvokerPost: "Отправить форму может только тот, кто вызвал `/post`.",
+  modalWrongInvokerEdit: "Отправить форму может только тот, кто вызвал `/edit`.",
   modalWrongInvokerRolePanel: "Отправить форму может только тот, кто вызвал `/rolepanel`.",
   modalWrongInvokerLinkPanel: "Отправить форму может только тот, кто вызвал `/linkpanel`.",
   postModalNeedsContent:
@@ -129,6 +144,10 @@ export const discordCommonReplies = {
   channelUnavailable: "Канал больше недоступен.",
   internalError: "Произошла внутренняя ошибка.",
 } as const;
+
+export function discordFmtEditDone(guildId: string, channelId: string, messageId: string): string {
+  return `Сообщение обновлено: https://discord.com/channels/${guildId}/${channelId}/${messageId}`;
+}
 
 export function discordFmtPostPublished(opts: {
   channelId: string;

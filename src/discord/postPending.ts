@@ -27,6 +27,26 @@ export type PendingPostPayload = {
   expiresAt: number;
 };
 
+export type PendingEditBaselineEmbed = Pick<
+  PendingPostPayload,
+  | "embedTitle"
+  | "embedDescription"
+  | "embedUrl"
+  | "embedColor"
+  | "embedThumbnailUrl"
+  | "embedImageUrl"
+  | "embedFooter"
+  | "embedFooterIconUrl"
+  | "embedAuthorName"
+  | "embedAuthorIconUrl"
+>;
+
+export type PendingEditPayload = PendingPostPayload & {
+  messageId: string;
+  /** First embed on the message when `/edit` ran; merged at submit (slash options override when provided). */
+  baselineEmbed?: PendingEditBaselineEmbed;
+};
+
 type PanelEmbedFields = Pick<
   PendingPostPayload,
   | "embedTitle"
@@ -66,6 +86,7 @@ export type PendingLinkPanelPayload = PanelEmbedFields & {
 
 const TTL_MS = 15 * 60 * 1000;
 const pendingByNonce = new Map<string, PendingPostPayload>();
+const pendingEditByNonce = new Map<string, PendingEditPayload>();
 const pendingRolePanelByNonce = new Map<string, PendingRolePanelPayload>();
 const pendingLinkPanelByNonce = new Map<string, PendingLinkPanelPayload>();
 
@@ -73,6 +94,9 @@ function pruneExpired(): void {
   const now = Date.now();
   for (const [k, v] of pendingByNonce) {
     if (v.expiresAt <= now) pendingByNonce.delete(k);
+  }
+  for (const [k, v] of pendingEditByNonce) {
+    if (v.expiresAt <= now) pendingEditByNonce.delete(k);
   }
   for (const [k, v] of pendingRolePanelByNonce) {
     if (v.expiresAt <= now) pendingRolePanelByNonce.delete(k);
@@ -94,6 +118,22 @@ export function takePendingPost(nonce: string): PendingPostPayload | undefined {
   const v = pendingByNonce.get(nonce);
   if (!v) return undefined;
   pendingByNonce.delete(nonce);
+  if (v.expiresAt <= Date.now()) return undefined;
+  return v;
+}
+
+export function createPendingEdit(payload: Omit<PendingEditPayload, "expiresAt">): string {
+  pruneExpired();
+  const nonce = randomUUID();
+  pendingEditByNonce.set(nonce, { ...payload, expiresAt: Date.now() + TTL_MS });
+  return nonce;
+}
+
+export function takePendingEdit(nonce: string): PendingEditPayload | undefined {
+  pruneExpired();
+  const v = pendingEditByNonce.get(nonce);
+  if (!v) return undefined;
+  pendingEditByNonce.delete(nonce);
   if (v.expiresAt <= Date.now()) return undefined;
   return v;
 }
