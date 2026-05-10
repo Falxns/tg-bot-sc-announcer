@@ -40,6 +40,21 @@ import {
   type PendingRolePanelPayload,
 } from "./postPending";
 import type { DiscordRolePanelButton } from "./types";
+import {
+  discordCommonReplies as com,
+  discordFmtAttachmentPrepFail,
+  discordFmtChannelSendFail,
+  discordFmtLinkPanelDone,
+  discordFmtPostPublished,
+  discordFmtRolePanelCreated,
+  discordFmtRolePanelWrongChannel,
+  discordLinkPanelErrors as linkErr,
+  discordRolePanelErrors as roleErr,
+  discordSlashEmbedOptions as emb,
+  discordSlashLinkPanel as lp,
+  discordSlashPost as postTxt,
+  discordSlashRolePanel as rp,
+} from "./userStrings";
 
 /** Discord message `content` limit per message (bots). Long posts are split across multiple messages. */
 const DISCORD_MESSAGE_CONTENT_MAX = 2000;
@@ -65,50 +80,50 @@ function isElevated(member: GuildMember | APIInteractionGuildMember | null): boo
 
 const postCommand = new SlashCommandBuilder()
   .setName("post")
-  .setDescription("Отправить сообщение от имени бота в выбранный канал.")
+  .setDescription(postTxt.commandDescription)
   .addChannelOption((opt) =>
     opt
       .setName("channel")
-      .setDescription("Канал для публикации")
+      .setDescription(postTxt.channel)
       .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
       .setRequired(true),
   )
   .addStringOption((opt) =>
-    opt.setName("embed_title").setDescription("Заголовок embed (необязательно)").setMaxLength(256).setRequired(false),
+    opt.setName("embed_title").setDescription(emb.embedTitle).setMaxLength(256).setRequired(false),
   )
   .addStringOption((opt) =>
-    opt.setName("embed_description").setDescription("Описание embed (необязательно)").setMaxLength(4000).setRequired(false),
+    opt.setName("embed_description").setDescription(emb.embedDescription).setMaxLength(4000).setRequired(false),
   )
   .addStringOption((opt) =>
-    opt.setName("embed_url").setDescription("Ссылка в заголовке embed (необязательно)").setMaxLength(2000).setRequired(false),
+    opt.setName("embed_url").setDescription(emb.embedUrl).setMaxLength(2000).setRequired(false),
   )
   .addStringOption((opt) =>
     opt
       .setName("embed_color")
-      .setDescription("Цвет embed: #RRGGBB или десятичное число")
+      .setDescription(emb.embedColor)
       .setMaxLength(32)
       .setRequired(false),
   )
   .addStringOption((opt) =>
-    opt.setName("embed_thumbnail_url").setDescription("URL миниатюры embed (справа сверху)").setMaxLength(2000),
+    opt.setName("embed_thumbnail_url").setDescription(emb.embedThumbnailUrl).setMaxLength(2000),
   )
   .addStringOption((opt) =>
-    opt.setName("embed_image_url").setDescription("URL большого изображения embed").setMaxLength(2000),
+    opt.setName("embed_image_url").setDescription(emb.embedImageUrl).setMaxLength(2000),
   )
   .addStringOption((opt) =>
-    opt.setName("embed_footer").setDescription("Текст подвала embed").setMaxLength(2048),
+    opt.setName("embed_footer").setDescription(emb.embedFooter).setMaxLength(2048),
   )
   .addStringOption((opt) =>
-    opt.setName("embed_footer_icon_url").setDescription("URL иконки подвала embed").setMaxLength(2000),
+    opt.setName("embed_footer_icon_url").setDescription(emb.embedFooterIconUrl).setMaxLength(2000),
   )
   .addStringOption((opt) =>
-    opt.setName("embed_author_name").setDescription("Строка автора embed (сверху)").setMaxLength(256),
+    opt.setName("embed_author_name").setDescription(emb.embedAuthorName).setMaxLength(256),
   )
   .addStringOption((opt) =>
-    opt.setName("embed_author_icon_url").setDescription("URL иконки автора embed").setMaxLength(2000),
+    opt.setName("embed_author_icon_url").setDescription(emb.embedAuthorIconUrl).setMaxLength(2000),
   )
   .addAttachmentOption((opt) =>
-    opt.setName("image").setDescription("Файл/картинка (к первому сообщению, необязательно)").setRequired(false),
+    opt.setName("image").setDescription(postTxt.image).setRequired(false),
   );
 
 postCommand.setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
@@ -119,38 +134,38 @@ function appendSharedPanelEmbedOptions(cmd: unknown): SlashCommandBuilder {
   return (
     base
       .addStringOption((opt) =>
-        opt.setName("embed_title").setDescription("Заголовок embed (необязательно)").setMaxLength(256).setRequired(false),
+        opt.setName("embed_title").setDescription(emb.embedTitle).setMaxLength(256).setRequired(false),
       )
       .addStringOption((opt) =>
-        opt.setName("embed_description").setDescription("Описание embed (необязательно)").setMaxLength(4000).setRequired(false),
+        opt.setName("embed_description").setDescription(emb.embedDescription).setMaxLength(4000).setRequired(false),
       )
       .addStringOption((opt) =>
-        opt.setName("embed_url").setDescription("Ссылка в заголовке embed (необязательно)").setMaxLength(2000).setRequired(false),
+        opt.setName("embed_url").setDescription(emb.embedUrl).setMaxLength(2000).setRequired(false),
       )
       .addStringOption((opt) =>
         opt
           .setName("embed_color")
-          .setDescription("Цвет embed: #RRGGBB или десятичное число")
+          .setDescription(emb.embedColor)
           .setMaxLength(32)
           .setRequired(false),
       )
       .addStringOption((opt) =>
-        opt.setName("embed_thumbnail_url").setDescription("URL миниатюры embed (справа сверху)").setMaxLength(2000),
+        opt.setName("embed_thumbnail_url").setDescription(emb.embedThumbnailUrl).setMaxLength(2000),
       )
       .addStringOption((opt) =>
-        opt.setName("embed_image_url").setDescription("URL большого изображения embed").setMaxLength(2000),
+        opt.setName("embed_image_url").setDescription(emb.embedImageUrl).setMaxLength(2000),
       )
       .addStringOption((opt) =>
-        opt.setName("embed_footer").setDescription("Текст подвала embed").setMaxLength(2048),
+        opt.setName("embed_footer").setDescription(emb.embedFooter).setMaxLength(2048),
       )
       .addStringOption((opt) =>
-        opt.setName("embed_footer_icon_url").setDescription("URL иконки подвала embed").setMaxLength(2000),
+        opt.setName("embed_footer_icon_url").setDescription(emb.embedFooterIconUrl).setMaxLength(2000),
       )
       .addStringOption((opt) =>
-        opt.setName("embed_author_name").setDescription("Строка автора embed (сверху)").setMaxLength(256),
+        opt.setName("embed_author_name").setDescription(emb.embedAuthorName).setMaxLength(256),
       )
       .addStringOption((opt) =>
-        opt.setName("embed_author_icon_url").setDescription("URL иконки автора embed").setMaxLength(2000),
+        opt.setName("embed_author_icon_url").setDescription(emb.embedAuthorIconUrl).setMaxLength(2000),
       ) as unknown as SlashCommandBuilder
   );
 }
@@ -158,30 +173,30 @@ function appendSharedPanelEmbedOptions(cmd: unknown): SlashCommandBuilder {
 const rolePanelCommand = appendSharedPanelEmbedOptions(
   new SlashCommandBuilder()
     .setName("rolepanel")
-    .setDescription("Создать сообщение с кнопками выдачи ролей.")
+    .setDescription(rp.commandDescription)
     .addChannelOption((opt) =>
       opt
         .setName("channel")
-        .setDescription("Канал для сообщения")
+        .setDescription(rp.channel)
         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setRequired(true),
     )
-    .addRoleOption((opt) => opt.setName("role1").setDescription("Роль №1").setRequired(true))
-    .addStringOption((opt) => opt.setName("label1").setDescription("Подпись кнопки для роли №1").setMaxLength(80))
-    .addRoleOption((opt) => opt.setName("role2").setDescription("Роль №2"))
-    .addStringOption((opt) => opt.setName("label2").setDescription("Подпись кнопки для роли №2").setMaxLength(80))
-    .addRoleOption((opt) => opt.setName("role3").setDescription("Роль №3"))
-    .addStringOption((opt) => opt.setName("label3").setDescription("Подпись кнопки для роли №3").setMaxLength(80))
-    .addRoleOption((opt) => opt.setName("role4").setDescription("Роль №4"))
-    .addStringOption((opt) => opt.setName("label4").setDescription("Подпись кнопки для роли №4").setMaxLength(80))
-    .addRoleOption((opt) => opt.setName("role5").setDescription("Роль №5"))
-    .addStringOption((opt) => opt.setName("label5").setDescription("Подпись кнопки для роли №5").setMaxLength(80))
-    .addRoleOption((opt) => opt.setName("role6").setDescription("Роль №6"))
-    .addStringOption((opt) => opt.setName("label6").setDescription("Подпись кнопки для роли №6").setMaxLength(80))
+    .addRoleOption((opt) => opt.setName("role1").setDescription(rp.role(1)).setRequired(true))
+    .addStringOption((opt) => opt.setName("label1").setDescription(rp.roleButtonLabel(1)).setMaxLength(80))
+    .addRoleOption((opt) => opt.setName("role2").setDescription(rp.role(2)))
+    .addStringOption((opt) => opt.setName("label2").setDescription(rp.roleButtonLabel(2)).setMaxLength(80))
+    .addRoleOption((opt) => opt.setName("role3").setDescription(rp.role(3)))
+    .addStringOption((opt) => opt.setName("label3").setDescription(rp.roleButtonLabel(3)).setMaxLength(80))
+    .addRoleOption((opt) => opt.setName("role4").setDescription(rp.role(4)))
+    .addStringOption((opt) => opt.setName("label4").setDescription(rp.roleButtonLabel(4)).setMaxLength(80))
+    .addRoleOption((opt) => opt.setName("role5").setDescription(rp.role(5)))
+    .addStringOption((opt) => opt.setName("label5").setDescription(rp.roleButtonLabel(5)).setMaxLength(80))
+    .addRoleOption((opt) => opt.setName("role6").setDescription(rp.role(6)))
+    .addStringOption((opt) => opt.setName("label6").setDescription(rp.roleButtonLabel(6)).setMaxLength(80))
     .addBooleanOption((opt) =>
       opt
         .setName("single_role")
-        .setDescription("Разрешить только одну роль из этой панели (взаимоисключающие роли)")
+        .setDescription(rp.singleRole)
         .setRequired(false),
     ),
 ).setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles);
@@ -191,34 +206,34 @@ const LINK_BUTTON_URL_MAX = 512;
 const linkPanelCommand = appendSharedPanelEmbedOptions(
   new SlashCommandBuilder()
     .setName("linkpanel")
-    .setDescription("Создать сообщение с кнопками-ссылками (открывают URL в браузере).")
+    .setDescription(lp.commandDescription)
     .addChannelOption((opt) =>
       opt
         .setName("channel")
-        .setDescription("Канал для сообщения")
+        .setDescription(lp.channel)
         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setRequired(true),
     )
     .addStringOption((opt) =>
-      opt.setName("url1").setDescription("Ссылка №1 (https://…)").setMaxLength(LINK_BUTTON_URL_MAX).setRequired(true),
+      opt.setName("url1").setDescription(lp.url(1)).setMaxLength(LINK_BUTTON_URL_MAX).setRequired(true),
     )
-    .addStringOption((opt) => opt.setName("label1").setDescription("Подпись кнопки №1").setMaxLength(80))
+    .addStringOption((opt) => opt.setName("label1").setDescription(lp.buttonLabel(1)).setMaxLength(80))
     .addStringOption((opt) =>
-      opt.setName("url2").setDescription("Ссылка №2 (необязательно)").setMaxLength(LINK_BUTTON_URL_MAX),
+      opt.setName("url2").setDescription(lp.url(2)).setMaxLength(LINK_BUTTON_URL_MAX),
     )
-    .addStringOption((opt) => opt.setName("label2").setDescription("Подпись кнопки №2").setMaxLength(80))
+    .addStringOption((opt) => opt.setName("label2").setDescription(lp.buttonLabel(2)).setMaxLength(80))
     .addStringOption((opt) =>
-      opt.setName("url3").setDescription("Ссылка №3 (необязательно)").setMaxLength(LINK_BUTTON_URL_MAX),
+      opt.setName("url3").setDescription(lp.url(3)).setMaxLength(LINK_BUTTON_URL_MAX),
     )
-    .addStringOption((opt) => opt.setName("label3").setDescription("Подпись кнопки №3").setMaxLength(80))
+    .addStringOption((opt) => opt.setName("label3").setDescription(lp.buttonLabel(3)).setMaxLength(80))
     .addStringOption((opt) =>
-      opt.setName("url4").setDescription("Ссылка №4 (необязательно)").setMaxLength(LINK_BUTTON_URL_MAX),
+      opt.setName("url4").setDescription(lp.url(4)).setMaxLength(LINK_BUTTON_URL_MAX),
     )
-    .addStringOption((opt) => opt.setName("label4").setDescription("Подпись кнопки №4").setMaxLength(80))
+    .addStringOption((opt) => opt.setName("label4").setDescription(lp.buttonLabel(4)).setMaxLength(80))
     .addStringOption((opt) =>
-      opt.setName("url5").setDescription("Ссылка №5 (необязательно)").setMaxLength(LINK_BUTTON_URL_MAX),
+      opt.setName("url5").setDescription(lp.url(5)).setMaxLength(LINK_BUTTON_URL_MAX),
     )
-    .addStringOption((opt) => opt.setName("label5").setDescription("Подпись кнопки №5").setMaxLength(80)),
+    .addStringOption((opt) => opt.setName("label5").setDescription(lp.buttonLabel(5)).setMaxLength(80)),
 ).setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
 export async function registerGuildCommands(guild: Guild): Promise<void> {
@@ -312,7 +327,7 @@ function defaultLinkButtonLabel(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./i, "").slice(0, DISCORD_BUTTON_LABEL_MAX);
   } catch {
-    return "Ссылка";
+    return lp.linkFallbackLabel;
   }
 }
 
@@ -501,7 +516,7 @@ async function handlePost(interaction: ChatInputCommandInteraction): Promise<voi
   const channelRef = interaction.options.getChannel("channel", true);
   const channel = await interaction.guild!.channels.fetch(channelRef.id);
   if (!channel || !channel.isTextBased() || !("send" in channel)) {
-    await interaction.reply({ content: "Этот канал не подходит для текстовых сообщений.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: com.channelNotText, flags: MessageFlags.Ephemeral });
     return;
   }
   const attachments = collectPostAttachmentRefs(interaction);
@@ -522,11 +537,11 @@ async function handlePost(interaction: ChatInputCommandInteraction): Promise<voi
     embedAuthorName: embedOpts.authorName,
     embedAuthorIconUrl: embedOpts.authorIconUrl,
   });
-  const modal = new ModalBuilder().setCustomId(`post:${nonce}`).setTitle("Публикация сообщения");
+  const modal = new ModalBuilder().setCustomId(`post:${nonce}`).setTitle(postTxt.modalTitle);
   const bodyRow = new ActionRowBuilder<TextInputBuilder>().addComponents(
     new TextInputBuilder()
       .setCustomId("content")
-      .setLabel("Текст (необязательно, если есть файл)".slice(0, DISCORD_TEXT_INPUT_LABEL_MAX))
+      .setLabel(postTxt.modalBodyLabel.slice(0, DISCORD_TEXT_INPUT_LABEL_MAX))
       .setStyle(TextInputStyle.Paragraph)
       .setRequired(false)
       .setMinLength(0)
@@ -541,21 +556,21 @@ async function handlePostModalSubmit(interaction: ModalSubmitInteraction): Promi
   const pending = takePendingPost(nonce);
   if (!pending) {
     await interaction.reply({
-      content: "Форма устарела или уже использована. Запустите `/post` снова.",
+      content: com.modalStalePost,
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
   if (!interaction.inGuild() || interaction.guildId !== pending.guildId) {
-    await interaction.reply({ content: "Неверный сервер.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: com.wrongGuild, flags: MessageFlags.Ephemeral });
     return;
   }
   if (interaction.user.id !== pending.userId) {
-    await interaction.reply({ content: "Отправить форму может только тот, кто вызвал `/post`.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: com.modalWrongInvokerPost, flags: MessageFlags.Ephemeral });
     return;
   }
   if (!isElevated(interaction.member)) {
-    await interaction.reply({ content: "У вас нет прав на эту команду.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }
   const raw = interaction.fields.getTextInputValue("content").replace(/\r\n/g, "\n");
@@ -567,8 +582,7 @@ async function handlePostModalSubmit(interaction: ModalSubmitInteraction): Promi
 
   if (!contentTrimmed && !hasAttachments && !hasEmbed) {
     await interaction.reply({
-      content:
-        "Добавьте текст в форму, прикрепите файл в `/post` и/или задайте параметры embed (например `embed_title`, `embed_description`, `embed_image_url`).",
+      content: com.postModalNeedsContent,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -578,7 +592,7 @@ async function handlePostModalSubmit(interaction: ModalSubmitInteraction): Promi
 
   const channel = await interaction.guild!.channels.fetch(pending.channelId);
   if (!channel || !channel.isTextBased() || !("send" in channel)) {
-    await interaction.editReply({ content: "Канал больше недоступен." });
+    await interaction.editReply({ content: com.channelUnavailable });
     return;
   }
   let fileBuilders: AttachmentBuilder[] = [];
@@ -589,7 +603,7 @@ async function handlePostModalSubmit(interaction: ModalSubmitInteraction): Promi
   } catch (err) {
     console.error("/post attachment download failed:", err);
     await interaction.editReply({
-      content: `Не удалось подготовить вложения: ${err instanceof Error ? err.message : String(err)}`,
+      content: discordFmtAttachmentPrepFail(err),
     });
     return;
   }
@@ -621,7 +635,7 @@ async function handlePostModalSubmit(interaction: ModalSubmitInteraction): Promi
   } catch (err) {
     console.error("/post channel.send failed:", err);
     await interaction.editReply({
-      content: `Не удалось отправить в канал: ${err instanceof Error ? err.message : String(err)}`,
+      content: discordFmtChannelSendFail(err),
     });
     return;
   }
@@ -632,7 +646,12 @@ async function handlePostModalSubmit(interaction: ModalSubmitInteraction): Promi
     );
   }
   await interaction.editReply({
-    content: `Опубликовано в <#${pending.channelId}>. Сообщений: ${totalParts}, вложений: ${attachmentRefs.length}${hasEmbed ? ", с embed" : ""}.`,
+    content: discordFmtPostPublished({
+      channelId: pending.channelId,
+      totalParts,
+      attachmentCount: attachmentRefs.length,
+      hasEmbed,
+    }),
   });
 }
 
@@ -655,12 +674,12 @@ async function handleRolePanel(interaction: ChatInputCommandInteraction): Promis
   const channelRef = interaction.options.getChannel("channel", true);
   const channel = await interaction.guild!.channels.fetch(channelRef.id);
   if (!channel || !channel.isTextBased() || !("send" in channel)) {
-    await interaction.reply({ content: "Этот канал не подходит для текстовых сообщений.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: com.channelNotText, flags: MessageFlags.Ephemeral });
     return;
   }
   if (DISCORD_ROLE_PANEL_CHANNEL_ID && channel.id !== DISCORD_ROLE_PANEL_CHANNEL_ID) {
     await interaction.reply({
-      content: `Панель ролей разрешена только в канале <#${DISCORD_ROLE_PANEL_CHANNEL_ID}>.`,
+      content: discordFmtRolePanelWrongChannel(DISCORD_ROLE_PANEL_CHANNEL_ID),
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -668,7 +687,7 @@ async function handleRolePanel(interaction: ChatInputCommandInteraction): Promis
   const singleRole = interaction.options.getBoolean("single_role") ?? false;
   const buttons = buildButtonsFromInteraction(interaction, { singleRole });
   if (buttons.length === 0) {
-    await interaction.reply({ content: "Укажите хотя бы одну роль.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: roleErr.needOneRole, flags: MessageFlags.Ephemeral });
     return;
   }
   const embedOpts = collectSlashEmbedOptions(interaction);
@@ -680,12 +699,12 @@ async function handleRolePanel(interaction: ChatInputCommandInteraction): Promis
     singleRole,
     ...slashEmbedOptionsToPendingFields(embedOpts),
   });
-  const modal = new ModalBuilder().setCustomId(`rolepanel:${nonce}`).setTitle("Панель ролей — текст сообщения");
+  const modal = new ModalBuilder().setCustomId(`rolepanel:${nonce}`).setTitle(rp.modalTitle);
   modal.addComponents(
     new ActionRowBuilder<TextInputBuilder>().addComponents(
       new TextInputBuilder()
         .setCustomId("content")
-        .setLabel("Текст над кнопками (необязательно, если задан embed)".slice(0, DISCORD_TEXT_INPUT_LABEL_MAX))
+        .setLabel(rp.modalBodyLabel.slice(0, DISCORD_TEXT_INPUT_LABEL_MAX))
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(false)
         .setMinLength(0)
@@ -700,24 +719,24 @@ async function handleRolePanelModalSubmit(interaction: ModalSubmitInteraction): 
   const pending = takePendingRolePanel(nonce);
   if (!pending) {
     await interaction.reply({
-      content: "Форма устарела или уже использована. Запустите `/rolepanel` снова.",
+      content: com.modalStaleRolePanel,
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
   if (!interaction.inGuild() || interaction.guildId !== pending.guildId) {
-    await interaction.reply({ content: "Неверный сервер.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: com.wrongGuild, flags: MessageFlags.Ephemeral });
     return;
   }
   if (interaction.user.id !== pending.userId) {
     await interaction.reply({
-      content: "Отправить форму может только тот, кто вызвал `/rolepanel`.",
+      content: com.modalWrongInvokerRolePanel,
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
   if (!isElevated(interaction.member)) {
-    await interaction.reply({ content: "У вас нет прав на эту команду.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }
   const raw = interaction.fields.getTextInputValue("content").replace(/\r\n/g, "\n");
@@ -726,8 +745,7 @@ async function handleRolePanelModalSubmit(interaction: ModalSubmitInteraction): 
   const hasEmbed = !!embedsFirst?.length;
   if (!contentTrimmed && !hasEmbed) {
     await interaction.reply({
-      content:
-        "Добавьте текст в форму и/или задайте embed в команде (например `embed_title`, `embed_description`, `embed_image_url`).",
+      content: com.panelModalNeedsContent,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -737,7 +755,7 @@ async function handleRolePanelModalSubmit(interaction: ModalSubmitInteraction): 
 
   const channel = await interaction.guild!.channels.fetch(pending.channelId);
   if (!channel || !channel.isTextBased() || !("send" in channel)) {
-    await interaction.editReply({ content: "Канал больше недоступен." });
+    await interaction.editReply({ content: com.channelUnavailable });
     return;
   }
 
@@ -781,7 +799,7 @@ async function handleRolePanelModalSubmit(interaction: ModalSubmitInteraction): 
   } catch (err) {
     console.error("/rolepanel modal channel.send failed:", err);
     await interaction.editReply({
-      content: `Не удалось отправить в канал: ${err instanceof Error ? err.message : String(err)}`,
+      content: discordFmtChannelSendFail(err),
     });
     return;
   }
@@ -792,17 +810,17 @@ async function handleRolePanelModalSubmit(interaction: ModalSubmitInteraction): 
     );
   }
   await interaction.editReply({
-    content: `Панель ролей создана в <#${pending.channelId}> (${pending.buttons.length} кнопок).`,
+    content: discordFmtRolePanelCreated(pending.channelId, pending.buttons.length),
   });
 }
 
 export async function handleDiscordCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.inGuild()) {
-    await interaction.reply({ content: "Эта команда доступна только на сервере.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: com.guildOnlyCommand, flags: MessageFlags.Ephemeral });
     return;
   }
   if (!isElevated(interaction.member)) {
-    await interaction.reply({ content: "У вас нет прав на эту команду.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }
   if (interaction.commandName === "mute" || interaction.commandName === "unmute" || interaction.commandName === "warn" || interaction.commandName === "unwarn") {
@@ -826,19 +844,19 @@ async function handleLinkPanel(interaction: ChatInputCommandInteraction): Promis
   const channelRef = interaction.options.getChannel("channel", true);
   const channel = await interaction.guild!.channels.fetch(channelRef.id);
   if (!channel || !channel.isTextBased() || !("send" in channel)) {
-    await interaction.reply({ content: "Этот канал не подходит для текстовых сообщений.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: com.channelNotText, flags: MessageFlags.Ephemeral });
     return;
   }
   const links = buildLinkButtonsFromInteraction(interaction);
   if (links === null) {
     await interaction.reply({
-      content: "Некорректная ссылка в `url1`: нужен http(s) URL длиной не больше 512 символов.",
+      content: linkErr.url1Invalid,
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
   if (links.length === 0) {
-    await interaction.reply({ content: "Укажите хотя бы одну корректную ссылку.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: linkErr.needOneLink, flags: MessageFlags.Ephemeral });
     return;
   }
   const embedOpts = collectSlashEmbedOptions(interaction);
@@ -849,12 +867,12 @@ async function handleLinkPanel(interaction: ChatInputCommandInteraction): Promis
     links,
     ...slashEmbedOptionsToPendingFields(embedOpts),
   });
-  const modal = new ModalBuilder().setCustomId(`linkpanel:${nonce}`).setTitle("Кнопки-ссылки — текст сообщения");
+  const modal = new ModalBuilder().setCustomId(`linkpanel:${nonce}`).setTitle(lp.modalTitle);
   modal.addComponents(
     new ActionRowBuilder<TextInputBuilder>().addComponents(
       new TextInputBuilder()
         .setCustomId("content")
-        .setLabel("Текст над кнопками (необязательно, если задан embed)".slice(0, DISCORD_TEXT_INPUT_LABEL_MAX))
+        .setLabel(lp.modalBodyLabel.slice(0, DISCORD_TEXT_INPUT_LABEL_MAX))
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(false)
         .setMinLength(0)
@@ -869,24 +887,24 @@ async function handleLinkPanelModalSubmit(interaction: ModalSubmitInteraction): 
   const pending = takePendingLinkPanel(nonce);
   if (!pending) {
     await interaction.reply({
-      content: "Форма устарела или уже использована. Запустите `/linkpanel` снова.",
+      content: com.modalStaleLinkPanel,
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
   if (!interaction.inGuild() || interaction.guildId !== pending.guildId) {
-    await interaction.reply({ content: "Неверный сервер.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: com.wrongGuild, flags: MessageFlags.Ephemeral });
     return;
   }
   if (interaction.user.id !== pending.userId) {
     await interaction.reply({
-      content: "Отправить форму может только тот, кто вызвал `/linkpanel`.",
+      content: com.modalWrongInvokerLinkPanel,
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
   if (!isElevated(interaction.member)) {
-    await interaction.reply({ content: "У вас нет прав на эту команду.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }
   const raw = interaction.fields.getTextInputValue("content").replace(/\r\n/g, "\n");
@@ -895,8 +913,7 @@ async function handleLinkPanelModalSubmit(interaction: ModalSubmitInteraction): 
   const hasEmbed = !!embedsFirst?.length;
   if (!contentTrimmed && !hasEmbed) {
     await interaction.reply({
-      content:
-        "Добавьте текст в форму и/или задайте embed в команде (например `embed_title`, `embed_description`, `embed_image_url`).",
+      content: com.panelModalNeedsContent,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -906,7 +923,7 @@ async function handleLinkPanelModalSubmit(interaction: ModalSubmitInteraction): 
 
   const channel = await interaction.guild!.channels.fetch(pending.channelId);
   if (!channel || !channel.isTextBased() || !("send" in channel)) {
-    await interaction.editReply({ content: "Канал больше недоступен." });
+    await interaction.editReply({ content: com.channelUnavailable });
     return;
   }
 
@@ -932,7 +949,7 @@ async function handleLinkPanelModalSubmit(interaction: ModalSubmitInteraction): 
   } catch (err) {
     console.error("/linkpanel modal channel.send failed:", err);
     await interaction.editReply({
-      content: `Не удалось отправить в канал: ${err instanceof Error ? err.message : String(err)}`,
+      content: discordFmtChannelSendFail(err),
     });
     return;
   }
@@ -943,6 +960,6 @@ async function handleLinkPanelModalSubmit(interaction: ModalSubmitInteraction): 
     );
   }
   await interaction.editReply({
-    content: `Сообщение с кнопками-ссылками отправлено в <#${pending.channelId}> (${pending.links.length} кнопок).`,
+    content: discordFmtLinkPanelDone(pending.channelId, pending.links.length),
   });
 }

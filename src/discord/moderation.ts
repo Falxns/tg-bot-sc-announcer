@@ -16,6 +16,11 @@ import {
 import type { DiscordChannelPolicy, ViolationSeverity } from "./types";
 import { logModerationEvent } from "./moderationLog";
 import {
+  discordAutoMod as autoTxt,
+  discordFormatDurationRu,
+  discordModerationLogTitles as logTitles,
+} from "./userStrings";
+import {
   applyModerationDecayIfNeeded,
   consumeMajorMuteTierForApply,
   consumeMinorMuteTierForApply,
@@ -29,7 +34,7 @@ import {
 const MINOR_WARN_THRESHOLD = 3;
 /** Discord “red” for moderation user notices */
 const MODERATION_USER_EMBED_COLOR = 0xed4245;
-const SPAM_DUPLICATE_REASON = "Повтор одного и того же сообщения подряд (спам).";
+const SPAM_DUPLICATE_REASON = autoTxt.spamDuplicateReason;
 const SPAM_NORMALIZE_MAX_LEN = 1000;
 /** Option F hybrid: max |len(a)−len(b)| for skeleton-based “almost duplicate” (decorated same core). */
 const SPAM_HYBRID_MAX_LEN_DELTA = 8;
@@ -289,7 +294,7 @@ function detectViolations(
     !allowInvitesInChannel && (DISCORD_BLOCK_INVITE_LINKS_GLOBAL || policy?.blockInviteLinks === true);
   if (shouldCheckInvites && hasExternalInvite(inviteScanText) && !hasAnyRole(member, inviteRoleAllow)) {
     const sev = policy?.inviteViolationSeverity ?? "major";
-    hits.push({ reason: "В этом канале запрещены приглашения Discord.", severity: sev });
+    hits.push({ reason: autoTxt.invitesForbidden, severity: sev });
   }
 
   if (DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST.length > 0) {
@@ -298,7 +303,7 @@ function detectViolations(
       try {
         const host = new URL(url).hostname.replace(/^\[+|\]+$/g, "").toLowerCase();
         if (hostMatchesBlacklist(host, DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST)) {
-          hits.push({ reason: `Ссылка на запрещённый домен: ${host}`, severity: "major" });
+          hits.push({ reason: autoTxt.forbiddenDomain(host), severity: "major" });
           break;
         }
       } catch {
@@ -311,7 +316,7 @@ function detectViolations(
     const hasVideo = attachments.some((a) => isVideoAttachment(a.contentType, a.name ?? ""));
     if (hasVideo) {
       hits.push({
-        reason: "В этом канале запрещены видеовложения.",
+        reason: autoTxt.videoForbidden,
         severity: policy.mediaViolationSeverity ?? "minor",
       });
     }
@@ -320,14 +325,14 @@ function detectViolations(
     const hasImage = attachments.some((a) => isImageAttachment(a.contentType, a.name ?? ""));
     if (hasImage) {
       hits.push({
-        reason: "В этом канале запрещены изображения.",
+        reason: autoTxt.imageForbidden,
         severity: policy.mediaViolationSeverity ?? "minor",
       });
     }
   }
   if (policy?.blockText && message.content.trim().length > 0) {
     hits.push({
-      reason: "В этом канале запрещены текстовые сообщения.",
+      reason: autoTxt.textForbidden,
       severity: policy.mediaViolationSeverity ?? "minor",
     });
   }
@@ -335,7 +340,7 @@ function detectViolations(
     const hit = policy.blockedKeywords.find((w) => lowerSearch.includes(w));
     if (hit) {
       hits.push({
-        reason: `Обнаружено запрещённое слово: «${hit}».`,
+        reason: autoTxt.keywordHit(hit),
         severity: policy.keywordViolationSeverity ?? "minor",
       });
     }
@@ -368,17 +373,6 @@ async function deleteLater(message: Message, delayMs: number): Promise<void> {
   setTimeout(() => {
     void message.delete().catch(() => undefined);
   }, delayMs);
-}
-
-function formatDurationRu(ms: number): string {
-  const totalMin = Math.round(ms / 60_000);
-  if (totalMin < 60) return `${totalMin} мин.`;
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (totalMin < 1440) return m > 0 ? `${h} ч ${m} мин.` : `${h} ч`;
-  const d = Math.floor(totalMin / 1440);
-  const remH = Math.floor((totalMin % 1440) / 60);
-  return remH > 0 ? `${d} д ${remH} ч` : `${d} д`;
 }
 
 /** Prefer human-readable channel/thread name; fetch if missing from cache. */
@@ -421,42 +415,38 @@ async function buildModerationUserNoticeEmbed(
   notice: ModerationUserNotice,
 ): Promise<EmbedBuilder> {
   const guild = message.guild;
-  const guildName = (guild?.name ?? "Сервер").trim() || "Сервер";
+  const guildName = (guild?.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
   const channelName = await resolveModerationChannelName(message);
   const nick = (member.displayName ?? member.user.username).trim() || member.user.username;
   const userId = member.id;
 
   const lines: string[] = [`<@${userId}>`, ""];
-  lines.push(`**Сервер:** **${escapeMarkdown(guildName)}**`);
-  lines.push(`**Канал:** **${escapeMarkdown(channelName)}**`);
-  lines.push(`**Ник на сервере:** **${escapeMarkdown(nick)}**`);
+  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
+  lines.push(`**${autoTxt.labelChannel}:** **${escapeMarkdown(channelName)}**`);
+  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
-  lines.push(`**Причина**`);
+  lines.push(`**${autoTxt.labelReason}**`);
   lines.push(escapeMarkdown(notice.reason));
 
   if (notice.kind === "minor") {
     lines.push("");
-    lines.push(
-      `**Предупреждения в этом канале:** **${notice.warnCount}** (порог таймаута: **${MINOR_WARN_THRESHOLD}**).`,
-    );
+    lines.push(autoTxt.labelWarnCount(notice.warnCount, MINOR_WARN_THRESHOLD));
     if (notice.timeoutMs !== undefined) {
       lines.push("");
-      lines.push(`**Таймаут:** **${escapeMarkdown(formatDurationRu(notice.timeoutMs))}**`);
+      lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(notice.timeoutMs))}**`);
     }
   } else {
     lines.push("");
     if (notice.outcome === "applied" && notice.timeoutMs !== undefined) {
-      lines.push(`**Таймаут:** **${escapeMarkdown(formatDurationRu(notice.timeoutMs))}**`);
+      lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(notice.timeoutMs))}**`);
     } else if (notice.outcome === "api_error") {
-      lines.push("**Таймаут:** не удалось применить (ошибка Discord API).");
+      lines.push(autoTxt.timeoutApplyFail);
     } else {
-      lines.push(
-        "**Таймаут:** не применён — бот не может замутить этого пользователя (проверьте иерархию ролей).",
-      );
+      lines.push(autoTxt.timeoutNotModeratable);
     }
   }
 
-  const title = notice.kind === "major" ? "Серьёзное нарушение" : "Предупреждение";
+  const title = notice.kind === "major" ? autoTxt.titleMajor : autoTxt.titleMinor;
   const description = lines.join("\n").slice(0, 4096);
 
   return new EmbedBuilder()
@@ -464,7 +454,7 @@ async function buildModerationUserNoticeEmbed(
     .setTitle(title)
     .setDescription(description)
     .setTimestamp(new Date())
-    .setFooter({ text: "Автоматическая модерация" });
+    .setFooter({ text: autoTxt.embedFooter });
 }
 
 async function notifyUserModerationEmbed(message: Message, member: GuildMember, embed: EmbedBuilder): Promise<void> {
@@ -526,7 +516,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     let majorTimeoutApplied = false;
     if (member.moderatable) {
       try {
-        await member.timeout(ms, `Автомодерация (major): ${violation.reason}`.slice(0, 500));
+        await member.timeout(ms, autoTxt.timeoutMajor(violation.reason).slice(0, 500));
         consumeMajorMuteTierForApply(guildId, userId, lastIdx);
         tierAfter = getMajorMuteTier(guildId, userId);
         majorTimeoutApplied = true;
@@ -538,7 +528,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     await saveState(LAST_SEEN_STATE_FILE);
 
     await logModerationEvent(message.guild!, {
-      title: "Major: таймаут",
+      title: logTitles.majorTimeout,
       color: 0xcc3333,
       targetUserId: userId,
       channelId: ctx.sourceChannelId,
@@ -582,7 +572,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     const idx = Math.min(tb, lastMinorIdx);
     const ms = DISCORD_MINOR_TIMEOUT_LADDER_MS[idx] ?? DISCORD_MINOR_TIMEOUT_LADDER_MS[lastMinorIdx];
     try {
-      await member.timeout(ms, `Автомодерация (minor): ${violation.reason}`.slice(0, 500));
+      await member.timeout(ms, autoTxt.timeoutMinor(violation.reason).slice(0, 500));
       consumeMinorMuteTierForApply(guildId, userId, lastMinorIdx);
       tierMinorAfter = getMinorMuteTier(guildId, userId);
       timeoutMs = ms;
@@ -602,7 +592,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
   await notifyUserModerationEmbed(message, member, minorEmbed);
 
   await logModerationEvent(message.guild!, {
-    title: timeoutMs !== undefined ? "Minor: предупреждение + таймаут" : "Minor: предупреждение",
+    title: timeoutMs !== undefined ? logTitles.minorWarnTimeout : logTitles.minorWarnOnly,
     color: timeoutMs !== undefined ? 0xcc8833 : 0x3388cc,
     targetUserId: userId,
     channelId: ctx.sourceChannelId,

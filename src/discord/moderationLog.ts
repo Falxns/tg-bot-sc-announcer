@@ -1,5 +1,9 @@
 import { EmbedBuilder, Guild, type ColorResolvable } from "discord.js";
 import { DISCORD_MODERATION_LOG_CHANNEL_ID } from "../config";
+import {
+  discordModerationLogChannelFieldValue,
+  discordModerationLogFields,
+} from "./userStrings";
 
 export type ModerationLogPayload = {
   title: string;
@@ -32,53 +36,76 @@ export async function logModerationEvent(guild: Guild, payload: ModerationLogPay
   const embed = new EmbedBuilder()
     .setTitle(payload.title.slice(0, 256))
     .setDescription(payload.reason.slice(0, 4096))
-    .addFields({ name: "Пользователь", value: `<@${payload.targetUserId}> (\`${payload.targetUserId}\`)`, inline: false });
+    .addFields({
+      name: discordModerationLogFields.user,
+      value: `<@${payload.targetUserId}> (\`${payload.targetUserId}\`)`,
+      inline: false,
+    });
 
   if (payload.channelId) {
     embed.addFields({
-      name: "Канал",
-      value: payload.parentChannelId
-        ? `<#${payload.channelId}> (ветка, родитель <#${payload.parentChannelId}>)`
-        : `<#${payload.channelId}>`,
+      name: discordModerationLogFields.channel,
+      value: discordModerationLogChannelFieldValue(payload.channelId, payload.parentChannelId),
       inline: false,
     });
   }
-  if (payload.severity) embed.addFields({ name: "Тип", value: payload.severity, inline: true });
+  if (payload.severity)
+    embed.addFields({ name: discordModerationLogFields.type, value: payload.severity, inline: true });
   if (payload.minorWarningsInChannel !== undefined) {
-    embed.addFields({ name: "Предупреждений (минор, канал)", value: String(payload.minorWarningsInChannel), inline: true });
+    embed.addFields({
+      name: discordModerationLogFields.minorWarningsChannel,
+      value: String(payload.minorWarningsInChannel),
+      inline: true,
+    });
   }
   if (payload.minorMuteTierBefore !== undefined && payload.minorMuteTierAfter !== undefined) {
     embed.addFields({
-      name: "Minor tier",
+      name: discordModerationLogFields.minorTier,
       value: `${payload.minorMuteTierBefore} → ${payload.minorMuteTierAfter}`,
       inline: true,
     });
   }
   if (payload.majorMuteTierBefore !== undefined && payload.majorMuteTierAfter !== undefined) {
     embed.addFields({
-      name: "Major tier",
+      name: discordModerationLogFields.majorTier,
       value: `${payload.majorMuteTierBefore} → ${payload.majorMuteTierAfter}`,
       inline: true,
     });
   }
   if (payload.timeoutMs !== undefined) {
-    embed.addFields({ name: "Таймаут", value: `${Math.round(payload.timeoutMs / 60000)} мин`, inline: true });
+    embed.addFields({
+      name: discordModerationLogFields.timeout,
+      value: discordModerationLogFields.timeoutMinutes(Math.round(payload.timeoutMs / 60000)),
+      inline: true,
+    });
   }
   if (payload.messageId && payload.channelId) {
     embed.addFields({
-      name: "Сообщение",
+      name: discordModerationLogFields.message,
       value: `https://discord.com/channels/${guild.id}/${payload.channelId}/${payload.messageId}`,
       inline: false,
     });
   }
   if (payload.messageExcerpt) {
-    embed.addFields({ name: "Фрагмент", value: payload.messageExcerpt.slice(0, 1000), inline: false });
+    embed.addFields({
+      name: discordModerationLogFields.excerpt,
+      value: payload.messageExcerpt.slice(0, 1000),
+      inline: false,
+    });
   }
   if (payload.pinnedEvidenceUrl) {
-    embed.addFields({ name: "Закреплённое сообщение", value: payload.pinnedEvidenceUrl.slice(0, 500), inline: false });
+    embed.addFields({
+      name: discordModerationLogFields.pinnedMessage,
+      value: payload.pinnedEvidenceUrl.slice(0, 500),
+      inline: false,
+    });
   }
   if (payload.staffUserId) {
-    embed.addFields({ name: "Модератор", value: `<@${payload.staffUserId}>`, inline: false });
+    embed.addFields({
+      name: discordModerationLogFields.moderator,
+      value: `<@${payload.staffUserId}>`,
+      inline: false,
+    });
   }
   if (payload.color !== undefined) embed.setColor(payload.color);
   embed.setTimestamp(new Date());

@@ -1,6 +1,7 @@
 import { ButtonInteraction, GuildMember, MessageFlags, PermissionFlagsBits, Role } from "discord.js";
 import { stripAllCustomDiscordEmojiMarkup } from "./buttonEmoji";
 import { getOrRehydrateRolePanel } from "./rolePanelHydrate";
+import { discordRoles as roleTxt } from "./userStrings";
 
 const ROLE_BUTTON_PREFIX = "role:";
 const ROLE_BUTTON_SINGLE_PREFIX = "roleone:";
@@ -30,33 +31,33 @@ function buildRoleToggleDiagnostics(me: GuildMember, target: GuildMember, role: 
 
 function roleToggleHumanBlocker(me: GuildMember, target: GuildMember, role: Role): string | null {
   if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
-    return "У этого бота нет права **Управлять ролями** на сервере. Включите его в **Настройки сервера → Интеграции** (или выдайте роли бота это право).";
+    return roleTxt.noManageRoles;
   }
   if (!target.manageable) {
-    return "Бот не может менять ваши роли из‑за **порядка ролей**: ваша **самая высокая** роль должна быть **ниже** самой высокой роли бота. Поднимите роль бота выше в **Настройки сервера → Роли**.";
+    return roleTxt.hierarchyTarget;
   }
   if (role.managed) {
-    return `Роль **${role.name}** **управляется** Discord (интеграция, подписка и т.п.) — бот не может её выдавать или снимать.`;
+    return roleTxt.roleManaged(role.name);
   }
   if (!role.editable) {
-    return `Роль бота должна быть **выше** роли **${role.name}** в **Настройки сервера → Роли** (перетащите роль бота выше), чтобы бот мог выдавать или снимать эту роль.`;
+    return roleTxt.roleNotEditable(role.name);
   }
   return null;
 }
 
 function discordApiRoleHint(err: unknown): string {
   if (typeof err !== "object" || err === null) {
-    return "Не удалось изменить роль. Обратитесь к администраторам сервера.";
+    return roleTxt.apiGeneric;
   }
   const o = err as { code?: unknown; status?: unknown };
   if (o.status === 429) {
-    return "Discord ограничил частоту действий. Подождите немного и попробуйте снова.";
+    return roleTxt.apiRateLimit;
   }
   const code = o.code;
   if (code === 50001 || code === 50013) {
-    return "Discord отклонил действие (**нет доступа / прав**). Обычно помогает: (1) у бота есть **Управлять ролями**, (2) роль бота **выше** роли на кнопке, (3) ваша верхняя роль **ниже** верхней роли бота.";
+    return roleTxt.apiForbidden;
   }
-  return "Не удалось изменить роль. Обратитесь к администраторам сервера.";
+  return roleTxt.apiGeneric;
 }
 
 export async function handleRoleButtonInteraction(interaction: ButtonInteraction): Promise<boolean> {
@@ -66,8 +67,7 @@ export async function handleRoleButtonInteraction(interaction: ButtonInteraction
   const panel = await getOrRehydrateRolePanel(interaction);
   if (!panel) {
     await interaction.reply({
-      content:
-        "Эта кнопка роли не зарегистрирована у бота (состояние потеряли после перезапуска или сообщение не удалось восстановить). Попросите модератора снова выполнить `/rolepanel`.",
+      content: roleTxt.panelUnknown,
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -75,25 +75,25 @@ export async function handleRoleButtonInteraction(interaction: ButtonInteraction
   const button = panel.buttons.find((x) => x.customId === interaction.customId);
   if (!button) {
     await interaction.reply({
-      content: "Эта кнопка не относится к сохранённой панели ролей для этого сообщения. Попробуйте снова `/rolepanel`.",
+      content: roleTxt.buttonWrongPanel,
       flags: MessageFlags.Ephemeral,
     });
     return true;
   }
   if (panel.guildId !== guild.id) {
-    await interaction.reply({ content: "Эта панель ролей относится к другому серверу.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: roleTxt.wrongGuild, flags: MessageFlags.Ephemeral });
     return true;
   }
   const member = interaction.member;
   if (!(member instanceof GuildMember)) {
-    await interaction.reply({ content: "Не удалось определить ваш профиль участника на этом сервере.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: roleTxt.memberResolveFailed, flags: MessageFlags.Ephemeral });
     return true;
   }
 
   const role = await guild.roles.fetch(button.roleId).catch(() => null);
   if (!role) {
     await interaction.reply({
-      content: "Роль не найдена (возможно, удалена). Создайте панель заново через `/rolepanel`.",
+      content: roleTxt.roleMissing,
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -101,8 +101,7 @@ export async function handleRoleButtonInteraction(interaction: ButtonInteraction
   const me = guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
   if (!me) {
     await interaction.reply({
-      content:
-        "Не удалось загрузить профиль бота на сервере. Проверьте, что бот в гильдии и при необходимости включён интент **Участники сервера** (Server Members Intent).",
+      content: roleTxt.botMemberFailed,
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -114,12 +113,12 @@ export async function handleRoleButtonInteraction(interaction: ButtonInteraction
     return true;
   }
 
-  const labelForReply = stripAllCustomDiscordEmojiMarkup(button.label) || "роль";
+  const labelForReply = stripAllCustomDiscordEmojiMarkup(button.label) || roleTxt.fallbackRoleLabel;
   const action = member.roles.cache.has(button.roleId) ? "remove" : "add";
   try {
     if (action === "remove") {
       await member.roles.remove(button.roleId);
-      await interaction.reply({ content: `Роль снята: ${labelForReply}`, flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: roleTxt.roleRemoved(labelForReply), flags: MessageFlags.Ephemeral });
     } else {
       if (panel.singleRole) {
         const otherRoleIds = panel.buttons
@@ -130,7 +129,7 @@ export async function handleRoleButtonInteraction(interaction: ButtonInteraction
         }
       }
       await member.roles.add(button.roleId);
-      await interaction.reply({ content: `Роль выдана: ${labelForReply}`, flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: roleTxt.roleAdded(labelForReply), flags: MessageFlags.Ephemeral });
     }
   } catch (err) {
     const hint = discordApiRoleHint(err);

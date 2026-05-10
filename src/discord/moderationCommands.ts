@@ -10,6 +10,12 @@ import type { Message } from "discord.js";
 import { DISCORD_MODERATION_LOG_CHANNEL_ID, LAST_SEEN_STATE_FILE } from "../config";
 import { logModerationEvent } from "./moderationLog";
 import { adjustMinorWarningCount, getMinorWarningCount, saveState, setMinorWarningCount } from "../state";
+import {
+  discordModerationCommands as modTxt,
+  discordModerationLogTitles,
+  discordMuteDurationChoices,
+  discordSlashModeration as slashModTxt,
+} from "./userStrings";
 
 function warningScopeChannelIdFromInteraction(interaction: ChatInputCommandInteraction): string | null {
   const ch = interaction.channel;
@@ -20,24 +26,13 @@ function warningScopeChannelIdFromInteraction(interaction: ChatInputCommandInter
   return ch.id;
 }
 
-const MUTE_DURATION_CHOICES: { name: string; value: string }[] = [
-  { name: "1 час", value: "60" },
-  { name: "6 часов", value: "360" },
-  { name: "12 часов", value: "720" },
-  { name: "1 день", value: "1440" },
-  { name: "3 дня", value: "4320" },
-  { name: "7 дней", value: "10080" },
-  { name: "14 дней", value: "20160" },
-  { name: "28 дней", value: "40320" },
-];
-
 async function tryPinTargetRecentMessage(
   interaction: ChatInputCommandInteraction,
   targetUserId: string,
 ): Promise<{ url?: string; error?: string }> {
   const ch = interaction.channel;
   if (!ch?.isTextBased() || !("messages" in ch)) {
-    return { error: "В этом канале нельзя закреплять сообщения." };
+    return { error: modTxt.pinChannelUnsupported };
   }
   try {
     const batch = await ch.messages.fetch({ limit: 100 });
@@ -52,7 +47,7 @@ async function tryPinTargetRecentMessage(
       }
     }
     if (!best) {
-      return { error: "Нет сообщений пользователя среди последних 100 в канале." };
+      return { error: modTxt.pinNoMessage };
     }
     await best.pin();
     return { url: best.url };
@@ -63,41 +58,43 @@ async function tryPinTargetRecentMessage(
 
 export const muteSlashCommand = new SlashCommandBuilder()
   .setName("mute")
-  .setDescription("Выдать таймаут пользователю (без изменения авто-лестниц).")
-  .addUserOption((o) => o.setName("user").setDescription("Пользователь").setRequired(true))
+  .setDescription(slashModTxt.mute.commandDescription)
+  .addUserOption((o) => o.setName("user").setDescription(slashModTxt.userOption).setRequired(true))
   .addStringOption((o) =>
     o
       .setName("duration")
-      .setDescription("Длительность таймаута")
+      .setDescription(slashModTxt.mute.duration)
       .setRequired(true)
-      .addChoices(...MUTE_DURATION_CHOICES),
+      .addChoices(...discordMuteDurationChoices),
   )
-  .addStringOption((o) => o.setName("reason").setDescription("Причина").setMaxLength(450).setRequired(false))
+  .addStringOption((o) =>
+    o.setName("reason").setDescription(slashModTxt.mute.reason).setMaxLength(450).setRequired(false),
+  )
   .addAttachmentOption((o) =>
-    o.setName("screenshot").setDescription("Скриншот нарушения — приложится к записи в лог модерации").setRequired(false),
+    o.setName("screenshot").setDescription(slashModTxt.mute.screenshot).setRequired(false),
   )
   .addBooleanOption((o) =>
     o
       .setName("pin_last_message")
-      .setDescription("Закрепить последнее сообщение пользователя в этом канале (до 100 сообщений истории)")
+      .setDescription(slashModTxt.mute.pinLastMessage)
       .setRequired(false),
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
 export const unmuteSlashCommand = new SlashCommandBuilder()
   .setName("unmute")
-  .setDescription("Снять таймаут с пользователя.")
-  .addUserOption((o) => o.setName("user").setDescription("Пользователь").setRequired(true))
+  .setDescription(slashModTxt.unmute.commandDescription)
+  .addUserOption((o) => o.setName("user").setDescription(slashModTxt.userOption).setRequired(true))
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
 export const warnSlashCommand = new SlashCommandBuilder()
   .setName("warn")
-  .setDescription("Добавить минор-предупреждение пользователю в канале.")
-  .addUserOption((o) => o.setName("user").setDescription("Пользователь").setRequired(true))
+  .setDescription(slashModTxt.warn.commandDescription)
+  .addUserOption((o) => o.setName("user").setDescription(slashModTxt.userOption).setRequired(true))
   .addChannelOption((o) =>
     o
       .setName("channel")
-      .setDescription("Канал учёта (по умолчанию текущий)")
+      .setDescription(slashModTxt.warn.channel)
       .addChannelTypes(
         ChannelType.GuildText,
         ChannelType.GuildAnnouncement,
@@ -107,19 +104,21 @@ export const warnSlashCommand = new SlashCommandBuilder()
       .setRequired(false),
   )
   .addIntegerOption((o) =>
-    o.setName("amount").setDescription("Сколько добавить (1–20)").setMinValue(1).setMaxValue(20).setRequired(false),
+    o.setName("amount").setDescription(slashModTxt.warn.amount).setMinValue(1).setMaxValue(20).setRequired(false),
   )
-  .addStringOption((o) => o.setName("reason").setDescription("Причина").setMaxLength(450).setRequired(false))
+  .addStringOption((o) =>
+    o.setName("reason").setDescription(slashModTxt.warn.reason).setMaxLength(450).setRequired(false),
+  )
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
 export const unwarnSlashCommand = new SlashCommandBuilder()
   .setName("unwarn")
-  .setDescription("Уменьшить или сбросить минор-предупреждения пользователя в канале.")
-  .addUserOption((o) => o.setName("user").setDescription("Пользователь").setRequired(true))
+  .setDescription(slashModTxt.unwarn.commandDescription)
+  .addUserOption((o) => o.setName("user").setDescription(slashModTxt.userOption).setRequired(true))
   .addChannelOption((o) =>
     o
       .setName("channel")
-      .setDescription("Канал учёта (по умолчанию текущий)")
+      .setDescription(slashModTxt.unwarn.channel)
       .addChannelTypes(
         ChannelType.GuildText,
         ChannelType.GuildAnnouncement,
@@ -129,33 +128,35 @@ export const unwarnSlashCommand = new SlashCommandBuilder()
       .setRequired(false),
   )
   .addIntegerOption((o) =>
-    o.setName("amount").setDescription("На сколько уменьшить (1–20)").setMinValue(1).setMaxValue(20).setRequired(false),
+    o.setName("amount").setDescription(slashModTxt.unwarn.amount).setMinValue(1).setMaxValue(20).setRequired(false),
   )
-  .addBooleanOption((o) => o.setName("clear").setDescription("Сбросить счётчик в этом канале").setRequired(false))
+  .addBooleanOption((o) =>
+    o.setName("clear").setDescription(slashModTxt.unwarn.clear).setRequired(false),
+  )
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
 async function resolveWarningScope(
   interaction: ChatInputCommandInteraction,
   channelOptId: string | null,
 ): Promise<{ scopeId: string } | { error: string }> {
-  if (!interaction.guildId) return { error: "Только на сервере." };
+  if (!interaction.guildId) return { error: modTxt.guildOnly };
   if (channelOptId) {
     const fetched = await interaction.guild!.channels.fetch(channelOptId).catch(() => null);
-    if (!fetched?.isTextBased()) return { error: "Укажите текстовый канал или ветку." };
+    if (!fetched?.isTextBased()) return { error: modTxt.scopeNeedTextChannel };
     if ("isThread" in fetched && fetched.isThread()) {
       return { scopeId: fetched.parentId ?? fetched.id };
     }
     return { scopeId: fetched.id };
   }
   const scope = warningScopeChannelIdFromInteraction(interaction);
-  if (!scope) return { error: "Не удалось определить канал." };
+  if (!scope) return { error: modTxt.scopeChannelUnknown };
   return { scopeId: scope };
 }
 
 export async function handleModerationSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   const guild = interaction.guild;
   if (!guild || !interaction.guildId) {
-    await interaction.reply({ content: "Только на сервере.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: modTxt.guildOnly, flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -164,26 +165,26 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const target = interaction.options.getUser("user", true);
     const durationRaw = interaction.options.getString("duration", true);
     const minutes = parseInt(durationRaw, 10);
-    const reason = interaction.options.getString("reason")?.trim() || "Ручной мут модератором";
+    const reason = interaction.options.getString("reason")?.trim() || modTxt.defaultMuteReason;
     const screenshot = interaction.options.getAttachment("screenshot");
     const pinLast = interaction.options.getBoolean("pin_last_message") === true;
     if (target.bot) {
-      await interaction.reply({ content: "Нельзя замутить бота.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: modTxt.muteBot, flags: MessageFlags.Ephemeral });
       return;
     }
     if (!Number.isFinite(minutes) || minutes < 1 || minutes > 40320) {
-      await interaction.reply({ content: "Некорректная длительность.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: modTxt.badDuration, flags: MessageFlags.Ephemeral });
       return;
     }
     let member: GuildMember;
     try {
       member = await guild.members.fetch({ user: target.id });
     } catch {
-      await interaction.reply({ content: "Пользователь не на сервере.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: modTxt.userNotInGuild, flags: MessageFlags.Ephemeral });
       return;
     }
     if (!member.moderatable) {
-      await interaction.reply({ content: "Не могу изменить таймаут этого пользователя (роль выше?).", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: modTxt.muteNotModeratable, flags: MessageFlags.Ephemeral });
       return;
     }
     const ms = Math.min(minutes * 60_000, 2_419_200_000);
@@ -192,7 +193,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       await member.timeout(ms, reason);
     } catch (err) {
       await interaction.editReply({
-        content: `Не удалось выдать таймаут: ${err instanceof Error ? err.message : String(err)}`,
+        content: modTxt.muteTimeoutFail(err instanceof Error ? err.message : String(err)),
       });
       return;
     }
@@ -204,9 +205,9 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       const pinResult = await tryPinTargetRecentMessage(interaction, target.id);
       if (pinResult.url) {
         pinnedEvidenceUrl = pinResult.url;
-        pinNote = `\nЗакреплено сообщение: ${pinResult.url}`;
+        pinNote = modTxt.pinSuccessNote(pinResult.url);
       } else {
-        pinNote = `\nЗакрепление: не удалось — ${pinResult.error ?? "неизвестно"}`;
+        pinNote = modTxt.pinFailNote(pinResult.error ?? modTxt.unknownError);
       }
     }
 
@@ -214,11 +215,11 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       screenshot?.url && screenshot.name
         ? [{ url: screenshot.url, name: screenshot.name }]
         : screenshot?.url
-          ? [{ url: screenshot.url, name: "screenshot" }]
+          ? [{ url: screenshot.url, name: modTxt.screenshotFileFallback }]
           : undefined;
 
     await logModerationEvent(guild, {
-      title: "Staff: /mute",
+      title: discordModerationLogTitles.staffMute,
       color: 0x9966cc,
       targetUserId: target.id,
       channelId: interaction.channelId,
@@ -230,16 +231,15 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       ...(pinnedEvidenceUrl ? { pinnedEvidenceUrl } : {}),
     });
 
-    const durLabel = MUTE_DURATION_CHOICES.find((c) => c.value === String(minutes))?.name ?? `${minutes} мин`;
+    const durLabel =
+      discordMuteDurationChoices.find((c) => c.value === String(minutes))?.name ?? modTxt.minutesFallback(minutes);
     let shotNote = "";
     if (screenshot) {
-      shotNote = DISCORD_MODERATION_LOG_CHANNEL_ID
-        ? "\nСкриншот добавлен к записи в лог модерации."
-        : "\nСкриншот не попадёт в лог: не задан DISCORD_MODERATION_LOG_CHANNEL_ID.";
+      shotNote = DISCORD_MODERATION_LOG_CHANNEL_ID ? modTxt.screenshotLogged : modTxt.screenshotNoLogEnv;
     }
 
     await interaction.editReply({
-      content: `Таймаут **${durLabel}** (<@${target.id}>).${pinNote}${shotNote}`,
+      content: modTxt.muteDone(durLabel, target.id, pinNote, shotNote),
     });
     return;
   }
@@ -247,40 +247,40 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
   if (name === "unmute") {
     const target = interaction.options.getUser("user", true);
     if (target.bot) {
-      await interaction.reply({ content: "Некорректная цель.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: modTxt.unmuteBadTarget, flags: MessageFlags.Ephemeral });
       return;
     }
     let member: GuildMember;
     try {
       member = await guild.members.fetch({ user: target.id });
     } catch {
-      await interaction.reply({ content: "Пользователь не на сервере.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: modTxt.userNotInGuild, flags: MessageFlags.Ephemeral });
       return;
     }
     if (!member.moderatable) {
-      await interaction.reply({ content: "Не могу снять таймаут (роль выше?).", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: modTxt.unmuteNotModeratable, flags: MessageFlags.Ephemeral });
       return;
     }
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     try {
-      await member.timeout(null, "Снят модератором");
+      await member.timeout(null, modTxt.unmuteReason);
     } catch (err) {
       await interaction.editReply({
-        content: `Не удалось снять таймаут: ${err instanceof Error ? err.message : String(err)}`,
+        content: modTxt.unmuteFail(err instanceof Error ? err.message : String(err)),
       });
       return;
     }
     await saveState(LAST_SEEN_STATE_FILE);
     await logModerationEvent(guild, {
-      title: "Staff: /unmute",
+      title: discordModerationLogTitles.staffUnmute,
       color: 0x669966,
       targetUserId: target.id,
       channelId: interaction.channelId,
       parentChannelId: interaction.channel?.isThread() ? interaction.channel.parentId ?? undefined : undefined,
-      reason: "Снят таймаут",
+      reason: modTxt.unmuteLogReason,
       staffUserId: interaction.user.id,
     });
-    await interaction.editReply({ content: `Таймаут снят с <@${target.id}>.` });
+    await interaction.editReply({ content: modTxt.unmuteDone(target.id) });
     return;
   }
 
@@ -288,9 +288,9 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const target = interaction.options.getUser("user", true);
     const chOpt = interaction.options.getChannel("channel");
     const amount = interaction.options.getInteger("amount") ?? 1;
-    const reason = interaction.options.getString("reason")?.trim() || "Предупреждение модератором";
+    const reason = interaction.options.getString("reason")?.trim() || modTxt.warnDefaultReason;
     if (target.bot) {
-      await interaction.reply({ content: "Некорректная цель.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: modTxt.unmuteBadTarget, flags: MessageFlags.Ephemeral });
       return;
     }
     const resolved = await resolveWarningScope(interaction, chOpt?.id ?? null);
@@ -302,7 +302,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const after = adjustMinorWarningCount(interaction.guildId, resolved.scopeId, target.id, amount);
     await saveState(LAST_SEEN_STATE_FILE);
     await logModerationEvent(guild, {
-      title: "Staff: /warn",
+      title: discordModerationLogTitles.staffWarn,
       color: 0x3388cc,
       targetUserId: target.id,
       channelId: resolved.scopeId,
@@ -311,7 +311,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       staffUserId: interaction.user.id,
     });
     await interaction.reply({
-      content: `Предупреждения <@${target.id}> в <#${resolved.scopeId}>: ${before} → ${after}.`,
+      content: modTxt.warnCounts(target.id, resolved.scopeId, before, after),
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -323,7 +323,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const amount = interaction.options.getInteger("amount") ?? 1;
     const clear = interaction.options.getBoolean("clear") === true;
     if (target.bot) {
-      await interaction.reply({ content: "Некорректная цель.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: modTxt.unmuteBadTarget, flags: MessageFlags.Ephemeral });
       return;
     }
     const resolved = await resolveWarningScope(interaction, chOpt?.id ?? null);
@@ -341,16 +341,16 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     }
     await saveState(LAST_SEEN_STATE_FILE);
     await logModerationEvent(guild, {
-      title: "Staff: /unwarn",
+      title: discordModerationLogTitles.staffUnwarn,
       color: 0x888888,
       targetUserId: target.id,
       channelId: resolved.scopeId,
-      reason: clear ? "Сброс предупреждений" : `−${amount}`,
+      reason: clear ? modTxt.unwarnReasonClear : modTxt.unwarnReasonIncrement(amount),
       minorWarningsInChannel: after,
       staffUserId: interaction.user.id,
     });
     await interaction.reply({
-      content: `Предупреждения <@${target.id}> в <#${resolved.scopeId}>: ${before} → ${after}.`,
+      content: modTxt.warnCounts(target.id, resolved.scopeId, before, after),
       flags: MessageFlags.Ephemeral,
     });
   }

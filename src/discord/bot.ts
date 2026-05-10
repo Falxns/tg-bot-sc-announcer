@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits, MessageFlags } from "discord.js";
 import { DISCORD_BOT_TOKEN, DISCORD_GUILD_ID, LOG_LEVEL } from "../config";
+import { discordCommonReplies as com } from "./userStrings";
 import { handleDiscordCommand, handleDiscordModal, registerGuildCommands } from "./commands";
 import { handleModerationMessage } from "./moderation";
 import { handleRoleButtonInteraction } from "./roles";
@@ -55,7 +56,7 @@ export async function startDiscordBot(): Promise<void> {
       } catch (err) {
         console.error("Discord interaction handler failed:", err);
         if (interaction.isRepliable() && !interaction.replied) {
-          await interaction.reply({ content: "Произошла внутренняя ошибка.", flags: MessageFlags.Ephemeral }).catch(() => undefined);
+          await interaction.reply({ content: com.internalError, flags: MessageFlags.Ephemeral }).catch(() => undefined);
         }
       }
     })();
