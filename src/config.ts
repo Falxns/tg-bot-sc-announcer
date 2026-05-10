@@ -56,7 +56,7 @@ export const DISCORD_INVITE_ALLOWED_ROLE_IDS = (process.env.DISCORD_INVITE_ALLOW
 export const DISCORD_BLOCK_INVITE_LINKS_GLOBAL = !/^0|false$/i.test(
   process.env.DISCORD_BLOCK_INVITE_LINKS_GLOBAL ?? "0",
 );
-/** @deprecated No longer used; minor mutes use DISCORD_MINOR_TIMEOUT_LADDER_MS. */
+/** Minor warnings in a channel required before the minor-timeout ladder applies (must match automod logic). */
 export const DISCORD_WARNINGS_BEFORE_TIMEOUT = clampParseInt(
   process.env.DISCORD_WARNINGS_BEFORE_TIMEOUT ?? "3",
   1,

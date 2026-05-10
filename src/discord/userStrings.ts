@@ -6,70 +6,69 @@
 
 /** Shared `/post`, `/rolepanel`, `/linkpanel` embed-related option descriptions. */
 export const discordSlashEmbedOptions = {
-  embedTitle: "Заголовок embed (необязательно)",
-  embedDescription: "Описание embed (необязательно)",
-  embedUrl: "Ссылка в заголовке embed (необязательно)",
-  embedColor: "Цвет embed: #RRGGBB или десятичное число",
-  embedThumbnailUrl: "URL миниатюры embed (справа сверху)",
-  embedImageUrl: "URL большого изображения embed",
-  embedFooter: "Текст подвала embed",
-  embedFooterIconUrl: "URL иконки подвала embed",
-  embedAuthorName: "Строка автора embed (сверху)",
-  embedAuthorIconUrl: "URL иконки автора embed",
+  embedTitle: "Заголовок",
+  embedDescription: "Основной текст",
+  embedUrl: "URL заголовка",
+  embedColor: "Цвет: #RRGGBB",
+  embedThumbnailUrl: "URL миниатюры (справа сверху)",
+  embedImageUrl: "URL большого изображения (внизу)",
+  embedFooter: "Текст футера",
+  embedFooterIconUrl: "URL иконки футера",
+  embedAuthorName: "Автор (над заголовком)",
+  embedAuthorIconUrl: "URL иконки автора",
 } as const;
 
 export const discordSlashPost = {
-  commandDescription: "Отправить сообщение от имени бота в выбранный канал.",
+  commandDescription: "Сообщение от имени бота в выбранный канал.",
   channel: "Канал для публикации",
-  image: "Файл/картинка (к первому сообщению, необязательно)",
-  modalTitle: "Публикация сообщения",
-  modalBodyLabel: "Текст (необязательно, если есть файл)",
+  image: "Фотография (необязательно)",
+  modalTitle: "Ввод текста сообщения",
+  modalBodyLabel: "Текст сообщения",
 } as const;
 
 export const discordSlashRolePanel = {
-  commandDescription: "Создать сообщение с кнопками выдачи ролей.",
-  channel: "Канал для сообщения",
+  commandDescription: "Сообщение с кнопками выдачи ролей.",
+  channel: "Канал для публикации",
   role: (n: number) => `Роль №${n}`,
-  roleButtonLabel: (n: number) => `Подпись кнопки для роли №${n}`,
-  singleRole: "Разрешить только одну роль из этой панели (взаимоисключающие роли)",
-  modalTitle: "Панель ролей — текст сообщения",
-  modalBodyLabel: "Текст над кнопками (необязательно, если задан embed)",
+  roleButtonLabel: (n: number) => `Видимый текст для кнопки №${n}`,
+  singleRole: "Выдавать только одну роль из всей панели (другие роли будут сняты)",
+  modalTitle: "Панель ролей — ввод текста сообщения",
+  modalBodyLabel: "Текст сообщения (необязательно, если задан embed)",
 } as const;
 
 export const discordSlashLinkPanel = {
-  commandDescription: "Создать сообщение с кнопками-ссылками (открывают URL в браузере).",
-  channel: "Канал для сообщения",
-  url: (n: number) => (n === 1 ? "Ссылка №1 (https://…)" : `Ссылка №${n} (необязательно)`),
-  buttonLabel: (n: number) => `Подпись кнопки №${n}`,
-  modalTitle: "Кнопки-ссылки — текст сообщения",
-  modalBodyLabel: "Текст над кнопками (необязательно, если задан embed)",
+  commandDescription: "Сообщение с кнопками-ссылками.",
+  channel: "Канал для публикации",
+  url: (n: number) => (n === 1 ? "URL №1 (https://…)" : `URL №${n} (необязательно)`),
+  buttonLabel: (n: number) => `Видимый текст для кнопки №${n}`,
+  modalTitle: "Кнопки-ссылки — ввод текста сообщения",
+  modalBodyLabel: "Текст сообщения (необязательно, если задан embed)",
   linkFallbackLabel: "Ссылка",
 } as const;
 
 export const discordSlashModeration = {
   userOption: "Пользователь",
   mute: {
-    commandDescription: "Выдать таймаут пользователю (без изменения авто-лестниц).",
+    commandDescription: "Выдать таймаут пользователю.",
     duration: "Длительность таймаута",
     reason: "Причина",
-    screenshot: "Скриншот нарушения — приложится к записи в лог модерации",
-    logLastMessage:
-      "Добавить в лог модерации копию последнего сообщения пользователя в этом канале (до 100 сообщений истории), со ссылкой — оригинал можно удалить",
+    screenshot: "Скриншот нарушения (необязательно)",
+    logLastMessage: "Прикрепить копию последнего сообщения пользователя в этом канале (из последних 100 сообщений)",
   },
   unmute: {
     commandDescription: "Снять таймаут с пользователя.",
   },
   warn: {
-    commandDescription: "Добавить минор-предупреждение пользователю в канале.",
-    channel: "Канал учёта (по умолчанию текущий)",
-    amount: "Сколько добавить (1–20)",
+    commandDescription: "Добавить предупреждение пользователю.",
+    channel: "Канал (по умолчанию текущий)",
+    amount: "Количество предупреждений (1–5)",
     reason: "Причина",
   },
   unwarn: {
-    commandDescription: "Уменьшить или сбросить минор-предупреждения пользователя в канале.",
-    channel: "Канал учёта (по умолчанию текущий)",
-    amount: "На сколько уменьшить (1–20)",
-    clear: "Сбросить счётчик в этом канале",
+    commandDescription: "Уменьшить или сбросить предупреждения пользователя.",
+    channel: "Канал (по умолчанию текущий)",
+    amount: "Количество предупреждений (1–5)",
+    clear: "Сбросить счётчик предупреждений",
   },
 } as const;
 
@@ -87,7 +86,7 @@ export const discordMuteDurationChoices: ReadonlyArray<{ name: string; value: st
 
 export function discordModerationLogChannelFieldValue(channelId: string, parentChannelId?: string): string {
   if (parentChannelId) {
-    return `<#${channelId}> (ветка, родитель <#${parentChannelId}>)`;
+    return `<#${channelId}> (тред в <#${parentChannelId}>)`;
   }
   return `<#${channelId}>`;
 }
@@ -95,31 +94,27 @@ export function discordModerationLogChannelFieldValue(channelId: string, parentC
 export const discordModerationLogFields = {
   user: "Пользователь",
   channel: "Канал",
-  type: "Тип",
-  minorWarningsChannel: "Предупреждений (минор, канал)",
-  minorTier: "Minor tier",
-  majorTier: "Major tier",
+  minorWarningsChannel: "Предупреждений",
   timeout: "Таймаут",
   timeoutMinutes: (m: number) => `${m} мин`,
-  message: "Сообщение",
-  excerpt: "Фрагмент",
+  excerpt: "Текст сообщения",
   moderator: "Модератор",
 } as const;
 
 export const discordModerationLogTitles = {
-  staffMute: "Staff: /mute",
-  staffUnmute: "Staff: /unmute",
-  staffWarn: "Staff: /warn",
-  staffUnwarn: "Staff: /unwarn",
-  majorTimeout: "Major: таймаут",
-  minorWarnOnly: "Minor: предупреждение",
-  minorWarnTimeout: "Minor: предупреждение + таймаут",
+  staffMute: "Ручной /mute",
+  staffUnmute: "Ручной /unmute",
+  staffWarn: "Ручной /warn",
+  staffUnwarn: "Ручной /unwarn",
+  majorTimeout: "Серьёзное нарушение",
+  minorWarnOnly: "Легкое нарушение",
+  minorWarnTimeout: "Легкое нарушение + таймаут",
 } as const;
 
 export const discordCommonReplies = {
   guildOnly: "Только на сервере.",
   guildOnlyCommand: "Эта команда доступна только на сервере.",
-  noPermission: "У вас нет прав на эту команду.",
+  noPermission: "У вас недостаточно прав для этой команды.",
   wrongGuild: "Неверный сервер.",
   channelNotText: "Этот канал не подходит для текстовых сообщений.",
   modalStalePost: "Форма устарела или уже использована. Запустите `/post` снова.",
@@ -129,9 +124,8 @@ export const discordCommonReplies = {
   modalWrongInvokerRolePanel: "Отправить форму может только тот, кто вызвал `/rolepanel`.",
   modalWrongInvokerLinkPanel: "Отправить форму может только тот, кто вызвал `/linkpanel`.",
   postModalNeedsContent:
-    "Добавьте текст в форму, прикрепите файл в `/post` и/или задайте параметры embed (например `embed_title`, `embed_description`, `embed_image_url`).",
-  panelModalNeedsContent:
-    "Добавьте текст в форму и/или задайте embed в команде (например `embed_title`, `embed_description`, `embed_image_url`).",
+    "Добавьте текст сообщения, прикрепите картинку и/или задайте embed (например `embed_title`, `embed_description`).",
+  panelModalNeedsContent: "Добавьте текст сообщения и/или задайте embed (например `embed_title`, `embed_description`).",
   channelUnavailable: "Канал больше недоступен.",
   internalError: "Произошла внутренняя ошибка.",
 } as const;
@@ -175,18 +169,16 @@ export const discordRolePanelErrors = {
 } as const;
 
 export const discordRoles = {
-  panelUnknown:
-    "Эта кнопка роли не зарегистрирована у бота (состояние потеряли после перезапуска или сообщение не удалось восстановить). Попросите модератора снова выполнить `/rolepanel`.",
+  panelUnknown: "Эта кнопка роли не работает. Сообщите о проблеме модераторам.",
   buttonWrongPanel:
-    "Эта кнопка не относится к сохранённой панели ролей для этого сообщения. Попробуйте снова `/rolepanel`.",
+    "Эта кнопка не относится к сохранённой панели для этого сообщения. Сообщите о проблеме модераторам.",
   wrongGuild: "Эта панель ролей относится к другому серверу.",
-  memberResolveFailed: "Не удалось определить ваш профиль участника на этом сервере.",
-  roleMissing: "Роль не найдена (возможно, удалена). Создайте панель заново через `/rolepanel`.",
-  botMemberFailed:
-    "Не удалось загрузить профиль бота на сервере. Проверьте, что бот в гильдии и при необходимости включён интент **Участники сервера** (Server Members Intent).",
+  memberResolveFailed: "Не удалось определить ваш профиль на сервере.",
+  roleMissing: "Роль не найдена. Сообщите о проблеме модераторам.",
+  botMemberFailed: "Не удалось загрузить профиль бота на сервере.",
   roleRemoved: (label: string) => `Роль снята: ${label}`,
   roleAdded: (label: string) => `Роль выдана: ${label}`,
-  fallbackRoleLabel: "роль",
+  fallbackRoleLabel: "Роль",
   noManageRoles:
     "У этого бота нет права **Управлять ролями** на сервере. Включите его в **Настройки сервера → Интеграции** (или выдайте роли бота это право).",
   hierarchyTarget:
@@ -195,48 +187,45 @@ export const discordRoles = {
     `Роль **${name}** **управляется** Discord (интеграция, подписка и т.п.) — бот не может её выдавать или снимать.`,
   roleNotEditable: (name: string) =>
     `Роль бота должна быть **выше** роли **${name}** в **Настройки сервера → Роли** (перетащите роль бота выше), чтобы бот мог выдавать или снимать эту роль.`,
-  apiGeneric: "Не удалось изменить роль. Обратитесь к администраторам сервера.",
+  apiGeneric: "Не удалось изменить роль. Сообщите о проблеме модераторам.",
   apiRateLimit: "Discord ограничил частоту действий. Подождите немного и попробуйте снова.",
-  apiForbidden:
-    "Discord отклонил действие (**нет доступа / прав**). Обычно помогает: (1) у бота есть **Управлять ролями**, (2) роль бота **выше** роли на кнопке, (3) ваша верхняя роль **ниже** верхней роли бота.",
+  apiForbidden: "Discord отклонил действие (нет доступа / прав). Сообщите о проблеме модераторам.",
 } as const;
 
 export const discordModerationCommands = {
-  unknownError: "неизвестно",
-  defaultMuteReason: "Ручной мут модератором",
-  unmuteReason: "Снят модератором",
-  warnDefaultReason: "Предупреждение модератором",
-  unmuteLogReason: "Снят таймаут",
+  unknownError: "Неизвестная ошибка",
+  defaultMuteReason: "Ручной таймаут модератором",
+  unmuteReason: "Таймаут снят модератором",
+  warnDefaultReason: "Предупреждение выдано модератором",
+  unmuteLogReason: "Таймаут снят модератором",
   unwarnReasonIncrement: (n: number) => `−${n}`,
-  unwarnReasonClear: "Сброс предупреждений",
+  unwarnReasonClear: "Сброс предупреждений модератором",
   guildOnly: "Только на сервере.",
-  scopeNeedTextChannel: "Укажите текстовый канал или ветку.",
+  scopeNeedTextChannel: "Укажите текстовый канал.",
   scopeChannelUnknown: "Не удалось определить канал.",
   muteBot: "Нельзя замутить бота.",
-  badDuration: "Некорректная длительность.",
+  badDuration: "Некорректная длительность таймаута.",
   userNotInGuild: "Пользователь не на сервере.",
-  muteNotModeratable: "Не могу изменить таймаут этого пользователя (роль выше?).",
+  muteNotModeratable: "Не могу выдать таймаут этому пользователю (роль выше).",
   muteTimeoutFail: (err: string) => `Не удалось выдать таймаут: ${err}`,
   unmuteBadTarget: "Некорректная цель.",
-  unmuteNotModeratable: "Не могу снять таймаут (роль выше?).",
+  unmuteNotModeratable: "Не могу снять таймаут (роль выше).",
   unmuteFail: (err: string) => `Не удалось снять таймаут: ${err}`,
   unmuteDone: (userId: string) => `Таймаут снят с <@${userId}>.`,
   warnCounts: (userId: string, scopeId: string, before: number, after: number) =>
     `Предупреждения <@${userId}> в <#${scopeId}>: ${before} → ${after}.`,
-  lastMessageChannelUnsupported: "В этом канале нельзя прочитать историю сообщений для копии.",
+  lastMessageChannelUnsupported: "В этом канале нельзя прочитать историю сообщений.",
   lastMessageNotFound: "Нет сообщений пользователя среди последних 100 в канале.",
-  lastMessageLoggedNote:
-    "\nВ лог модерации добавлены ссылка и копия последнего сообщения пользователя.",
-  lastMessageNoLogEnv:
-    "\nКопия сообщения не попадёт в лог: не задан DISCORD_MODERATION_LOG_CHANNEL_ID.",
-  lastMessageFailNote: (err: string) => `\nНе удалось добавить копию сообщения в лог — ${err}`,
-  screenshotLogged: "\nСкриншот добавлен к записи в лог модерации.",
-  screenshotNoLogEnv: "\nСкриншот не попадёт в лог: не задан DISCORD_MODERATION_LOG_CHANNEL_ID.",
-  muteSnapshotEmpty: "(нет текста; есть только вложения/embed/стикеры — см. ссылку на сообщение)",
+  lastMessageLoggedNote: "\nВ отчет модерации добавлена копия последнего сообщения пользователя.",
+  lastMessageNoLogEnv: "\nКопия сообщения не попадёт в отчет: не задан канал.",
+  lastMessageFailNote: (err: string) => `\nНе удалось добавить копию сообщения в отчет — ${err}`,
+  screenshotLogged: "\nСкриншот добавлен в отчет модерации.",
+  screenshotNoLogEnv: "\nСкриншот не попадёт в отчет: не задан канал.",
+  muteSnapshotEmpty: "(нет текста; есть только вложения/embed/стикеры)",
   muteDone: (durLabel: string, userId: string, evidenceNote: string, shotNote: string) =>
     `Таймаут **${durLabel}** (<@${userId}>).${evidenceNote}${shotNote}`,
   minutesFallback: (n: number) => `${n} мин`,
-  screenshotFileFallback: "screenshot",
+  screenshotFileFallback: "Скриншот",
 } as const;
 
 export const discordAutoMod = {
@@ -247,8 +236,8 @@ export const discordAutoMod = {
   imageForbidden: "В этом канале запрещены изображения.",
   textForbidden: "В этом канале запрещены текстовые сообщения.",
   keywordHit: (word: string) => `Обнаружено запрещённое слово: «${word}».`,
-  timeoutMajor: (reason: string) => `Автомодерация (major): ${reason}`,
-  timeoutMinor: (reason: string) => `Автомодерация (minor): ${reason}`,
+  timeoutMajor: (reason: string) => `Автомодерация (серьёзное нарушение): ${reason}`,
+  timeoutMinor: (reason: string) => `Автомодерация (легкое нарушение): ${reason}`,
   guildFallbackName: "Сервер",
   embedFooter: "Автоматическая модерация",
   titleMajor: "Серьёзное нарушение",
@@ -257,12 +246,11 @@ export const discordAutoMod = {
   labelChannel: "Канал",
   labelNick: "Ник на сервере",
   labelReason: "Причина",
-  labelWarnCount: (count: number, threshold: number) =>
-    `**Предупреждения в этом канале:** **${count}** (порог таймаута: **${threshold}**).`,
+  labelWarnCount: (count: number, threshold: number) => `**Предупреждений в этом канале:** **${count}/${threshold}**`,
   labelTimeout: "Таймаут",
   timeoutApplyFail: "**Таймаут:** не удалось применить (ошибка Discord API).",
   timeoutNotModeratable:
-    "**Таймаут:** не применён — бот не может замутить этого пользователя (проверьте иерархию ролей).",
+    "**Таймаут:** не применён — бот не может замутить этого пользователя (проверьте настройки ролей).",
 } as const;
 
 /** Human-readable duration for automod user embeds (Russian). */

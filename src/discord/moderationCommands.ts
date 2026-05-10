@@ -215,13 +215,11 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     }
     await saveState(LAST_SEEN_STATE_FILE);
 
-    let evidenceMessageId: string | undefined;
     let evidenceExcerpt: string | undefined;
     let lastMsgNote = "";
     if (logLastMessage) {
       const found = await findTargetRecentMessage(interaction, target.id);
       if (found.message) {
-        evidenceMessageId = found.message.id;
         evidenceExcerpt = formatMutedUserMessageSnapshot(found.message);
         lastMsgNote = DISCORD_MODERATION_LOG_CHANNEL_ID ? modTxt.lastMessageLoggedNote : modTxt.lastMessageNoLogEnv;
       } else {
@@ -246,9 +244,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       staffUserId: interaction.user.id,
       timeoutMs: ms,
       ...(logFiles ? { logFiles } : {}),
-      ...(evidenceMessageId !== undefined && evidenceExcerpt !== undefined
-        ? { messageId: evidenceMessageId, messageExcerpt: evidenceExcerpt }
-        : {}),
+      ...(evidenceExcerpt !== undefined ? { messageExcerpt: evidenceExcerpt } : {}),
     });
 
     const durLabel =

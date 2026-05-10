@@ -9,6 +9,7 @@ import {
   DISCORD_MINOR_TIMEOUT_LADDER_MS,
   DISCORD_MODERATION_DECAY_MS,
   DISCORD_SPAM_FILTER_CHANNEL_IDS,
+  DISCORD_WARNINGS_BEFORE_TIMEOUT,
   DISCORD_WARNING_MESSAGE_TTL_MS,
   LAST_SEEN_STATE_FILE,
   LOG_LEVEL,
@@ -31,7 +32,6 @@ import {
   touchModerationViolation,
 } from "../state";
 
-const MINOR_WARN_THRESHOLD = 3;
 /** Discord “red” for moderation user notices */
 const MODERATION_USER_EMBED_COLOR = 0xed4245;
 const SPAM_DUPLICATE_REASON = autoTxt.spamDuplicateReason;
@@ -430,7 +430,7 @@ async function buildModerationUserNoticeEmbed(
 
   if (notice.kind === "minor") {
     lines.push("");
-    lines.push(autoTxt.labelWarnCount(notice.warnCount, MINOR_WARN_THRESHOLD));
+    lines.push(autoTxt.labelWarnCount(notice.warnCount, DISCORD_WARNINGS_BEFORE_TIMEOUT));
     if (notice.timeoutMs !== undefined) {
       lines.push("");
       lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(notice.timeoutMs))}**`);
@@ -496,7 +496,6 @@ export async function handleModerationMessage(message: Message): Promise<void> {
   applyModerationDecayIfNeeded(guildId, userId, now, DISCORD_MODERATION_DECAY_MS);
 
   const excerpt = `${message.content}`.slice(0, 400);
-  const msgId = message.id;
 
   try {
     await message.delete();
@@ -534,11 +533,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
       channelId: ctx.sourceChannelId,
       parentChannelId: ctx.parentChannelId,
       reason: violation.reason,
-      severity: "major",
-      majorMuteTierBefore: tierBefore,
-      majorMuteTierAfter: tierAfter,
       timeoutMs: ms,
-      messageId: msgId,
       messageExcerpt: excerpt,
     });
 
@@ -567,7 +562,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
   const tierMinorBefore = getMinorMuteTier(guildId, userId);
   let tierMinorAfter = tierMinorBefore;
 
-  if (warnCount >= MINOR_WARN_THRESHOLD && member.moderatable) {
+  if (warnCount >= DISCORD_WARNINGS_BEFORE_TIMEOUT && member.moderatable) {
     const tb = getMinorMuteTier(guildId, userId);
     const idx = Math.min(tb, lastMinorIdx);
     const ms = DISCORD_MINOR_TIMEOUT_LADDER_MS[idx] ?? DISCORD_MINOR_TIMEOUT_LADDER_MS[lastMinorIdx];
@@ -598,12 +593,8 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     channelId: ctx.sourceChannelId,
     parentChannelId: ctx.parentChannelId,
     reason: violation.reason,
-    severity: "minor",
     minorWarningsInChannel: warnCount,
-    minorMuteTierBefore: tierMinorBefore,
-    minorMuteTierAfter: tierMinorAfter,
     timeoutMs,
-    messageId: msgId,
     messageExcerpt: excerpt,
   });
 
