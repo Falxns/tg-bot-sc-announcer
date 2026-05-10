@@ -378,13 +378,11 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       member = null;
     }
 
-    const crossedThreshold =
-      before < DISCORD_WARNINGS_BEFORE_TIMEOUT &&
-      after >= DISCORD_WARNINGS_BEFORE_TIMEOUT &&
-      member !== null &&
-      member.moderatable;
+    /** Same rule as automod minor path: ladder timeout whenever warnings stay at/above threshold after this `/warn`. */
+    const applyMinorLadderTimeout =
+      after >= DISCORD_WARNINGS_BEFORE_TIMEOUT && member !== null && member.moderatable;
 
-    if (crossedThreshold && member) {
+    if (applyMinorLadderTimeout && member) {
       const lastMinorIdx = DISCORD_MINOR_TIMEOUT_LADDER_MS.length - 1;
       const tb = getMinorMuteTier(guild.id, target.id);
       const idx = Math.min(tb, lastMinorIdx);
