@@ -87,6 +87,19 @@ function collectSearchableText(message: Message): string {
   return parts.join("\n");
 }
 
+/**
+ * Text used only for Discord invite detection. Intentionally excludes embed title/description/footer:
+ * rich previews (e.g. YouTube) often repeat the video description, which may contain third-party
+ * `discord.gg` links — that would falsely trigger invite moderation while the user only pasted a video URL.
+ */
+function collectInviteScanText(message: Message): string {
+  const parts: string[] = [message.content];
+  for (const e of message.embeds) {
+    if (e.url) parts.push(e.url);
+  }
+  return parts.join("\n");
+}
+
 function extractUrls(text: string): string[] {
   const re = /https?:\/\/[^\s<>"'`]+/gi;
   const out: string[] = [];
@@ -263,6 +276,7 @@ function detectViolations(
   member: GuildMember,
   ctx: PolicyContext,
   searchable: string,
+  inviteScanText: string,
   lowerSearch: string,
   attachments: readonly Attachment[],
 ): ViolationHit | null {
@@ -273,7 +287,7 @@ function detectViolations(
   const allowInvitesInChannel = policy?.allowDiscordInvites === true;
   const shouldCheckInvites =
     !allowInvitesInChannel && (DISCORD_BLOCK_INVITE_LINKS_GLOBAL || policy?.blockInviteLinks === true);
-  if (shouldCheckInvites && hasExternalInvite(searchable) && !hasAnyRole(member, inviteRoleAllow)) {
+  if (shouldCheckInvites && hasExternalInvite(inviteScanText) && !hasAnyRole(member, inviteRoleAllow)) {
     const sev = policy?.inviteViolationSeverity ?? "major";
     hits.push({ reason: "В этом канале запрещены приглашения Discord.", severity: sev });
   }
@@ -473,6 +487,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
 
   const ctx = resolvePolicyContext(message);
   const searchable = collectSearchableText(message);
+  const inviteScanText = collectInviteScanText(message);
   const lowerSearch = searchable.toLowerCase();
   const attachments = [...message.attachments.values()];
 
@@ -481,7 +496,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     violation = await trySpamDuplicateViolation(message);
   }
   if (!violation) {
-    violation = detectViolations(message, member, ctx, searchable, lowerSearch, attachments);
+    violation = detectViolations(message, member, ctx, searchable, inviteScanText, lowerSearch, attachments);
   }
   if (!violation) return;
 
