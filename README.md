@@ -11,7 +11,7 @@ Telegram + Discord bot service that polls the [Exbo forum](https://forum.exbo.ru
 - Runs a Discord bot in the same process with:
   - admin slash commands `/post` and `/edit` (post or edit bot messages in a target channel)
   - role assignment message buttons via `/rolepanel`
-  - channel-aware moderation (minor/major severity, per-channel warnings, guild mute ladders, 3-day decay, DM + channel fallback, optional log channel, staff `/mute` `/unmute` `/warn` `/unwarn`, optional external-link domain blacklist)
+  - channel-aware moderation (minor/major severity, per-channel warnings, guild mute ladders, 3-day decay, DM + channel fallback, optional log channel, staff `/mute` `/unmute` `/warn` `/unwarn` `/modstatus`, optional external-link domain blacklist)
 - Optional HTTP health-check server (e.g. for PaaS readiness probes)
 
 ## Stack
@@ -57,7 +57,7 @@ Edit `.env`:
 | `UPSTASH_REDIS_REST_TOKEN` | No | Upstash Redis REST token (required when `STATE_BACKEND=upstash`) |
 | `UPSTASH_STATE_KEY` | No | Redis key for serialized state JSON (default: `tg-bot-sc-announcer:state`) |
 | `ADMIN_USER_IDS` | No | Comma-separated Telegram user IDs; if empty, all users can use admin commands |
-| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/edit`, `/rolepanel`, `/linkpanel`, `/mute`, `/unmute`, `/warn`, `/unwarn` (when empty, any member who passes Discord’s command permissions may use them) |
+| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/edit`, `/rolepanel`, `/linkpanel`, `/mute`, `/unmute`, `/warn`, `/unwarn`, `/modstatus` (when empty, any member who passes Discord’s command permissions may use them) |
 | `DISCORD_ROLE_PANEL_CHANNEL_ID` | No | Restrict `/rolepanel` usage to one channel |
 | `DISCORD_BLOCK_INVITE_LINKS_GLOBAL` | No | `1`/`0` toggle for global Discord invite-link filtering |
 | `DISCORD_INVITE_ALLOWED_ROLE_IDS` | No | Roles allowed to bypass invite-link filter |
@@ -108,6 +108,7 @@ Author list and “last seen” state are saved to the state file and restored o
 - `/unmute user:<user>` — clears Discord timeout
 - `/warn user:<user> [channel] [amount] [reason] [screenshot] [message_id]` — increments per-channel minor warning counter; optional **`screenshot`** and **`message_id`** behave like **`/mute`** (resolve **`message_id`** in the channel/thread where the command is run); when the count reaches **`DISCORD_WARNINGS_BEFORE_TIMEOUT`** (default **3**) on this action, applies **one** timeout using **`DISCORD_MINOR_TIMEOUT_LADDER_MS`** and advances the same guild minor tier as automod
 - `/unwarn user:<user> [channel] [amount] [clear]` — decrements or clears per-channel minor warnings
+- `/modstatus user:<user>` — read-only: per-channel **minor** warning rows stored in bot state, **next** minor/major ladder step and duration (same logic as automod and threshold `/warn`), and last-violation / **decay** hint for `DISCORD_MODERATION_DECAY_MS` (no state is changed)
 
 Role-panel definitions and moderation state (per-channel minor warnings, guild minor/major mute tiers, last-violation timestamps) are saved in shared bot state (`file` or Upstash, depending on `STATE_BACKEND`) and restored on restart. Legacy `discordModerationWarnings` (`guildId:userId`) in old JSON files is migrated into a `legacy` scope bucket and merged on first per-channel write.
 

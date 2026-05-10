@@ -22,6 +22,7 @@ import { DISCORD_ADMIN_ROLE_IDS, DISCORD_ROLE_PANEL_CHANNEL_ID, LAST_SEEN_STATE_
 import { saveState, setDiscordRolePanel } from "../state";
 import {
   handleModerationSlashCommand,
+  modstatusSlashCommand,
   muteSlashCommand,
   unmuteSlashCommand,
   unwarnSlashCommand,
@@ -314,6 +315,7 @@ export async function registerGuildCommands(guild: Guild): Promise<void> {
     unmuteSlashCommand.toJSON(),
     warnSlashCommand.toJSON(),
     unwarnSlashCommand.toJSON(),
+    modstatusSlashCommand.toJSON(),
   ]);
 }
 
@@ -1082,7 +1084,13 @@ export async function handleDiscordCommand(interaction: ChatInputCommandInteract
     await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }
-  if (interaction.commandName === "mute" || interaction.commandName === "unmute" || interaction.commandName === "warn" || interaction.commandName === "unwarn") {
+  if (
+    interaction.commandName === "mute" ||
+    interaction.commandName === "unmute" ||
+    interaction.commandName === "warn" ||
+    interaction.commandName === "unwarn" ||
+    interaction.commandName === "modstatus"
+  ) {
     await handleModerationSlashCommand(interaction);
     return;
   }

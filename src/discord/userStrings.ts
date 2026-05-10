@@ -85,6 +85,10 @@ export const discordSlashModeration = {
     amount: "Количество предупреждений (1–5)",
     clear: "Сбросить счётчик предупреждений",
   },
+  modstatus: {
+    commandDescription: "Статус модерации пользователя. Предупреждения и лестницы таймаутов.",
+    user: "Пользователь",
+  },
 } as const;
 
 /** Values are minute counts as strings (Discord choice values). */
@@ -254,6 +258,22 @@ export const discordModerationCommands = {
     `Таймаут **${durLabel}** (<@${userId}>).${evidenceNote}${shotNote}`,
   minutesFallback: (n: number) => `${n} мин`,
   screenshotFileFallback: "Скриншот",
+  modstatusBot: "Для ботов статус не показывается.",
+  modstatusIntro: (userId: string) => `**Статус модерации** — <@${userId}>`,
+  modstatusMinorLadder: (tier: number, nextDur: string, ladderSteps: number, threshold: number) =>
+    `**Лёгкая лестница** (автотаймаут при **${threshold}** предупреждениях в канале): номер следующего шага **${tier}** / ${ladderSteps}, следующая длительность **${nextDur}**.`,
+  modstatusMajorLadder: (tier: number, nextDur: string, ladderSteps: number) =>
+    `**Серьёзная лестница** (автомодерация): номер следующего шага **${tier}** / ${ladderSteps}, следующая длительность **${nextDur}**.`,
+  modstatusWarningsHeader: "**Предупреждения по каналам**:",
+  modstatusWarningsEmpty: "_Нет предупреждений._",
+  modstatusLegacyScope: "legacy (импорт)",
+  modstatusWarningsTruncated: (n: number) => `_… и ещё ${n}._`,
+  modstatusDecayNone: "**Последнее нарушение:** нет записи — отсчёт до авто-сброса не ведётся.",
+  modstatusDecayLine: (agoLabel: string, resetInLabel: string) =>
+    `**Последнее нарушение:** ${agoLabel} назад. ${resetInLabel}`,
+  modstatusDecayPending: (dur: string) =>
+    `Без новых нарушений сброс предупреждений и лестниц примерно через **${dur}**.`,
+  modstatusDecayDue: "Порог бездействия для сброса уже пройден — сброс произойдёт при следующей проверке нарушения.",
 } as const;
 
 export const discordAutoMod = {

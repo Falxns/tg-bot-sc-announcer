@@ -8,7 +8,9 @@ import {
 } from "discord.js";
 import type { Guild, Message } from "discord.js";
 import {
+  DISCORD_MAJOR_TIMEOUT_LADDER_MS,
   DISCORD_MINOR_TIMEOUT_LADDER_MS,
+  DISCORD_MODERATION_DECAY_MS,
   DISCORD_MODERATION_LOG_CHANNEL_ID,
   DISCORD_WARNINGS_BEFORE_TIMEOUT,
   LAST_SEEN_STATE_FILE,
@@ -17,8 +19,13 @@ import { logModerationEvent } from "./moderationLog";
 import {
   adjustMinorWarningCount,
   consumeMinorMuteTierForApply,
+  discordModerationLastViolationAt,
+  getMajorMuteTier,
   getMinorMuteTier,
   getMinorWarningCount,
+  guildUserKey,
+  LEGACY_MINOR_WARNING_SCOPE,
+  listMinorWarningEntriesForGuildUser,
   saveState,
   setMinorWarningCount,
   touchModerationViolation,
@@ -183,6 +190,12 @@ export const unwarnSlashCommand = new SlashCommandBuilder()
   .addBooleanOption((o) =>
     o.setName("clear").setDescription(slashModTxt.unwarn.clear).setRequired(false),
   )
+  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
+
+export const modstatusSlashCommand = new SlashCommandBuilder()
+  .setName("modstatus")
+  .setDescription(slashModTxt.modstatus.commandDescription)
+  .addUserOption((o) => o.setName("user").setDescription(slashModTxt.modstatus.user).setRequired(true))
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
 async function resolveWarningScope(
@@ -471,6 +484,79 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     });
     await interaction.reply({
       content: modTxt.warnCounts(target.id, resolved.scopeId, before, after),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (name === "modstatus") {
+    const target = interaction.options.getUser("user", true);
+    if (target.bot) {
+      await interaction.reply({ content: modTxt.modstatusBot, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    const guildId = guild.id;
+    const userId = target.id;
+    const entries = listMinorWarningEntriesForGuildUser(guildId, userId);
+    const minorTier = getMinorMuteTier(guildId, userId);
+    const majorTier = getMajorMuteTier(guildId, userId);
+    const lastMinorIdx = DISCORD_MINOR_TIMEOUT_LADDER_MS.length - 1;
+    const lastMajorIdx = DISCORD_MAJOR_TIMEOUT_LADDER_MS.length - 1;
+    const minorNextMs =
+      DISCORD_MINOR_TIMEOUT_LADDER_MS[Math.min(minorTier, lastMinorIdx)] ?? DISCORD_MINOR_TIMEOUT_LADDER_MS[lastMinorIdx];
+    const majorNextMs =
+      DISCORD_MAJOR_TIMEOUT_LADDER_MS[Math.min(majorTier, lastMajorIdx)] ?? DISCORD_MAJOR_TIMEOUT_LADDER_MS[lastMajorIdx];
+
+    const lines: string[] = [];
+    lines.push(modTxt.modstatusIntro(userId));
+    lines.push("");
+    lines.push(
+      modTxt.modstatusMinorLadder(
+        minorTier,
+        discordFormatDurationRu(minorNextMs),
+        DISCORD_MINOR_TIMEOUT_LADDER_MS.length,
+        DISCORD_WARNINGS_BEFORE_TIMEOUT,
+      ),
+    );
+    lines.push(
+      modTxt.modstatusMajorLadder(
+        majorTier,
+        discordFormatDurationRu(majorNextMs),
+        DISCORD_MAJOR_TIMEOUT_LADDER_MS.length,
+      ),
+    );
+    lines.push("");
+    lines.push(modTxt.modstatusWarningsHeader);
+    if (entries.length === 0) {
+      lines.push(modTxt.modstatusWarningsEmpty);
+    } else {
+      const maxLines = 20;
+      for (let i = 0; i < entries.length && i < maxLines; i++) {
+        const e = entries[i]!;
+        const label =
+          e.scopeId === LEGACY_MINOR_WARNING_SCOPE ? modTxt.modstatusLegacyScope : `<#${e.scopeId}>`;
+        lines.push(`• ${label}: **${e.count}** / ${DISCORD_WARNINGS_BEFORE_TIMEOUT}`);
+      }
+      if (entries.length > maxLines) {
+        lines.push(modTxt.modstatusWarningsTruncated(entries.length - maxLines));
+      }
+    }
+    lines.push("");
+    const lastAt = discordModerationLastViolationAt.get(guildUserKey(guildId, userId));
+    const now = Date.now();
+    if (lastAt === undefined) {
+      lines.push(modTxt.modstatusDecayNone);
+    } else {
+      const since = now - lastAt;
+      const agoLabel = discordFormatDurationRu(since);
+      const remaining = DISCORD_MODERATION_DECAY_MS - since;
+      const resetLabel =
+        remaining <= 0 ? modTxt.modstatusDecayDue : modTxt.modstatusDecayPending(discordFormatDurationRu(remaining));
+      lines.push(modTxt.modstatusDecayLine(agoLabel, resetLabel));
+    }
+
+    await interaction.reply({
+      content: lines.join("\n").slice(0, 2000),
       flags: MessageFlags.Ephemeral,
     });
   }

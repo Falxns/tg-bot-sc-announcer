@@ -126,6 +126,21 @@ export function adjustMinorWarningCount(
   return next;
 }
 
+/** Raw per-scope warning rows from state (excludes zero counts). Sorted by count desc, then scope id. */
+export function listMinorWarningEntriesForGuildUser(guildId: string, userId: string): { scopeId: string; count: number }[] {
+  const prefix = `${guildId}:`;
+  const suffix = `:${userId}`;
+  const out: { scopeId: string; count: number }[] = [];
+  for (const [key, count] of discordMinorWarnings) {
+    if (!key.startsWith(prefix) || !key.endsWith(suffix)) continue;
+    if (typeof count !== "number" || count <= 0) continue;
+    const scopeId = key.slice(prefix.length, key.length - suffix.length);
+    out.push({ scopeId, count });
+  }
+  out.sort((a, b) => b.count - a.count || a.scopeId.localeCompare(b.scopeId));
+  return out;
+}
+
 export function getMinorMuteTier(guildId: string, userId: string): number {
   return discordMinorMuteTier.get(guildUserKey(guildId, userId)) ?? 0;
 }
