@@ -6,16 +6,34 @@ import {
   PermissionFlagsBits,
   SlashCommandBuilder,
 } from "discord.js";
-import type { Message } from "discord.js";
-import { DISCORD_MODERATION_LOG_CHANNEL_ID, LAST_SEEN_STATE_FILE } from "../config";
-import { logModerationEvent } from "./moderationLog";
-import { adjustMinorWarningCount, getMinorWarningCount, saveState, setMinorWarningCount } from "../state";
+import type { Guild, Message } from "discord.js";
 import {
+  DISCORD_MINOR_TIMEOUT_LADDER_MS,
+  DISCORD_MODERATION_LOG_CHANNEL_ID,
+  DISCORD_WARNINGS_BEFORE_TIMEOUT,
+  LAST_SEEN_STATE_FILE,
+} from "../config";
+import { logModerationEvent } from "./moderationLog";
+import {
+  adjustMinorWarningCount,
+  consumeMinorMuteTierForApply,
+  getMinorMuteTier,
+  getMinorWarningCount,
+  saveState,
+  setMinorWarningCount,
+  touchModerationViolation,
+} from "../state";
+import {
+  discordFormatDurationRu,
   discordModerationCommands as modTxt,
   discordModerationLogTitles,
   discordMuteDurationChoices,
   discordSlashModeration as slashModTxt,
 } from "./userStrings";
+
+function isDiscordSnowflake(id: string): boolean {
+  return /^\d{17,20}$/.test(id.trim());
+}
 
 function warningScopeChannelIdFromInteraction(interaction: ChatInputCommandInteraction): string | null {
   const ch = interaction.channel;
@@ -24,35 +42,6 @@ function warningScopeChannelIdFromInteraction(interaction: ChatInputCommandInter
     return ch.parentId ?? ch.id;
   }
   return ch.id;
-}
-
-async function findTargetRecentMessage(
-  interaction: ChatInputCommandInteraction,
-  targetUserId: string,
-): Promise<{ message?: Message; error?: string }> {
-  const ch = interaction.channel;
-  if (!ch?.isTextBased() || !("messages" in ch)) {
-    return { error: modTxt.lastMessageChannelUnsupported };
-  }
-  try {
-    const batch = await ch.messages.fetch({ limit: 100 });
-    let best: Message | null = null;
-    let bestTs = 0;
-    for (const m of batch.values()) {
-      if (m.author.id !== targetUserId || m.system) continue;
-      const t = m.createdTimestamp;
-      if (t >= bestTs) {
-        bestTs = t;
-        best = m;
-      }
-    }
-    if (!best) {
-      return { error: modTxt.lastMessageNotFound };
-    }
-    return { message: best };
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
-  }
 }
 
 /** Plaintext snapshot for mod log (does not render embeds). */
@@ -75,6 +64,35 @@ function formatMutedUserMessageSnapshot(msg: Message): string {
   return parts.join("\n\n");
 }
 
+async function resolveEvidenceFromMessageId(opts: {
+  guild: Guild;
+  fetchChannelId: string;
+  targetUserId: string;
+  messageIdRaw: string | undefined | null;
+}): Promise<{ excerpt?: string; note: string }> {
+  const raw = opts.messageIdRaw?.trim();
+  if (!raw) return { note: "" };
+  if (!isDiscordSnowflake(raw)) {
+    return { note: modTxt.evidenceNoteInvalidId };
+  }
+  const channel = await opts.guild.channels.fetch(opts.fetchChannelId).catch(() => null);
+  if (!channel?.isTextBased() || !("messages" in channel)) {
+    return { note: modTxt.evidenceNoteBadChannel };
+  }
+  try {
+    const msg = await channel.messages.fetch(raw);
+    if (msg.author.id !== opts.targetUserId) {
+      return { note: modTxt.evidenceNoteWrongAuthor };
+    }
+    return {
+      excerpt: formatMutedUserMessageSnapshot(msg),
+      note: DISCORD_MODERATION_LOG_CHANNEL_ID ? modTxt.evidenceCopiedNote : modTxt.evidenceNoLogEnv,
+    };
+  } catch {
+    return { note: modTxt.evidenceNoteFetchFail };
+  }
+}
+
 export const muteSlashCommand = new SlashCommandBuilder()
   .setName("mute")
   .setDescription(slashModTxt.mute.commandDescription)
@@ -92,8 +110,13 @@ export const muteSlashCommand = new SlashCommandBuilder()
   .addAttachmentOption((o) =>
     o.setName("screenshot").setDescription(slashModTxt.mute.screenshot).setRequired(false),
   )
-  .addBooleanOption((o) =>
-    o.setName("log_last_message").setDescription(slashModTxt.mute.logLastMessage).setRequired(false),
+  .addStringOption((o) =>
+    o
+      .setName("message_id")
+      .setDescription(slashModTxt.mute.messageId)
+      .setRequired(false)
+      .setMinLength(17)
+      .setMaxLength(22),
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
@@ -124,6 +147,17 @@ export const warnSlashCommand = new SlashCommandBuilder()
   )
   .addStringOption((o) =>
     o.setName("reason").setDescription(slashModTxt.warn.reason).setMaxLength(450).setRequired(false),
+  )
+  .addAttachmentOption((o) =>
+    o.setName("screenshot").setDescription(slashModTxt.warn.screenshot).setRequired(false),
+  )
+  .addStringOption((o) =>
+    o
+      .setName("message_id")
+      .setDescription(slashModTxt.warn.messageId)
+      .setRequired(false)
+      .setMinLength(17)
+      .setMaxLength(22),
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
@@ -183,7 +217,11 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const minutes = parseInt(durationRaw, 10);
     const reason = interaction.options.getString("reason")?.trim() || modTxt.defaultMuteReason;
     const screenshot = interaction.options.getAttachment("screenshot");
-    const logLastMessage = interaction.options.getBoolean("log_last_message") === true;
+    const messageIdRaw = interaction.options.getString("message_id")?.trim();
+    if (messageIdRaw && !isDiscordSnowflake(messageIdRaw)) {
+      await interaction.reply({ content: modTxt.evidenceInvalidSnowflakeReply, flags: MessageFlags.Ephemeral });
+      return;
+    }
     if (target.bot) {
       await interaction.reply({ content: modTxt.muteBot, flags: MessageFlags.Ephemeral });
       return;
@@ -213,19 +251,15 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       });
       return;
     }
-    await saveState(LAST_SEEN_STATE_FILE);
 
-    let evidenceExcerpt: string | undefined;
-    let lastMsgNote = "";
-    if (logLastMessage) {
-      const found = await findTargetRecentMessage(interaction, target.id);
-      if (found.message) {
-        evidenceExcerpt = formatMutedUserMessageSnapshot(found.message);
-        lastMsgNote = DISCORD_MODERATION_LOG_CHANNEL_ID ? modTxt.lastMessageLoggedNote : modTxt.lastMessageNoLogEnv;
-      } else {
-        lastMsgNote = modTxt.lastMessageFailNote(found.error ?? modTxt.unknownError);
-      }
-    }
+    const evidence = await resolveEvidenceFromMessageId({
+      guild,
+      fetchChannelId: interaction.channelId,
+      targetUserId: target.id,
+      messageIdRaw,
+    });
+
+    await saveState(LAST_SEEN_STATE_FILE);
 
     const logFiles =
       screenshot?.url && screenshot.name
@@ -244,7 +278,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       staffUserId: interaction.user.id,
       timeoutMs: ms,
       ...(logFiles ? { logFiles } : {}),
-      ...(evidenceExcerpt !== undefined ? { messageExcerpt: evidenceExcerpt } : {}),
+      ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
     });
 
     const durLabel =
@@ -255,7 +289,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     }
 
     await interaction.editReply({
-      content: modTxt.muteDone(durLabel, target.id, lastMsgNote, shotNote),
+      content: modTxt.muteDone(durLabel, target.id, evidence.note, shotNote),
     });
     return;
   }
@@ -305,8 +339,14 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const chOpt = interaction.options.getChannel("channel");
     const amount = interaction.options.getInteger("amount") ?? 1;
     const reason = interaction.options.getString("reason")?.trim() || modTxt.warnDefaultReason;
+    const screenshot = interaction.options.getAttachment("screenshot");
+    const messageIdRaw = interaction.options.getString("message_id")?.trim();
     if (target.bot) {
       await interaction.reply({ content: modTxt.unmuteBadTarget, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    if (messageIdRaw && !isDiscordSnowflake(messageIdRaw)) {
+      await interaction.reply({ content: modTxt.evidenceInvalidSnowflakeReply, flags: MessageFlags.Ephemeral });
       return;
     }
     const resolved = await resolveWarningScope(interaction, chOpt?.id ?? null);
@@ -316,7 +356,55 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     }
     const before = getMinorWarningCount(interaction.guildId, resolved.scopeId, target.id);
     const after = adjustMinorWarningCount(interaction.guildId, resolved.scopeId, target.id, amount);
+
+    let timeoutMs: number | undefined;
+    let member: GuildMember | null = null;
+    try {
+      member = await guild.members.fetch({ user: target.id });
+    } catch {
+      member = null;
+    }
+
+    const crossedThreshold =
+      before < DISCORD_WARNINGS_BEFORE_TIMEOUT &&
+      after >= DISCORD_WARNINGS_BEFORE_TIMEOUT &&
+      member !== null &&
+      member.moderatable;
+
+    if (crossedThreshold && member) {
+      const lastMinorIdx = DISCORD_MINOR_TIMEOUT_LADDER_MS.length - 1;
+      const tb = getMinorMuteTier(guild.id, target.id);
+      const idx = Math.min(tb, lastMinorIdx);
+      const ms = DISCORD_MINOR_TIMEOUT_LADDER_MS[idx] ?? DISCORD_MINOR_TIMEOUT_LADDER_MS[lastMinorIdx];
+      try {
+        await member.timeout(
+          ms,
+          modTxt.warnThresholdTimeoutReason(reason, DISCORD_WARNINGS_BEFORE_TIMEOUT),
+        );
+        consumeMinorMuteTierForApply(guild.id, target.id, lastMinorIdx);
+        timeoutMs = ms;
+      } catch (err) {
+        console.error("Discord manual warn threshold timeout failed:", err);
+      }
+    }
+
+    touchModerationViolation(guild.id, target.id, Date.now());
     await saveState(LAST_SEEN_STATE_FILE);
+
+    const evidence = await resolveEvidenceFromMessageId({
+      guild,
+      fetchChannelId: interaction.channelId,
+      targetUserId: target.id,
+      messageIdRaw,
+    });
+
+    const logFiles =
+      screenshot?.url && screenshot.name
+        ? [{ url: screenshot.url, name: screenshot.name }]
+        : screenshot?.url
+          ? [{ url: screenshot.url, name: modTxt.screenshotFileFallback }]
+          : undefined;
+
     await logModerationEvent(guild, {
       title: discordModerationLogTitles.staffWarn,
       color: 0x3388cc,
@@ -325,9 +413,25 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       reason,
       minorWarningsInChannel: after,
       staffUserId: interaction.user.id,
+      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+      ...(logFiles ? { logFiles } : {}),
+      ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
     });
+
+    let shotNote = "";
+    if (screenshot) {
+      shotNote = DISCORD_MODERATION_LOG_CHANNEL_ID ? modTxt.screenshotLogged : modTxt.screenshotNoLogEnv;
+    }
+    const timeoutNote =
+      timeoutMs !== undefined ? modTxt.warnTimeoutNote(discordFormatDurationRu(timeoutMs)) : "";
+
     await interaction.reply({
-      content: modTxt.warnCounts(target.id, resolved.scopeId, before, after),
+      content: modTxt.warnDoneLine(
+        modTxt.warnCounts(target.id, resolved.scopeId, before, after),
+        timeoutNote,
+        shotNote,
+        evidence.note,
+      ),
       flags: MessageFlags.Ephemeral,
     });
     return;

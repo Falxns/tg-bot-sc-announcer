@@ -66,7 +66,7 @@ export const discordSlashModeration = {
     duration: "Длительность таймаута",
     reason: "Причина",
     screenshot: "Скриншот нарушения (необязательно)",
-    logLastMessage: "Прикрепить копию последнего сообщения пользователя в этом канале (из последних 100 сообщений)",
+    messageId: "ID сообщения нарушения в текущем канале/треде (ПКМ по сообщению → Копировать ID сообщения)",
   },
   unmute: {
     commandDescription: "Снять таймаут с пользователя.",
@@ -76,6 +76,8 @@ export const discordSlashModeration = {
     channel: "Канал (по умолчанию текущий)",
     amount: "Количество предупреждений (1–5)",
     reason: "Причина",
+    screenshot: "Скриншот нарушения (необязательно)",
+    messageId: "ID сообщения нарушения в текущем канале/треде (ПКМ по сообщению → Копировать ID сообщения)",
   },
   unwarn: {
     commandDescription: "Уменьшить или сбросить предупреждения пользователя.",
@@ -233,11 +235,18 @@ export const discordModerationCommands = {
   unmuteDone: (userId: string) => `Таймаут снят с <@${userId}>.`,
   warnCounts: (userId: string, scopeId: string, before: number, after: number) =>
     `Предупреждения <@${userId}> в <#${scopeId}>: ${before} → ${after}.`,
-  lastMessageChannelUnsupported: "В этом канале нельзя прочитать историю сообщений.",
-  lastMessageNotFound: "Нет сообщений пользователя среди последних 100 в канале.",
-  lastMessageLoggedNote: "\nВ отчет модерации добавлена копия последнего сообщения пользователя.",
-  lastMessageNoLogEnv: "\nКопия сообщения не попадёт в отчет: не задан канал.",
-  lastMessageFailNote: (err: string) => `\nНе удалось добавить копию сообщения в отчет — ${err}`,
+  warnTimeoutNote: (durationLabel: string) => `\nТаймаут по лестнице лёгких нарушений: **${durationLabel}**.`,
+  warnDoneLine: (base: string, timeoutNote: string, shotNote: string, evidenceNote: string) =>
+    `${base}${timeoutNote}${shotNote}${evidenceNote}`,
+  warnThresholdTimeoutReason: (staffReason: string, threshold: number) =>
+    `Достигнут порог предупреждений (${threshold}): ${staffReason}`.slice(0, 500),
+  evidenceInvalidSnowflakeReply: "Некорректный ID сообщения.",
+  evidenceCopiedNote: "\nВ отчёт модерации добавлена копия указанного сообщения.",
+  evidenceNoteWrongAuthor: "\nУказанное сообщение не от этого пользователя — фрагмент не добавлен.",
+  evidenceNoteFetchFail: "\nСообщение не найдено или недоступно.",
+  evidenceNoteBadChannel: "\nНельзя прочитать сообщения в этом канале.",
+  evidenceNoteInvalidId: "\nНекорректный ID сообщения.",
+  evidenceNoLogEnv: "\nКопия сообщения не попадёт в отчёт: не задан канал для модерации.",
   screenshotLogged: "\nСкриншот добавлен в отчет модерации.",
   screenshotNoLogEnv: "\nСкриншот не попадёт в отчет: не задан канал.",
   muteSnapshotEmpty: "(нет текста; есть только вложения/embed/стикеры)",
