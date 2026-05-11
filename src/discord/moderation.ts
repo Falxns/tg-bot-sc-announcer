@@ -1,5 +1,12 @@
 import type { Attachment } from "discord.js";
-import { EmbedBuilder, escapeMarkdown, GuildMember, Message } from "discord.js";
+import {
+  ChatInputCommandInteraction,
+  EmbedBuilder,
+  escapeMarkdown,
+  Guild,
+  GuildMember,
+  Message,
+} from "discord.js";
 import {
   DISCORD_BLOCK_INVITE_LINKS_GLOBAL,
   DISCORD_CHANNEL_POLICIES,
@@ -19,6 +26,7 @@ import { logModerationEvent } from "./moderationLog";
 import {
   discordAutoMod as autoTxt,
   discordFormatDurationRu,
+  discordModerationCommands as modTxt,
   discordModerationLogTitles as logTitles,
 } from "./userStrings";
 import {
@@ -467,6 +475,107 @@ async function notifyUserModerationEmbed(message: Message, member: GuildMember, 
       if (notice) await deleteLater(notice, DISCORD_WARNING_MESSAGE_TTL_MS);
     }
   }
+}
+
+/** DM (+ ephemeral fallback to command channel) for manual `/mute`, `/warn`, `/unmute` — mirrors {@link notifyUserModerationEmbed}. */
+export async function notifyStaffModerationUser(
+  interaction: ChatInputCommandInteraction,
+  member: GuildMember,
+  embed: EmbedBuilder,
+): Promise<void> {
+  try {
+    await member.send({ embeds: [embed] });
+  } catch {
+    const ch = interaction.channel;
+    if (ch?.isTextBased() && "send" in ch) {
+      const notice = await ch.send({ embeds: [embed] }).catch(() => null);
+      if (notice) await deleteLater(notice, DISCORD_WARNING_MESSAGE_TTL_MS);
+    }
+  }
+}
+
+export function buildStaffManualMuteEmbed(opts: {
+  guild: Guild;
+  member: GuildMember;
+  channelName: string;
+  reason: string;
+  timeoutMs: number;
+}): EmbedBuilder {
+  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
+  const nick = (opts.member.displayName ?? opts.member.user.username).trim() || opts.member.user.username;
+  const userId = opts.member.id;
+  const lines: string[] = [`<@${userId}>`, ""];
+  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
+  lines.push(`**${autoTxt.labelChannel}:** **${escapeMarkdown(opts.channelName)}**`);
+  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
+  lines.push("");
+  lines.push(`**${autoTxt.labelReason}**`);
+  lines.push(escapeMarkdown(opts.reason));
+  lines.push("");
+  lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(opts.timeoutMs))}**`);
+  const description = lines.join("\n").slice(0, 4096);
+  return new EmbedBuilder()
+    .setColor(MODERATION_USER_EMBED_COLOR)
+    .setTitle(modTxt.staffDmTitleMute)
+    .setDescription(description)
+    .setTimestamp(new Date())
+    .setFooter({ text: modTxt.staffDmFooter });
+}
+
+export function buildStaffManualWarnEmbed(opts: {
+  guild: Guild;
+  member: GuildMember;
+  channelName: string;
+  reason: string;
+  warnCount: number;
+  timeoutMs?: number;
+}): EmbedBuilder {
+  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
+  const nick = (opts.member.displayName ?? opts.member.user.username).trim() || opts.member.user.username;
+  const userId = opts.member.id;
+  const lines: string[] = [`<@${userId}>`, ""];
+  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
+  lines.push(`**${autoTxt.labelChannel}:** **${escapeMarkdown(opts.channelName)}**`);
+  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
+  lines.push("");
+  lines.push(`**${autoTxt.labelReason}**`);
+  lines.push(escapeMarkdown(opts.reason));
+  lines.push("");
+  lines.push(autoTxt.labelWarnCount(opts.warnCount, DISCORD_WARNINGS_BEFORE_TIMEOUT));
+  if (opts.timeoutMs !== undefined) {
+    lines.push("");
+    lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(opts.timeoutMs))}**`);
+  }
+  const description = lines.join("\n").slice(0, 4096);
+  return new EmbedBuilder()
+    .setColor(MODERATION_USER_EMBED_COLOR)
+    .setTitle(modTxt.staffDmTitleWarn)
+    .setDescription(description)
+    .setTimestamp(new Date())
+    .setFooter({ text: modTxt.staffDmFooter });
+}
+
+export function buildStaffManualUnmuteEmbed(opts: {
+  guild: Guild;
+  member: GuildMember;
+  channelName: string;
+}): EmbedBuilder {
+  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
+  const nick = (opts.member.displayName ?? opts.member.user.username).trim() || opts.member.user.username;
+  const userId = opts.member.id;
+  const lines: string[] = [`<@${userId}>`, ""];
+  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
+  lines.push(`**${autoTxt.labelChannel}:** **${escapeMarkdown(opts.channelName)}**`);
+  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
+  lines.push("");
+  lines.push(escapeMarkdown(modTxt.staffDmUnmuteBody));
+  const description = lines.join("\n").slice(0, 4096);
+  return new EmbedBuilder()
+    .setColor(MODERATION_USER_EMBED_COLOR)
+    .setTitle(modTxt.staffDmTitleUnmute)
+    .setDescription(description)
+    .setTimestamp(new Date())
+    .setFooter({ text: modTxt.staffDmFooter });
 }
 
 export async function handleModerationMessage(message: Message): Promise<void> {

@@ -278,6 +278,11 @@ export const discordModerationCommands = {
   modstatusDecayPending: (dur: string) =>
     `Без новых нарушений сброс предупреждений и лестниц примерно через **${dur}**.`,
   modstatusDecayDue: "Порог бездействия для сброса уже пройден — сброс произойдёт при следующей проверке нарушения.",
+  staffDmFooter: "Сообщение от модераторов сервера",
+  staffDmTitleMute: "Таймаут",
+  staffDmTitleWarn: "Предупреждение",
+  staffDmTitleUnmute: "Таймаут снят",
+  staffDmUnmuteBody: "Модератор снял с вас таймаут на этом сервере.",
 } as const;
 
 export const discordAutoMod = {

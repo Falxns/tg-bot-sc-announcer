@@ -110,7 +110,7 @@ Author list and “last seen” state are saved to the state file and restored o
 - `/unwarn user:<user> [channel] [amount] [clear]` — decrements or clears per-channel minor warnings
 - `/modstatus user:<user>` — read-only: whether Discord **timeout** is active on the member (from **guild member** state, with **`<t:…>`** absolute + relative end time), per-channel **minor** warning rows in bot state, **next** minor/major ladder step/duration, and last-violation / **decay** hint for `DISCORD_MODERATION_DECAY_MS` (no state is changed)
 
-Role-panel definitions and moderation state (per-channel minor warnings, guild minor/major mute tiers, last-violation timestamps) are saved in shared bot state (`file` or Upstash, depending on `STATE_BACKEND`) and restored on restart. Legacy `discordModerationWarnings` (`guildId:userId`) in old JSON files is migrated into a `legacy` scope bucket and merged on first per-channel write.
+**User DMs (staff):** `/mute`, `/warn`, and `/unmute` try to **DM** the target the same kind of details as automod (server, channel, display name, reason, and timeout / warning count). If DMs are disabled, a short **message is posted in the channel where the command was run** and auto-deleted after **`DISCORD_WARNING_MESSAGE_TTL_MS`** (same as automod fallback). and moderation state (per-channel minor warnings, guild minor/major mute tiers, last-violation timestamps) are saved in shared bot state (`file` or Upstash, depending on `STATE_BACKEND`) and restored on restart. Legacy `discordModerationWarnings` (`guildId:userId`) in old JSON files is migrated into a `legacy` scope bucket and merged on first per-channel write.
 
 ### Discord AutoMod (recommended)
 

@@ -17,6 +17,12 @@ import {
 } from "../config";
 import { logModerationEvent } from "./moderationLog";
 import {
+  buildStaffManualMuteEmbed,
+  buildStaffManualUnmuteEmbed,
+  buildStaffManualWarnEmbed,
+  notifyStaffModerationUser,
+} from "./moderation";
+import {
   adjustMinorWarningCount,
   consumeMinorMuteTierForApply,
   discordModerationLastViolationAt,
@@ -40,6 +46,19 @@ import {
 
 function isDiscordSnowflake(id: string): boolean {
   return /^\d{17,20}$/.test(id.trim());
+}
+
+async function channelDisplayNameForGuildChannel(guild: Guild, channelId: string): Promise<string> {
+  try {
+    const ch = await guild.channels.fetch(channelId);
+    if (ch && "name" in ch && typeof (ch as { name?: string }).name === "string") {
+      const n = (ch as { name: string }).name.trim();
+      if (n.length > 0) return n.slice(0, 100);
+    }
+  } catch {
+    /* use id */
+  }
+  return channelId;
 }
 
 function warningScopeChannelIdFromInteraction(interaction: ChatInputCommandInteraction): string | null {
@@ -265,6 +284,18 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       return;
     }
 
+    const channelNameForDm = await channelDisplayNameForGuildChannel(guild, interaction.channelId);
+    const muteDm = buildStaffManualMuteEmbed({
+      guild,
+      member,
+      channelName: channelNameForDm,
+      reason,
+      timeoutMs: ms,
+    });
+    void notifyStaffModerationUser(interaction, member, muteDm).catch((err) => {
+      console.error("staff /mute DM notify failed:", err);
+    });
+
     const evidence = await resolveEvidenceFromMessageId({
       guild,
       fetchChannelId: interaction.channelId,
@@ -333,6 +364,15 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       });
       return;
     }
+    const unmuteChannelName = await channelDisplayNameForGuildChannel(guild, interaction.channelId);
+    const unmuteDm = buildStaffManualUnmuteEmbed({
+      guild,
+      member,
+      channelName: unmuteChannelName,
+    });
+    void notifyStaffModerationUser(interaction, member, unmuteDm).catch((err) => {
+      console.error("staff /unmute DM notify failed:", err);
+    });
     await saveState(LAST_SEEN_STATE_FILE);
     await logModerationEvent(guild, {
       title: discordModerationLogTitles.staffUnmute,
@@ -428,6 +468,21 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       ...(logFiles ? { logFiles } : {}),
       ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
     });
+
+    if (member) {
+      const warnChannelName = await channelDisplayNameForGuildChannel(guild, resolved.scopeId);
+      const warnDm = buildStaffManualWarnEmbed({
+        guild,
+        member,
+        channelName: warnChannelName,
+        reason,
+        warnCount: after,
+        timeoutMs,
+      });
+      void notifyStaffModerationUser(interaction, member, warnDm).catch((err) => {
+        console.error("staff /warn DM notify failed:", err);
+      });
+    }
 
     let shotNote = "";
     if (screenshot) {
