@@ -11,7 +11,7 @@ Telegram + Discord bot service that polls the [Exbo forum](https://forum.exbo.ru
 - Runs a Discord bot in the same process with:
   - admin slash commands `/post` and `/edit` (post or edit bot messages in a target channel)
   - role assignment message buttons via `/rolepanel`
-  - channel-aware moderation (minor/major severity, per-channel warnings, guild mute ladders, 3-day decay, DM + channel fallback, optional log channel, staff `/mute` `/unmute` `/warn` `/unwarn` `/modstatus`, optional external-link domain blacklist)
+  - channel-aware moderation (minor/major severity, per-channel warnings, guild mute ladders, 3-day decay, DM + channel fallback, optional log channel, staff `/mute` `/unmute` `/warn` `/unwarn` `/ban` `/unban` `/modstatus`, optional external-link domain blacklist)
 - Optional HTTP health-check server (e.g. for PaaS readiness probes)
 
 ## Stack
@@ -27,7 +27,7 @@ Telegram + Discord bot service that polls the [Exbo forum](https://forum.exbo.ru
 - Node.js 18 or higher
 - A [Telegram Bot](https://t.me/BotFather) token
 - One or more Telegram channel/group IDs where the bot can post (and is added as admin)
-- A Discord bot token, target guild ID, and bot permissions for message management, role management, timeout moderation, and **Attach Files** (for `/post` / `/edit` images and files attached to moderation log posts)
+- A Discord bot token, target guild ID, and bot permissions for message management, role management, timeout moderation, bans, and **Attach Files** (for `/post` / `/edit` images and files attached to moderation log posts)
 
 ## Setup
 
@@ -57,7 +57,7 @@ Edit `.env`:
 | `UPSTASH_REDIS_REST_TOKEN` | No | Upstash Redis REST token (required when `STATE_BACKEND=upstash`) |
 | `UPSTASH_STATE_KEY` | No | Redis key for serialized state JSON (default: `tg-bot-sc-announcer:state`) |
 | `ADMIN_USER_IDS` | No | Comma-separated Telegram user IDs; if empty, all users can use admin commands |
-| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/edit`, `/rolepanel`, `/linkpanel`, `/mute`, `/unmute`, `/warn`, `/unwarn`, `/modstatus` (when empty, any member who passes Discord’s command permissions may use them) |
+| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/edit`, `/rolepanel`, `/linkpanel`, `/mute`, `/unmute`, `/warn`, `/unwarn`, `/ban`, `/unban`, `/modstatus` (when empty, any member who passes Discord’s command permissions may use them) |
 | `DISCORD_ROLE_PANEL_CHANNEL_ID` | No | Restrict `/rolepanel` usage to one channel |
 | `DISCORD_BLOCK_INVITE_LINKS_GLOBAL` | No | `1`/`0` toggle for global Discord invite-link filtering |
 | `DISCORD_INVITE_ALLOWED_ROLE_IDS` | No | Roles allowed to bypass invite-link filter |
@@ -65,7 +65,7 @@ Edit `.env`:
 | `DISCORD_WARNINGS_BEFORE_TIMEOUT` | No | Minor warnings per channel before the minor-timeout ladder applies; also the denominator in mod-log `n/threshold` (default: **3**) |
 | `DISCORD_MAJOR_TIMEOUT_LADDER_MS` | No | Comma-separated major mute durations (ms); default `86400000,259200000,604800000` (1d, 3d, 7d) |
 | `DISCORD_MODERATION_DECAY_MS` | No | No violations for this long resets minor warnings + tiers (default: 259200000 = 3 days) |
-| `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for **full** moderation audit embeds (**automod** + **manual** `/mute` `/unmute` `/warn` `/unwarn`) |
+| `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for **full** moderation audit embeds (**automod** + **manual** `/mute` `/unmute` `/warn` `/unwarn` `/ban` `/unban`) |
 | `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID` | No | Optional text channel for **one-line** staff-only digests after manual commands; each line mentions the moderator and links to the corresponding message in **`DISCORD_MODERATION_LOG_CHANNEL_ID`** (skipped if the main log send failed or env is empty) |
 | `DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST` | No | Comma-separated or JSON array of hosts; non-invite `http(s)` URLs matching these trigger a **major** hit (empty = disabled) |
 | `DISCORD_SPAM_FILTER_CHANNEL_IDS` | No | Comma-separated channel/thread IDs where **consecutive near-duplicate text** from the **same user** (vs previous message in channel via API) counts as **minor** spam: strict normalized equality, or same **letter/digit skeleton** with similar length, or (for long text only) high **Levenshtein similarity**; empty disables. Bot needs **Read Message History** there. |
@@ -107,11 +107,13 @@ Author list and “last seen” state are saved to the state file and restored o
 - `/linkpanel channel:<channel> url1:<https://...> [label1…label5] [url2…url5] [embed_*]` — creates message buttons that open URLs (no role toggle), then opens a modal for optional multiline message text
 - `/mute user:<user> duration:<choice> [reason] [screenshot] [message_id]` — manual timeout (does **not** advance auto minor/major ladder tiers); **`duration`** is one of: 1 hour, 6 hours, 12 hours, 1 day, 3 days, 7 days, 14 days, 28 days; optional **`screenshot`** attaches to the moderation log message when **`DISCORD_MODERATION_LOG_CHANNEL_ID`** is set; optional **`message_id`** copies the **target user’s** message (from the **channel/thread where you run the command**) into the mod log, then **deletes** that message if the bot can
 - `/unmute user:<user>` — clears Discord timeout
+- `/ban user:<user> [reason] [screenshot] [message_id]` — permanent server ban; optional **`screenshot`** and **`message_id`** behave like **`/mute`**; tries to **DM** the user **before** banning (same fallback as other staff commands if DMs are closed)
+- `/unban user:<user> | user_id:<snowflake>` — remove server ban; specify **either** **`user`** **or** **`user_id`** (use **`user_id`** when the account does not appear in the picker); DM after unban when possible
 - `/warn user:<user> [channel] [amount] [reason] [screenshot] [message_id]` — increments per-channel minor warning counter; optional **`screenshot`** and **`message_id`** behave like **`/mute`**; whenever the count after the command is **≥ `DISCORD_WARNINGS_BEFORE_TIMEOUT`** (default **3**), applies **one** timeout using **`DISCORD_MINOR_TIMEOUT_LADDER_MS`** and advances the guild minor tier (**same rule as automod** — still applies at 4/3, 5/3, …)
 - `/unwarn user:<user> [channel] [amount] [clear]` — decrements or clears per-channel minor warnings
 - `/modstatus user:<user>` — read-only: whether Discord **timeout** is active on the member (from **guild member** state, with **`<t:…>`** absolute + relative end time), per-channel **minor** warning rows in bot state, **next** minor/major ladder step/duration, and last-violation / **decay** hint for `DISCORD_MODERATION_DECAY_MS` (no state is changed)
 
-**User DMs (staff):** `/mute`, `/warn`, and `/unmute` try to **DM** the target the same kind of details as automod (server, channel, display name, reason, and timeout / warning count). If DMs are disabled, a short **message is posted in the channel where the command was run** and auto-deleted after **`DISCORD_WARNING_MESSAGE_TTL_MS`** (same as automod fallback).
+**User DMs (staff):** `/mute`, `/warn`, `/unmute`, `/ban`, and `/unban` try to **DM** the target (before ban for **`/ban`**, after successful unban for **`/unban`**) with the same kind of structure as automod where applicable. If DMs are disabled, a short **message is posted in the channel where the command was run** and auto-deleted after **`DISCORD_WARNING_MESSAGE_TTL_MS`** (same as automod fallback).
 
 Role-panel definitions and moderation state (per-channel minor warnings, guild minor/major mute tiers, last-violation timestamps) are saved in shared bot state (`file` or Upstash, depending on `STATE_BACKEND`) and restored on restart. Legacy `discordModerationWarnings` (`guildId:userId`) in old JSON files is migrated into a `legacy` scope bucket and merged on first per-channel write.
 

@@ -89,7 +89,7 @@ export async function logModerationEvent(guild: Guild, payload: ModerationLogPay
   }
 }
 
-export type StaffModerationSummaryAction = "mute" | "unmute" | "warn" | "unwarn";
+export type StaffModerationSummaryAction = "mute" | "unmute" | "warn" | "unwarn" | "ban" | "unban";
 
 /** One-line digest for staff (manual commands only). Requires both log channel message id and env summary channel. */
 export async function postStaffModerationSummary(
@@ -118,6 +118,12 @@ export async function postStaffModerationSummary(
       break;
     case "unwarn":
       content = staffSumTxt.lineUnwarn(id, url);
+      break;
+    case "ban":
+      content = staffSumTxt.lineBan(id, url);
+      break;
+    case "unban":
+      content = staffSumTxt.lineUnban(id, url);
       break;
     default:
       return;

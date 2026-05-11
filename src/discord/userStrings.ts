@@ -85,6 +85,17 @@ export const discordSlashModeration = {
     amount: "Количество предупреждений (1–5)",
     clear: "Сбросить счётчик предупреждений",
   },
+  ban: {
+    commandDescription: "Перманентно заблокировать пользователя на сервере.",
+    reason: "Причина",
+    screenshot: "Скриншот нарушения (необязательно)",
+    messageId: "ID сообщения нарушителя в текущем канале/треде; сообщение будет удалено автоматически",
+  },
+  unban: {
+    commandDescription: "Снять блокировку с пользователя.",
+    user: "Пользователь",
+    userId: "ID пользователя (если не получается выбрать из списка); укажите это ИЛИ поле user, не оба",
+  },
   modstatus: {
     commandDescription: "Статус модерации пользователя. Предупреждения и лестницы таймаутов.",
     user: "Пользователь",
@@ -125,6 +136,8 @@ export const discordModerationLogTitles = {
   staffUnmute: "Ручной /unmute",
   staffWarn: "Ручной /warn",
   staffUnwarn: "Ручной /unwarn",
+  staffBan: "Ручной /ban",
+  staffUnban: "Ручной /unban",
   majorTimeout: "Серьёзное нарушение",
   minorWarnOnly: "Легкое нарушение",
   minorWarnTimeout: "Легкое нарушение + таймаут",
@@ -225,6 +238,20 @@ export const discordModerationCommands = {
   unmuteLogReason: "Таймаут снят модератором",
   unwarnReasonIncrement: (n: number) => `−${n}`,
   unwarnReasonClear: "Сброс предупреждений модератором",
+  defaultBanReason: "Блокировка модератором",
+  banFail: (err: string) => `Не удалось заблокировать: ${err}`,
+  banDone: (userId: string, evidenceNote: string, shotNote: string) =>
+    `Пользователь <@${userId}> заблокирован на сервере.${evidenceNote}${shotNote}`,
+  banSelf: "Нельзя заблокировать себя.",
+  banOwner: "Нельзя заблокировать владельца сервера.",
+  banNotBannable: "Не могу заблокировать этого пользователя (роль выше или недостаточно прав).",
+  unbanFail: (err: string) => `Не удалось снять блокировку: ${err}`,
+  unbanDone: (userId: string) => `Блокировка снята с <@${userId}>.`,
+  unbanNotBanned: "Этот пользователь не в списке банов сервера.",
+  unbanNeedExactlyOneTarget: "Укажите либо пользователя (user), либо ID (user_id), одно из двух.",
+  unbanBothTargets: "Укажите только поле user или только user_id, не оба сразу.",
+  unbanUserUnknown: "Не удалось найти пользователя по этому ID.",
+  unbanLogReason: "Блокировка снята модератором",
   guildOnly: "Только на сервере.",
   scopeNeedTextChannel: "Укажите текстовый канал.",
   scopeChannelUnknown: "Не удалось определить канал.",
@@ -285,6 +312,10 @@ export const discordModerationCommands = {
   staffDmTitleWarn: "Предупреждение",
   staffDmTitleUnmute: "Таймаут снят",
   staffDmUnmuteBody: "Модератор снял с вас таймаут на этом сервере.",
+  staffDmTitleBan: "Блокировка на сервере",
+  staffDmBanPermanentLine: "Блокировка постоянная.",
+  staffDmTitleUnbanFromServer: "Блокировка снята",
+  staffDmUnbanFromServerBody: "Модератор снял с вас блокировку на этом сервере.",
 } as const;
 
 /** One-line staff digest (see `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID`); `url` points to the full row in the main mod log. */
@@ -293,6 +324,8 @@ export const discordStaffModerationSummary = {
   lineUnmute: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Таймаут** — ${url}`,
   lineWarn: (staffUserId: string, url: string) => `<@${staffUserId}> выдал **Предупреждение** — ${url}`,
   lineUnwarn: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Предупреждение** — ${url}`,
+  lineBan: (staffUserId: string, url: string) => `<@${staffUserId}> выдал **Бан** — ${url}`,
+  lineUnban: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Бан** — ${url}`,
 } as const;
 
 export const discordAutoMod = {

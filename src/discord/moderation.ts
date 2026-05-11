@@ -6,6 +6,7 @@ import {
   Guild,
   GuildMember,
   Message,
+  User,
 } from "discord.js";
 import {
   DISCORD_BLOCK_INVITE_LINKS_GLOBAL,
@@ -494,6 +495,23 @@ export async function notifyStaffModerationUser(
   }
 }
 
+/** DM (+ ephemeral fallback to command channel) for `/ban` / `/unban` when the target may not be a guild member. */
+export async function notifyStaffUserDmFallback(
+  interaction: ChatInputCommandInteraction,
+  user: User,
+  embed: EmbedBuilder,
+): Promise<void> {
+  try {
+    await user.send({ embeds: [embed] });
+  } catch {
+    const ch = interaction.channel;
+    if (ch?.isTextBased() && "send" in ch) {
+      const notice = await ch.send({ embeds: [embed] }).catch(() => null);
+      if (notice) await deleteLater(notice, DISCORD_WARNING_MESSAGE_TTL_MS);
+    }
+  }
+}
+
 export function buildStaffManualMuteEmbed(opts: {
   guild: Guild;
   member: GuildMember;
@@ -573,6 +591,61 @@ export function buildStaffManualUnmuteEmbed(opts: {
   return new EmbedBuilder()
     .setColor(MODERATION_USER_EMBED_COLOR)
     .setTitle(modTxt.staffDmTitleUnmute)
+    .setDescription(description)
+    .setTimestamp(new Date())
+    .setFooter({ text: modTxt.staffDmFooter });
+}
+
+export function buildStaffManualBanEmbed(opts: {
+  guild: Guild;
+  targetUser: User;
+  member: GuildMember | null;
+  channelName: string;
+  reason: string;
+}): EmbedBuilder {
+  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
+  const nick = (
+    opts.member?.displayName ??
+    opts.targetUser.globalName ??
+    opts.targetUser.username
+  ).trim();
+  const userId = opts.targetUser.id;
+  const lines: string[] = [`<@${userId}>`, ""];
+  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
+  lines.push(`**${autoTxt.labelChannel}:** **${escapeMarkdown(opts.channelName)}**`);
+  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
+  lines.push("");
+  lines.push(`**${autoTxt.labelReason}**`);
+  lines.push(escapeMarkdown(opts.reason));
+  lines.push("");
+  lines.push(escapeMarkdown(modTxt.staffDmBanPermanentLine));
+  const description = lines.join("\n").slice(0, 4096);
+  return new EmbedBuilder()
+    .setColor(MODERATION_USER_EMBED_COLOR)
+    .setTitle(modTxt.staffDmTitleBan)
+    .setDescription(description)
+    .setTimestamp(new Date())
+    .setFooter({ text: modTxt.staffDmFooter });
+}
+
+export function buildStaffManualUnbanEmbed(opts: {
+  guild: Guild;
+  user: User;
+  channelName: string;
+}): EmbedBuilder {
+  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
+  const nick = (opts.user.globalName ?? opts.user.username).trim();
+  const userId = opts.user.id;
+  const lines: string[] = [`<@${userId}>`, ""];
+  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
+  lines.push(`**${autoTxt.labelChannel}:** **${escapeMarkdown(opts.channelName)}**`);
+  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
+  lines.push("");
+  lines.push(escapeMarkdown(modTxt.staffDmUnbanFromServerBody));
+  const description = lines.join("\n").slice(0, 4096);
+  return new EmbedBuilder()
+    .setColor(MODERATION_USER_EMBED_COLOR)
+    .setTitle(modTxt.staffDmTitleUnbanFromServer)
     .setDescription(description)
     .setTimestamp(new Date())
     .setFooter({ text: modTxt.staffDmFooter });

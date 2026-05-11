@@ -21,9 +21,11 @@ import type { Message } from "discord.js";
 import { DISCORD_ADMIN_ROLE_IDS, DISCORD_ROLE_PANEL_CHANNEL_ID, LAST_SEEN_STATE_FILE, LOG_LEVEL } from "../config";
 import { saveState, setDiscordRolePanel } from "../state";
 import {
+  banSlashCommand,
   handleModerationSlashCommand,
   modstatusSlashCommand,
   muteSlashCommand,
+  unbanSlashCommand,
   unmuteSlashCommand,
   unwarnSlashCommand,
   warnSlashCommand,
@@ -315,6 +317,8 @@ export async function registerGuildCommands(guild: Guild): Promise<void> {
     unmuteSlashCommand.toJSON(),
     warnSlashCommand.toJSON(),
     unwarnSlashCommand.toJSON(),
+    banSlashCommand.toJSON(),
+    unbanSlashCommand.toJSON(),
     modstatusSlashCommand.toJSON(),
   ]);
 }
@@ -1089,6 +1093,8 @@ export async function handleDiscordCommand(interaction: ChatInputCommandInteract
     interaction.commandName === "unmute" ||
     interaction.commandName === "warn" ||
     interaction.commandName === "unwarn" ||
+    interaction.commandName === "ban" ||
+    interaction.commandName === "unban" ||
     interaction.commandName === "modstatus"
   ) {
     await handleModerationSlashCommand(interaction);

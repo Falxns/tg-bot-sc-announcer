@@ -6,7 +6,7 @@ import {
   PermissionFlagsBits,
   SlashCommandBuilder,
 } from "discord.js";
-import type { Guild, Message } from "discord.js";
+import type { Guild, Message, User } from "discord.js";
 import {
   DISCORD_MAJOR_TIMEOUT_LADDER_MS,
   DISCORD_MINOR_TIMEOUT_LADDER_MS,
@@ -17,10 +17,13 @@ import {
 } from "../config";
 import { logModerationEvent, postStaffModerationSummary } from "./moderationLog";
 import {
+  buildStaffManualBanEmbed,
   buildStaffManualMuteEmbed,
+  buildStaffManualUnbanEmbed,
   buildStaffManualUnmuteEmbed,
   buildStaffManualWarnEmbed,
   notifyStaffModerationUser,
+  notifyStaffUserDmFallback,
 } from "./moderation";
 import {
   adjustMinorWarningCount,
@@ -211,6 +214,40 @@ export const unwarnSlashCommand = new SlashCommandBuilder()
     o.setName("clear").setDescription(slashModTxt.unwarn.clear).setRequired(false),
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
+
+export const banSlashCommand = new SlashCommandBuilder()
+  .setName("ban")
+  .setDescription(slashModTxt.ban.commandDescription)
+  .addUserOption((o) => o.setName("user").setDescription(slashModTxt.userOption).setRequired(true))
+  .addStringOption((o) =>
+    o.setName("reason").setDescription(slashModTxt.ban.reason).setMaxLength(450).setRequired(false),
+  )
+  .addAttachmentOption((o) =>
+    o.setName("screenshot").setDescription(slashModTxt.ban.screenshot).setRequired(false),
+  )
+  .addStringOption((o) =>
+    o
+      .setName("message_id")
+      .setDescription(slashModTxt.ban.messageId)
+      .setRequired(false)
+      .setMinLength(17)
+      .setMaxLength(22),
+  )
+  .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers);
+
+export const unbanSlashCommand = new SlashCommandBuilder()
+  .setName("unban")
+  .setDescription(slashModTxt.unban.commandDescription)
+  .addUserOption((o) => o.setName("user").setDescription(slashModTxt.unban.user).setRequired(false))
+  .addStringOption((o) =>
+    o
+      .setName("user_id")
+      .setDescription(slashModTxt.unban.userId)
+      .setRequired(false)
+      .setMinLength(17)
+      .setMaxLength(22),
+  )
+  .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers);
 
 export const modstatusSlashCommand = new SlashCommandBuilder()
   .setName("modstatus")
@@ -584,6 +621,170 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       content: modTxt.warnCounts(target.id, resolved.scopeId, before, after),
       flags: MessageFlags.Ephemeral,
     });
+    return;
+  }
+
+  if (name === "ban") {
+    const target = interaction.options.getUser("user", true);
+    const reason = interaction.options.getString("reason")?.trim() || modTxt.defaultBanReason;
+    const screenshot = interaction.options.getAttachment("screenshot");
+    const messageIdRaw = interaction.options.getString("message_id")?.trim();
+    if (messageIdRaw && !isDiscordSnowflake(messageIdRaw)) {
+      await interaction.reply({ content: modTxt.evidenceInvalidSnowflakeReply, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    if (target.id === interaction.user.id) {
+      await interaction.reply({ content: modTxt.banSelf, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    if (target.id === guild.ownerId) {
+      await interaction.reply({ content: modTxt.banOwner, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    const member: GuildMember | null = await guild.members.fetch({ user: target.id }).catch(() => null);
+    if (member && !member.bannable) {
+      await interaction.reply({ content: modTxt.banNotBannable, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const channelNameForDm = await channelDisplayNameForGuildChannel(guild, interaction.channelId);
+    const banDmEmbed = buildStaffManualBanEmbed({
+      guild,
+      targetUser: target,
+      member,
+      channelName: channelNameForDm,
+      reason,
+    });
+    await notifyStaffUserDmFallback(interaction, target, banDmEmbed);
+    try {
+      await guild.members.ban(target.id, { reason: reason.slice(0, 512) });
+    } catch (err) {
+      await interaction.editReply({
+        content: modTxt.banFail(err instanceof Error ? err.message : String(err)),
+      });
+      return;
+    }
+
+    const evidence = await resolveEvidenceFromMessageId({
+      guild,
+      fetchChannelId: interaction.channelId,
+      targetUserId: target.id,
+      messageIdRaw,
+    });
+
+    const logFiles =
+      screenshot?.url && screenshot.name
+        ? [{ url: screenshot.url, name: screenshot.name }]
+        : screenshot?.url
+          ? [{ url: screenshot.url, name: modTxt.screenshotFileFallback }]
+          : undefined;
+
+    const logMsg = await logModerationEvent(guild, {
+      title: discordModerationLogTitles.staffBan,
+      color: 0x992222,
+      targetUserId: target.id,
+      channelId: interaction.channelId,
+      parentChannelId: interaction.channel?.isThread() ? interaction.channel.parentId ?? undefined : undefined,
+      reason,
+      staffUserId: interaction.user.id,
+      ...(logFiles ? { logFiles } : {}),
+      ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
+    });
+
+    await postStaffModerationSummary(guild, {
+      staffUserId: interaction.user.id,
+      action: "ban",
+      logMessage: logMsg,
+    });
+
+    let evidenceDeleteNote = "";
+    if (evidence.evidenceMessage) {
+      try {
+        await evidence.evidenceMessage.delete();
+        evidenceDeleteNote = modTxt.evidenceSourceDeletedNote;
+      } catch (err) {
+        console.error("moderation evidence message delete failed:", err);
+        evidenceDeleteNote = modTxt.evidenceSourceDeleteFailNote;
+      }
+    }
+
+    let shotNote = "";
+    if (screenshot) {
+      shotNote = DISCORD_MODERATION_LOG_CHANNEL_ID ? modTxt.screenshotLogged : modTxt.screenshotNoLogEnv;
+    }
+
+    await interaction.editReply({
+      content: modTxt.banDone(target.id, evidence.note + evidenceDeleteNote, shotNote),
+    });
+    return;
+  }
+
+  if (name === "unban") {
+    const userOpt = interaction.options.getUser("user");
+    const userIdRaw = interaction.options.getString("user_id")?.trim();
+    if (userOpt && userIdRaw) {
+      await interaction.reply({ content: modTxt.unbanBothTargets, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    if (!userOpt && !userIdRaw) {
+      await interaction.reply({ content: modTxt.unbanNeedExactlyOneTarget, flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    let targetUser: User;
+    if (userIdRaw) {
+      if (!isDiscordSnowflake(userIdRaw)) {
+        await interaction.reply({ content: modTxt.evidenceInvalidSnowflakeReply, flags: MessageFlags.Ephemeral });
+        return;
+      }
+      try {
+        targetUser = await interaction.client.users.fetch(userIdRaw);
+      } catch {
+        await interaction.reply({ content: modTxt.unbanUserUnknown, flags: MessageFlags.Ephemeral });
+        return;
+      }
+    } else {
+      targetUser = userOpt!;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+      await guild.bans.remove(targetUser.id);
+    } catch (err: unknown) {
+      const code = typeof err === "object" && err !== null && "code" in err ? (err as { code?: number }).code : undefined;
+      const msg = err instanceof Error ? err.message : String(err);
+      const unknownBan =
+        code === 10026 || msg.includes("Unknown Ban") || msg.toLowerCase().includes("unknown ban");
+      await interaction.editReply({
+        content: unknownBan ? modTxt.unbanNotBanned : modTxt.unbanFail(msg),
+      });
+      return;
+    }
+
+    const channelNameUnban = await channelDisplayNameForGuildChannel(guild, interaction.channelId);
+    const unbanDm = buildStaffManualUnbanEmbed({
+      guild,
+      user: targetUser,
+      channelName: channelNameUnban,
+    });
+    await notifyStaffUserDmFallback(interaction, targetUser, unbanDm);
+
+    const logMsgUnban = await logModerationEvent(guild, {
+      title: discordModerationLogTitles.staffUnban,
+      color: 0x449944,
+      targetUserId: targetUser.id,
+      channelId: interaction.channelId,
+      parentChannelId: interaction.channel?.isThread() ? interaction.channel.parentId ?? undefined : undefined,
+      reason: modTxt.unbanLogReason,
+      staffUserId: interaction.user.id,
+    });
+    await postStaffModerationSummary(guild, {
+      staffUserId: interaction.user.id,
+      action: "unban",
+      logMessage: logMsgUnban,
+    });
+    await interaction.editReply({ content: modTxt.unbanDone(targetUser.id) });
     return;
   }
 
