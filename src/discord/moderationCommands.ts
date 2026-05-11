@@ -95,7 +95,7 @@ async function resolveEvidenceFromMessageId(opts: {
   fetchChannelId: string;
   targetUserId: string;
   messageIdRaw: string | undefined | null;
-}): Promise<{ excerpt?: string; note: string }> {
+}): Promise<{ excerpt?: string; note: string; evidenceMessage?: Message }> {
   const raw = opts.messageIdRaw?.trim();
   if (!raw) return { note: "" };
   if (!isDiscordSnowflake(raw)) {
@@ -113,6 +113,7 @@ async function resolveEvidenceFromMessageId(opts: {
     return {
       excerpt: formatMutedUserMessageSnapshot(msg),
       note: DISCORD_MODERATION_LOG_CHANNEL_ID ? modTxt.evidenceCopiedNote : modTxt.evidenceNoLogEnv,
+      evidenceMessage: msg,
     };
   } catch {
     return { note: modTxt.evidenceNoteFetchFail };
@@ -325,6 +326,17 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
     });
 
+    let evidenceDeleteNote = "";
+    if (evidence.evidenceMessage) {
+      try {
+        await evidence.evidenceMessage.delete();
+        evidenceDeleteNote = modTxt.evidenceSourceDeletedNote;
+      } catch (err) {
+        console.error("moderation evidence message delete failed:", err);
+        evidenceDeleteNote = modTxt.evidenceSourceDeleteFailNote;
+      }
+    }
+
     const durLabel =
       discordMuteDurationChoices.find((c) => c.value === String(minutes))?.name ?? modTxt.minutesFallback(minutes);
     let shotNote = "";
@@ -333,7 +345,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     }
 
     await interaction.editReply({
-      content: modTxt.muteDone(durLabel, target.id, evidence.note, shotNote),
+      content: modTxt.muteDone(durLabel, target.id, evidence.note + evidenceDeleteNote, shotNote),
     });
     return;
   }
@@ -469,6 +481,17 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
     });
 
+    let evidenceDeleteNote = "";
+    if (evidence.evidenceMessage) {
+      try {
+        await evidence.evidenceMessage.delete();
+        evidenceDeleteNote = modTxt.evidenceSourceDeletedNote;
+      } catch (err) {
+        console.error("moderation evidence message delete failed:", err);
+        evidenceDeleteNote = modTxt.evidenceSourceDeleteFailNote;
+      }
+    }
+
     if (member) {
       const warnChannelName = await channelDisplayNameForGuildChannel(guild, resolved.scopeId);
       const warnDm = buildStaffManualWarnEmbed({
@@ -496,7 +519,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
         modTxt.warnCounts(target.id, resolved.scopeId, before, after),
         timeoutNote,
         shotNote,
-        evidence.note,
+        evidence.note + evidenceDeleteNote,
       ),
       flags: MessageFlags.Ephemeral,
     });
