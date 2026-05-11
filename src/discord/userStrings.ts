@@ -66,7 +66,7 @@ export const discordSlashModeration = {
     duration: "Длительность таймаута",
     reason: "Причина",
     screenshot: "Скриншот нарушения (необязательно)",
-    messageId: "ID сообщения нарушителя в текущем канале/треде; сообщение будет удалено после копии в отчёт модерации",
+    messageId: "ID сообщения нарушителя в текущем канале/треде; сообщение будет удалено автоматически",
   },
   unmute: {
     commandDescription: "Снять таймаут с пользователя.",
@@ -77,7 +77,7 @@ export const discordSlashModeration = {
     amount: "Количество предупреждений (1–5)",
     reason: "Причина",
     screenshot: "Скриншот нарушения (необязательно)",
-    messageId: "ID сообщения нарушителя в текущем канале/треде; сообщение будет удалено после копии в отчёт модерации",
+    messageId: "ID сообщения нарушителя в текущем канале/треде; сообщение будет удалено автоматически",
   },
   unwarn: {
     commandDescription: "Уменьшить или сбросить предупреждения пользователя.",
@@ -251,8 +251,8 @@ export const discordModerationCommands = {
   evidenceNoteBadChannel: "\nНельзя прочитать сообщения в этом канале.",
   evidenceNoteInvalidId: "\nНекорректный ID сообщения.",
   evidenceNoLogEnv: "\nКопия сообщения не попадёт в отчёт: не задан канал для модерации.",
-  evidenceSourceDeletedNote: "\nСообщение **message_id** удалено.",
-  evidenceSourceDeleteFailNote: "\nНе удалось удалить сообщение **message_id**.",
+  evidenceSourceDeletedNote: "\nСообщение успешно удалено.",
+  evidenceSourceDeleteFailNote: "\nНе удалось удалить сообщение.",
   screenshotLogged: "\nСкриншот добавлен в отчет модерации.",
   screenshotNoLogEnv: "\nСкриншот не попадёт в отчет: не задан канал.",
   muteSnapshotEmpty: "(нет текста; есть только вложения/embed/стикеры)",
