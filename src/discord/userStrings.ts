@@ -287,6 +287,14 @@ export const discordModerationCommands = {
   staffDmUnmuteBody: "Модератор снял с вас таймаут на этом сервере.",
 } as const;
 
+/** One-line staff digest (see `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID`); `url` points to the full row in the main mod log. */
+export const discordStaffModerationSummary = {
+  lineMute: (staffUserId: string, url: string) => `<@${staffUserId}> выдал **Таймаут** — ${url}`,
+  lineUnmute: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Таймаут** — ${url}`,
+  lineWarn: (staffUserId: string, url: string) => `<@${staffUserId}> выдал **Предупреждение** — ${url}`,
+  lineUnwarn: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Предупреждение** — ${url}`,
+} as const;
+
 export const discordAutoMod = {
   spamDuplicateReason: "Повтор одного и того же сообщения подряд (спам).",
   invitesForbidden: "В этом канале запрещены приглашения Discord.",

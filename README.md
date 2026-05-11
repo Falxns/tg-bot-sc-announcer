@@ -65,7 +65,8 @@ Edit `.env`:
 | `DISCORD_WARNINGS_BEFORE_TIMEOUT` | No | Minor warnings per channel before the minor-timeout ladder applies; also the denominator in mod-log `n/threshold` (default: **3**) |
 | `DISCORD_MAJOR_TIMEOUT_LADDER_MS` | No | Comma-separated major mute durations (ms); default `86400000,259200000,604800000` (1d, 3d, 7d) |
 | `DISCORD_MODERATION_DECAY_MS` | No | No violations for this long resets minor warnings + tiers (default: 259200000 = 3 days) |
-| `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for moderation audit embeds |
+| `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for **full** moderation audit embeds (**automod** + **manual** `/mute` `/unmute` `/warn` `/unwarn`) |
+| `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID` | No | Optional text channel for **one-line** staff-only digests after manual commands; each line mentions the moderator and links to the corresponding message in **`DISCORD_MODERATION_LOG_CHANNEL_ID`** (skipped if the main log send failed or env is empty) |
 | `DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST` | No | Comma-separated or JSON array of hosts; non-invite `http(s)` URLs matching these trigger a **major** hit (empty = disabled) |
 | `DISCORD_SPAM_FILTER_CHANNEL_IDS` | No | Comma-separated channel/thread IDs where **consecutive near-duplicate text** from the **same user** (vs previous message in channel via API) counts as **minor** spam: strict normalized equality, or same **letter/digit skeleton** with similar length, or (for long text only) high **Levenshtein similarity**; empty disables. Bot needs **Read Message History** there. |
 | `DISCORD_WARNING_MESSAGE_TTL_MS` | No | Auto-delete delay for ephemeral-style channel notices (default: 12000) |

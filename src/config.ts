@@ -101,6 +101,11 @@ export const DISCORD_MODERATION_DECAY_MS = clampParseInt(
 
 export const DISCORD_MODERATION_LOG_CHANNEL_ID = (process.env.DISCORD_MODERATION_LOG_CHANNEL_ID ?? "").trim();
 
+/** Optional one-line staff digest channel (manual `/mute` `/unmute` `/warn` `/unwarn` only); links to rows in `DISCORD_MODERATION_LOG_CHANNEL_ID`. */
+export const DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID = (
+  process.env.DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID ?? ""
+).trim();
+
 function parseSeverity(raw: unknown, fallback: ViolationSeverity): ViolationSeverity {
   if (raw === "major" || raw === "minor") return raw;
   return fallback;

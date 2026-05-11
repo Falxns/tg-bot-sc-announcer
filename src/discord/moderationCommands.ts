@@ -15,7 +15,7 @@ import {
   DISCORD_WARNINGS_BEFORE_TIMEOUT,
   LAST_SEEN_STATE_FILE,
 } from "../config";
-import { logModerationEvent } from "./moderationLog";
+import { logModerationEvent, postStaffModerationSummary } from "./moderationLog";
 import {
   buildStaffManualMuteEmbed,
   buildStaffManualUnmuteEmbed,
@@ -313,7 +313,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
           ? [{ url: screenshot.url, name: modTxt.screenshotFileFallback }]
           : undefined;
 
-    await logModerationEvent(guild, {
+    const logMsg = await logModerationEvent(guild, {
       title: discordModerationLogTitles.staffMute,
       color: 0x9966cc,
       targetUserId: target.id,
@@ -324,6 +324,12 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       timeoutMs: ms,
       ...(logFiles ? { logFiles } : {}),
       ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
+    });
+
+    await postStaffModerationSummary(guild, {
+      staffUserId: interaction.user.id,
+      action: "mute",
+      logMessage: logMsg,
     });
 
     let evidenceDeleteNote = "";
@@ -386,7 +392,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       console.error("staff /unmute DM notify failed:", err);
     });
     await saveState(LAST_SEEN_STATE_FILE);
-    await logModerationEvent(guild, {
+    const logMsgUnmute = await logModerationEvent(guild, {
       title: discordModerationLogTitles.staffUnmute,
       color: 0x669966,
       targetUserId: target.id,
@@ -394,6 +400,11 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       parentChannelId: interaction.channel?.isThread() ? interaction.channel.parentId ?? undefined : undefined,
       reason: modTxt.unmuteLogReason,
       staffUserId: interaction.user.id,
+    });
+    await postStaffModerationSummary(guild, {
+      staffUserId: interaction.user.id,
+      action: "unmute",
+      logMessage: logMsgUnmute,
     });
     await interaction.editReply({ content: modTxt.unmuteDone(target.id) });
     return;
@@ -468,7 +479,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
           ? [{ url: screenshot.url, name: modTxt.screenshotFileFallback }]
           : undefined;
 
-    await logModerationEvent(guild, {
+    const logMsgWarn = await logModerationEvent(guild, {
       title: discordModerationLogTitles.staffWarn,
       color: 0x3388cc,
       targetUserId: target.id,
@@ -479,6 +490,12 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       ...(timeoutMs !== undefined ? { timeoutMs } : {}),
       ...(logFiles ? { logFiles } : {}),
       ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
+    });
+
+    await postStaffModerationSummary(guild, {
+      staffUserId: interaction.user.id,
+      action: "warn",
+      logMessage: logMsgWarn,
     });
 
     let evidenceDeleteNote = "";
@@ -549,7 +566,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       after = adjustMinorWarningCount(interaction.guildId, resolved.scopeId, target.id, -amount);
     }
     await saveState(LAST_SEEN_STATE_FILE);
-    await logModerationEvent(guild, {
+    const logMsgUnwarn = await logModerationEvent(guild, {
       title: discordModerationLogTitles.staffUnwarn,
       color: 0x888888,
       targetUserId: target.id,
@@ -557,6 +574,11 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       reason: clear ? modTxt.unwarnReasonClear : modTxt.unwarnReasonIncrement(amount),
       minorWarningsInChannel: after,
       staffUserId: interaction.user.id,
+    });
+    await postStaffModerationSummary(guild, {
+      staffUserId: interaction.user.id,
+      action: "unwarn",
+      logMessage: logMsgUnwarn,
     });
     await interaction.reply({
       content: modTxt.warnCounts(target.id, resolved.scopeId, before, after),
