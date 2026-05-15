@@ -356,7 +356,7 @@ function detectViolations(
     const hit = policy.blockedKeywords.find((w) => lowerSearch.includes(w));
     if (hit) {
       hits.push({
-        reason: autoTxt.keywordHit(hit),
+        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.keywordHit(hit)),
         severity: policy.keywordViolationSeverity ?? "minor",
       });
     }

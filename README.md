@@ -120,7 +120,7 @@ Role-panel definitions and moderation state (per-channel minor warnings, guild m
 
 ### Discord AutoMod (recommended)
 
-Semantic rules (slurs, cheats, 18+, marketplace phrases) are best handled with **Discord Server Settings → AutoMod** (keyword lists, block/alert, log to a channel). This bot complements AutoMod with mechanical checks (invites, attachments, keyword lists you map in `DISCORD_CHANNEL_POLICIES_JSON`, optional domain blacklist) and staff slash commands. For **wrong-content-in-channel** hits (`blockVideos` / `blockImages` / `blockText`), set **`reasonPresetId`** on the channel policy to use the same channel-purpose reason templates as **`/mute`** / **`/warn`** (requires **`DISCORD_MODERATION_REASON_CHANNEL_IDS_JSON`**).
+Semantic rules (slurs, cheats, 18+, marketplace phrases) are best handled with **Discord Server Settings → AutoMod** (keyword lists, block/alert, log to a channel). This bot complements AutoMod with mechanical checks (invites, attachments, keyword lists you map in `DISCORD_CHANNEL_POLICIES_JSON`, optional domain blacklist) and staff slash commands. For **wrong-content-in-channel** hits (`blockVideos` / `blockImages` / `blockText`) and **`blockedKeywords`** hits, set **`reasonPresetId`** on the channel policy to use the same channel-purpose reason templates as **`/mute`** / **`/warn`** (requires **`DISCORD_MODERATION_REASON_CHANNEL_IDS_JSON`**); without it, keywords still use the short “forbidden word” line.
 
 ## License
 
