@@ -25,6 +25,13 @@ import {
 import type { DiscordChannelPolicy, ViolationSeverity } from "./types";
 import { logModerationEvent } from "./moderationLog";
 import {
+  buildChannelPurposeReason,
+  channelIdForReasonPreset,
+  formatChannelLineForEmbed,
+  formatReasonForEmbed,
+  reasonPlainTextForAudit,
+} from "./moderationReasonPresets";
+import {
   discordAutoMod as autoTxt,
   discordFormatDurationRu,
   discordModerationCommands as modTxt,
@@ -325,7 +332,7 @@ function detectViolations(
     const hasVideo = attachments.some((a) => isVideoAttachment(a.contentType, a.name ?? ""));
     if (hasVideo) {
       hits.push({
-        reason: autoTxt.videoForbidden,
+        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.videoForbidden),
         severity: policy.mediaViolationSeverity ?? "minor",
       });
     }
@@ -334,14 +341,14 @@ function detectViolations(
     const hasImage = attachments.some((a) => isImageAttachment(a.contentType, a.name ?? ""));
     if (hasImage) {
       hits.push({
-        reason: autoTxt.imageForbidden,
+        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.imageForbidden),
         severity: policy.mediaViolationSeverity ?? "minor",
       });
     }
   }
   if (policy?.blockText && message.content.trim().length > 0) {
     hits.push({
-      reason: autoTxt.textForbidden,
+      reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.textForbidden),
       severity: policy.mediaViolationSeverity ?? "minor",
     });
   }
@@ -358,6 +365,23 @@ function detectViolations(
   if (hits.length === 0) return null;
   const major = hits.find((h) => h.severity === "major");
   return major ?? hits[0];
+}
+
+function mediaViolationReason(
+  policy: DiscordChannelPolicy | undefined,
+  scopeChannelId: string,
+  fallback: string,
+): string {
+  const presetId = policy?.reasonPresetId?.trim();
+  if (!presetId) return fallback;
+  const channelId = channelIdForReasonPreset(presetId, scopeChannelId) ?? scopeChannelId;
+  return buildChannelPurposeReason(presetId, channelId) ?? fallback;
+}
+
+function moderationEmbedChannelId(message: Message): string {
+  const ch = message.channel;
+  if (ch && "isThread" in ch && ch.isThread() && ch.parentId) return ch.parentId;
+  return message.channelId;
 }
 
 function moderationLogUserLabel(member: GuildMember, author: Message["author"]): string {
@@ -425,17 +449,17 @@ async function buildModerationUserNoticeEmbed(
 ): Promise<EmbedBuilder> {
   const guild = message.guild;
   const guildName = (guild?.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
-  const channelName = await resolveModerationChannelName(message);
+  const channelId = moderationEmbedChannelId(message);
   const nick = (member.displayName ?? member.user.username).trim() || member.user.username;
   const userId = member.id;
 
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
-  lines.push(`**${autoTxt.labelChannel}:** **${escapeMarkdown(channelName)}**`);
+  lines.push(formatChannelLineForEmbed(channelId, autoTxt.labelChannel));
   lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(`**${autoTxt.labelReason}**`);
-  lines.push(escapeMarkdown(notice.reason));
+  lines.push(formatReasonForEmbed(notice.reason));
 
   if (notice.kind === "minor") {
     lines.push("");
@@ -515,7 +539,7 @@ export async function notifyStaffUserDmFallback(
 export function buildStaffManualMuteEmbed(opts: {
   guild: Guild;
   member: GuildMember;
-  channelName: string;
+  channelId: string;
   reason: string;
   timeoutMs: number;
 }): EmbedBuilder {
@@ -524,11 +548,11 @@ export function buildStaffManualMuteEmbed(opts: {
   const userId = opts.member.id;
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
-  lines.push(`**${autoTxt.labelChannel}:** **${escapeMarkdown(opts.channelName)}**`);
+  lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
   lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(`**${autoTxt.labelReason}**`);
-  lines.push(escapeMarkdown(opts.reason));
+  lines.push(formatReasonForEmbed(opts.reason));
   lines.push("");
   lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(opts.timeoutMs))}**`);
   const description = lines.join("\n").slice(0, 4096);
@@ -543,7 +567,7 @@ export function buildStaffManualMuteEmbed(opts: {
 export function buildStaffManualWarnEmbed(opts: {
   guild: Guild;
   member: GuildMember;
-  channelName: string;
+  channelId: string;
   reason: string;
   warnCount: number;
   timeoutMs?: number;
@@ -553,11 +577,11 @@ export function buildStaffManualWarnEmbed(opts: {
   const userId = opts.member.id;
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
-  lines.push(`**${autoTxt.labelChannel}:** **${escapeMarkdown(opts.channelName)}**`);
+  lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
   lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(`**${autoTxt.labelReason}**`);
-  lines.push(escapeMarkdown(opts.reason));
+  lines.push(formatReasonForEmbed(opts.reason));
   lines.push("");
   lines.push(autoTxt.labelWarnCount(opts.warnCount, DISCORD_WARNINGS_BEFORE_TIMEOUT));
   if (opts.timeoutMs !== undefined) {
@@ -576,14 +600,14 @@ export function buildStaffManualWarnEmbed(opts: {
 export function buildStaffManualUnmuteEmbed(opts: {
   guild: Guild;
   member: GuildMember;
-  channelName: string;
+  channelId: string;
 }): EmbedBuilder {
   const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
   const nick = (opts.member.displayName ?? opts.member.user.username).trim() || opts.member.user.username;
   const userId = opts.member.id;
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
-  lines.push(`**${autoTxt.labelChannel}:** **${escapeMarkdown(opts.channelName)}**`);
+  lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
   lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(escapeMarkdown(modTxt.staffDmUnmuteBody));
@@ -600,7 +624,7 @@ export function buildStaffManualBanEmbed(opts: {
   guild: Guild;
   targetUser: User;
   member: GuildMember | null;
-  channelName: string;
+  channelId: string;
   reason: string;
 }): EmbedBuilder {
   const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
@@ -612,11 +636,11 @@ export function buildStaffManualBanEmbed(opts: {
   const userId = opts.targetUser.id;
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
-  lines.push(`**${autoTxt.labelChannel}:** **${escapeMarkdown(opts.channelName)}**`);
+  lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
   lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(`**${autoTxt.labelReason}**`);
-  lines.push(escapeMarkdown(opts.reason));
+  lines.push(formatReasonForEmbed(opts.reason));
   lines.push("");
   lines.push(escapeMarkdown(modTxt.staffDmBanPermanentLine));
   const description = lines.join("\n").slice(0, 4096);
@@ -631,14 +655,14 @@ export function buildStaffManualBanEmbed(opts: {
 export function buildStaffManualUnbanEmbed(opts: {
   guild: Guild;
   user: User;
-  channelName: string;
+  channelId: string;
 }): EmbedBuilder {
   const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
   const nick = (opts.user.globalName ?? opts.user.username).trim();
   const userId = opts.user.id;
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
-  lines.push(`**${autoTxt.labelChannel}:** **${escapeMarkdown(opts.channelName)}**`);
+  lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
   lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(escapeMarkdown(modTxt.staffDmUnbanFromServerBody));
@@ -697,7 +721,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     let majorTimeoutApplied = false;
     if (member.moderatable) {
       try {
-        await member.timeout(ms, autoTxt.timeoutMajor(violation.reason).slice(0, 500));
+        await member.timeout(ms, reasonPlainTextForAudit(autoTxt.timeoutMajor(violation.reason)));
         consumeMajorMuteTierForApply(guildId, userId, lastIdx);
         tierAfter = getMajorMuteTier(guildId, userId);
         majorTimeoutApplied = true;
@@ -749,7 +773,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     const idx = Math.min(tb, lastMinorIdx);
     const ms = DISCORD_MINOR_TIMEOUT_LADDER_MS[idx] ?? DISCORD_MINOR_TIMEOUT_LADDER_MS[lastMinorIdx];
     try {
-      await member.timeout(ms, autoTxt.timeoutMinor(violation.reason).slice(0, 500));
+      await member.timeout(ms, reasonPlainTextForAudit(autoTxt.timeoutMinor(violation.reason)));
       consumeMinorMuteTierForApply(guildId, userId, lastMinorIdx);
       tierMinorAfter = getMinorMuteTier(guildId, userId);
       timeoutMs = ms;

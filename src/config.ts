@@ -138,6 +138,10 @@ function parseDiscordChannelPolicies(raw: string): DiscordChannelPolicyMap {
           : [],
         keywordViolationSeverity: parseSeverity(row.keywordViolationSeverity, "minor"),
         mediaViolationSeverity: parseSeverity(row.mediaViolationSeverity, "minor"),
+        reasonPresetId:
+          typeof row.reasonPresetId === "string" && row.reasonPresetId.trim().length > 0
+            ? row.reasonPresetId.trim()
+            : undefined,
       };
       out[channelId] = policy;
     }
@@ -185,6 +189,29 @@ export const chatIds = TELEGRAM_CHANNEL_IDS.split(",")
   .map((id) => id.trim())
   .filter(Boolean);
 export const DISCORD_CHANNEL_POLICIES = parseDiscordChannelPolicies(process.env.DISCORD_CHANNEL_POLICIES_JSON ?? "");
+
+function parseModerationReasonChannelIds(raw: string): Record<string, string> {
+  if (!raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [presetId, channelId] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof channelId === "string" && /^\d{17,20}$/.test(channelId.trim())) {
+        out[presetId] = channelId.trim();
+      }
+    }
+    return out;
+  } catch {
+    console.warn("Invalid DISCORD_MODERATION_REASON_CHANNEL_IDS_JSON, using empty map.");
+    return {};
+  }
+}
+
+/** Preset id → Discord channel snowflake for clickable #channel in reason text. */
+export const DISCORD_MODERATION_REASON_CHANNEL_IDS = parseModerationReasonChannelIds(
+  process.env.DISCORD_MODERATION_REASON_CHANNEL_IDS_JSON ?? "",
+);
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
