@@ -1,4 +1,4 @@
-import { LOG_LEVEL, POSTS_PER_AUTHOR } from "./config";
+import { LOG_LEVEL, POSTS_PER_AUTHOR, STATE_BACKEND } from "./config";
 import type { DiscordRolePanelState } from "./discord/types";
 import { createStateStore } from "./stateStore";
 
@@ -223,7 +223,16 @@ export async function loadState(path: string): Promise<void> {
   try {
     const store = createStateStore(path);
     const data = await store.readState();
-    if (!data) return;
+    if (!data) {
+      if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
+        const where =
+          STATE_BACKEND === "upstash"
+            ? "Upstash (empty key or first run)"
+            : `file ${path} (missing or empty)`;
+        console.log(`State load: no persisted data (${where}).`);
+      }
+      return;
+    }
     const parsed = JSON.parse(data) as unknown;
     if (Array.isArray(parsed)) {
       // Old format: plain array of ids – no per-author info, start with empty lastSeenByAuthor
@@ -314,6 +323,14 @@ export async function loadState(path: string): Promise<void> {
           }
         }
       }
+    }
+    if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
+      console.log(
+        `State loaded (${STATE_BACKEND}): ${exboAuthors.length} authors, ` +
+          `${lastSeenByAuthor.size} lastSeen, ${discordRolePanels.size} role panels, ` +
+          `${discordMinorWarnings.size} minor warnings, ${discordMinorMuteTier.size} minor tiers, ` +
+          `${discordMajorMuteTier.size} major tiers.`,
+      );
     }
   } catch (err) {
     if (
