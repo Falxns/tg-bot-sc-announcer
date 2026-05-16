@@ -339,7 +339,6 @@ export const discordAutoMod = {
   titleMajor: "Серьёзное нарушение",
   titleMinor: "Предупреждение",
   labelChannel: "Канал",
-  labelNick: "Ник на сервере",
   labelReason: "Причина",
   labelTimeout: "Таймаут",
   timeoutApplyFail: "**Таймаут:** не удалось применить (ошибка Discord API).",

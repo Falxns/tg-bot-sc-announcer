@@ -458,12 +458,10 @@ async function buildModerationUserNoticeEmbed(
   notice: ModerationUserNotice,
 ): Promise<EmbedBuilder> {
   const channelId = moderationEmbedChannelId(message);
-  const nick = (member.displayName ?? member.user.username).trim() || member.user.username;
   const userId = member.id;
 
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(formatChannelLineForEmbed(channelId, autoTxt.labelChannel));
-  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(`**${autoTxt.labelReason}**`);
   lines.push(formatReasonForEmbed(notice.reason));
@@ -548,11 +546,9 @@ export function buildStaffManualMuteEmbed(opts: {
   reason: string;
   timeoutMs: number;
 }): EmbedBuilder {
-  const nick = (opts.member.displayName ?? opts.member.user.username).trim() || opts.member.user.username;
   const userId = opts.member.id;
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
-  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(`**${autoTxt.labelReason}**`);
   lines.push(formatReasonForEmbed(opts.reason));
@@ -574,11 +570,9 @@ export function buildStaffManualStrikeEmbed(opts: {
   reason: string;
   timeoutMs?: number;
 }): EmbedBuilder {
-  const nick = (opts.member.displayName ?? opts.member.user.username).trim() || opts.member.user.username;
   const userId = opts.member.id;
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
-  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(`**${autoTxt.labelReason}**`);
   lines.push(formatReasonForEmbed(opts.reason));
@@ -600,11 +594,9 @@ export function buildStaffManualUnmuteEmbed(opts: {
   member: GuildMember;
   channelId: string;
 }): EmbedBuilder {
-  const nick = (opts.member.displayName ?? opts.member.user.username).trim() || opts.member.user.username;
   const userId = opts.member.id;
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
-  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(escapeMarkdown(modTxt.staffDmUnmuteBody));
   const description = lines.join("\n").slice(0, 4096);
@@ -623,15 +615,9 @@ export function buildStaffManualBanEmbed(opts: {
   channelId: string;
   reason: string;
 }): EmbedBuilder {
-  const nick = (
-    opts.member?.displayName ??
-    opts.targetUser.globalName ??
-    opts.targetUser.username
-  ).trim();
   const userId = opts.targetUser.id;
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
-  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(`**${autoTxt.labelReason}**`);
   lines.push(formatReasonForEmbed(opts.reason));
@@ -651,11 +637,9 @@ export function buildStaffManualUnbanEmbed(opts: {
   user: User;
   channelId: string;
 }): EmbedBuilder {
-  const nick = (opts.user.globalName ?? opts.user.username).trim();
   const userId = opts.user.id;
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
-  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(escapeMarkdown(modTxt.staffDmUnbanFromServerBody));
   const description = lines.join("\n").slice(0, 4096);
