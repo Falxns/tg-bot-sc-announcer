@@ -5,6 +5,7 @@ import { handleDiscordCommand, handleDiscordModal, registerGuildCommands } from 
 import { handleModerationAutocomplete } from "./moderationCommands";
 import { handleModerationMessage } from "./moderation";
 import { handleRoleButtonInteraction } from "./roles";
+import { handleStaffSummaryCreatorMessage, handleStaffSummaryRoleCreate } from "./staffSummary";
 
 let discordClient: Client | null = null;
 
@@ -67,7 +68,16 @@ export async function startDiscordBot(): Promise<void> {
     })();
   });
 
+  client.on("roleCreate", (role) => {
+    void handleStaffSummaryRoleCreate(role).catch((err) => {
+      console.error("Discord staff summary roleCreate handler failed:", err);
+    });
+  });
+
   client.on("messageCreate", (message) => {
+    void handleStaffSummaryCreatorMessage(message).catch((err) => {
+      console.error("Discord staff summary creator message handler failed:", err);
+    });
     void handleModerationMessage(message).catch((err) => {
       console.error("Discord moderation handler failed:", err);
     });

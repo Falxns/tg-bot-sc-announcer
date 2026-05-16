@@ -66,7 +66,12 @@ Edit `.env`:
 | `DISCORD_MAJOR_MIN_LADDER_STEP` | No | Ladder index for first major automod hit (default **3** = 1 day) |
 | `DISCORD_MODERATION_DECAY_MS` | No | No violations for this long resets global warns + ladder tier (default: 259200000 = 3 days) |
 | `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for **full** moderation audit embeds (**automod** + **manual** `/mute` `/unmute` `/strike` `/unwarn` `/ban` `/unban`) |
-| `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID` | No | Optional text channel for **one-line** staff-only digests after manual commands; each line mentions the moderator and links to the corresponding message in **`DISCORD_MODERATION_LOG_CHANNEL_ID`** (skipped if the main log send failed or env is empty) |
+| `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID` | No | Optional **one-line** staff digest channel: manual mod commands (link to **`DISCORD_MODERATION_LOG_CHANNEL_ID`**), role creates, creator posts |
+| `DISCORD_STAFF_SUMMARY_ROLE_CREATE_TRACKED_ROLE_IDS` | No | Comma-separated role IDs; post a digest when someone with one of these roles creates a guild role (needs **View Audit Log**) |
+| `DISCORD_STAFF_SUMMARY_ROLE_CREATE_AUDIT_DELAY_MS` | No | Wait before reading audit log for role create (default **1000** ms) |
+| `DISCORD_STAFF_SUMMARY_CREATOR_CHANNEL_IDS` | No | Comma-separated channel IDs; digest when a member with creator roles posts a **top-level** message (not threads) |
+| `DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS` | No | Comma-separated role IDs treated as “creator” for the above |
+| `DISCORD_STAFF_SUMMARY_CREATOR_COOLDOWN_MS` | No | Min gap between creator digests per author+channel (default **1800000** = 30 min) |
 | `DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST` | No | Comma-separated or JSON array of hosts; non-invite `http(s)` URLs matching these trigger a **major** hit (empty = disabled) |
 | `DISCORD_SPAM_FILTER_CHANNEL_IDS` | No | Comma-separated channel/thread IDs where **consecutive near-duplicate text** from the **same user** (vs previous message in channel via API) counts as **minor** spam: strict normalized equality, or same **letter/digit skeleton** with similar length, or (for long text only) high **Levenshtein similarity**; empty disables. Bot needs **Read Message History** there. |
 | `DISCORD_WARNING_MESSAGE_TTL_MS` | No | Auto-delete delay for ephemeral-style channel notices (default: 12000) |

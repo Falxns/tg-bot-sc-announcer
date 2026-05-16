@@ -64,12 +64,36 @@ export const discordGlobalWarns = new Map<string, number>();
 export const discordMuteTier = new Map<string, number>();
 /** Last moderation violation time (ms): `${guildId}:${userId}` for decay. */
 export const discordModerationLastViolationAt = new Map<string, number>();
+/** Last creator staff-summary digest (ms): `${guildId}:${userId}:${channelId}`. */
+export const discordStaffSummaryCreatorLastAt = new Map<string, number>();
 
 const ROLE_BUTTON_PREFIX = "role:";
 const ROLE_BUTTON_SINGLE_PREFIX = "roleone:";
 
 export function guildUserKey(guildId: string, userId: string): string {
   return `${guildId}:${userId}`;
+}
+
+export function creatorSummaryKey(guildId: string, userId: string, channelId: string): string {
+  return `${guildId}:${userId}:${channelId}`;
+}
+
+/**
+ * If cooldown elapsed, updates last-post time and returns true.
+ * Otherwise returns false (skip duplicate digest).
+ */
+export function tryConsumeCreatorSummaryCooldown(
+  guildId: string,
+  userId: string,
+  channelId: string,
+  nowMs: number,
+  cooldownMs: number,
+): boolean {
+  const key = creatorSummaryKey(guildId, userId, channelId);
+  const last = discordStaffSummaryCreatorLastAt.get(key) ?? 0;
+  if (nowMs - last < cooldownMs) return false;
+  discordStaffSummaryCreatorLastAt.set(key, nowMs);
+  return true;
 }
 
 export function getGlobalWarnCount(guildId: string, userId: string): number {
@@ -250,6 +274,12 @@ export async function loadState(path: string): Promise<void> {
           discordModerationLastViolationAt.set(k, v);
         }
       }
+      const creatorSum = obj.discordStaffSummaryCreatorLastAt;
+      if (creatorSum && typeof creatorSum === "object" && !Array.isArray(creatorSum)) {
+        for (const [k, v] of parseNumberMap(creatorSum)) {
+          discordStaffSummaryCreatorLastAt.set(k, v);
+        }
+      }
     }
     if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
       console.log(
@@ -278,6 +308,7 @@ export async function saveState(path: string): Promise<boolean> {
       discordGlobalWarns: Object.fromEntries(discordGlobalWarns),
       discordMuteTier: Object.fromEntries(discordMuteTier),
       discordModerationLastViolationAt: Object.fromEntries(discordModerationLastViolationAt),
+      discordStaffSummaryCreatorLastAt: Object.fromEntries(discordStaffSummaryCreatorLastAt),
     };
     await store.writeState(JSON.stringify(state, null, 2));
     return true;

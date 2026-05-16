@@ -111,10 +111,46 @@ export const DISCORD_MODERATION_DECAY_MS = clampParseInt(
 
 export const DISCORD_MODERATION_LOG_CHANNEL_ID = (process.env.DISCORD_MODERATION_LOG_CHANNEL_ID ?? "").trim();
 
-/** Optional one-line staff digest channel (manual `/mute` `/unmute` `/warn` `/unwarn` only); links to rows in `DISCORD_MODERATION_LOG_CHANNEL_ID`. */
+/** Optional one-line staff digest channel (manual mod commands, role creates, creator posts). */
 export const DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID = (
   process.env.DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID ?? ""
 ).trim();
+
+function parseCommaSeparatedIds(raw: string | undefined): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Role create summaries: only when audit-log executor has one of these roles. */
+export const DISCORD_STAFF_SUMMARY_ROLE_CREATE_TRACKED_ROLE_IDS = parseCommaSeparatedIds(
+  process.env.DISCORD_STAFF_SUMMARY_ROLE_CREATE_TRACKED_ROLE_IDS,
+);
+
+/** Creator post summaries: watch messages in these channel IDs (not threads). */
+export const DISCORD_STAFF_SUMMARY_CREATOR_CHANNEL_IDS = parseCommaSeparatedIds(
+  process.env.DISCORD_STAFF_SUMMARY_CREATOR_CHANNEL_IDS,
+);
+
+/** Creator post summaries: author must have one of these roles. */
+export const DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS = parseCommaSeparatedIds(
+  process.env.DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS,
+);
+
+/** Min gap between creator digest lines per author+channel (default 30 min). */
+export const DISCORD_STAFF_SUMMARY_CREATOR_COOLDOWN_MS = clampParseInt(
+  process.env.DISCORD_STAFF_SUMMARY_CREATOR_COOLDOWN_MS ?? String(30 * 60_000),
+  60_000,
+  86_400_000,
+);
+
+/** Delay before reading audit log for role create (ms). */
+export const DISCORD_STAFF_SUMMARY_ROLE_CREATE_AUDIT_DELAY_MS = clampParseInt(
+  process.env.DISCORD_STAFF_SUMMARY_ROLE_CREATE_AUDIT_DELAY_MS ?? "1000",
+  200,
+  10_000,
+);
 
 function parseSeverity(raw: unknown, fallback: ViolationSeverity): ViolationSeverity {
   if (raw === "major" || raw === "minor") return raw;

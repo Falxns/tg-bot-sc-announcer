@@ -324,6 +324,10 @@ export const discordStaffModerationSummary = {
   lineUnwarn: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Предупреждение** — ${url}`,
   lineBan: (staffUserId: string, url: string) => `<@${staffUserId}> выдал **Бан** — ${url}`,
   lineUnban: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Бан** — ${url}`,
+  lineRoleCreate: (staffUserId: string, roleName: string) =>
+    `<@${staffUserId}> создал роль **${roleName.replace(/\*\*/g, "")}**`,
+  lineCreatorPost: (authorUserId: string, channelId: string, messageUrl: string) =>
+    `<@${authorUserId}> опубликовал пост в <#${channelId}> — ${messageUrl}`,
 } as const;
 
 export const discordAutoMod = {
