@@ -73,17 +73,17 @@ export const discordSlashModeration = {
     commandDescription: "Снять таймаут с пользователя.",
   },
   strike: {
-    commandDescription: "Страйк.",
-    amount: "Количество страйков (1–20)",
+    commandDescription: "Выдать наказание пользователю.",
+    amount: "Количество предупреждений (1–20)",
     reasonPreset: "Шаблон причины (начните вводить для поиска)",
     reason: "Своя причина (перекрывает шаблон)",
     screenshot: "Скриншот нарушения (необязательно)",
     messageId: "ID сообщения нарушителя в текущем канале/треде; сообщение будет удалено автоматически",
   },
   unwarn: {
-    commandDescription: "Уменьшить или сбросить страйки.",
-    amount: "Количество страйков (1–20)",
-    clear: "Сбросить счётчик страйков",
+    commandDescription: "Уменьшить или сбросить предупреждения.",
+    amount: "Количество предупреждений (1–20)",
+    clear: "Сбросить счётчик предупреждений",
   },
   ban: {
     commandDescription: "Перманентно заблокировать пользователя на сервере.",
@@ -98,7 +98,7 @@ export const discordSlashModeration = {
     userId: "ID пользователя (если не получается выбрать из списка); укажите это ИЛИ поле user, не оба",
   },
   modstatus: {
-    commandDescription: "Статус модерации: страйки и лестница таймаутов.",
+    commandDescription: "Статус модерации: предупреждения и лестница таймаутов.",
     user: "Пользователь",
   },
 } as const;
@@ -235,7 +235,7 @@ export const discordModerationCommands = {
   unknownError: "Неизвестная ошибка",
   defaultMuteReason: "Ручной таймаут модератором",
   unmuteReason: "Таймаут снят модератором",
-  strikeDefaultReason: "Страйк выдан модератором",
+  strikeDefaultReason: "Наказание выдано модератором",
   unmuteLogReason: "Таймаут снят модератором",
   unwarnReasonIncrement: (n: number) => `−${n}`,
   unwarnReasonClear: "Сброс предупреждений модератором",
@@ -266,12 +266,12 @@ export const discordModerationCommands = {
   unmuteFail: (err: string) => `Не удалось снять таймаут: ${err}`,
   unmuteDone: (userId: string) => `Таймаут снят с <@${userId}>.`,
   strikeCounts: (userId: string, before: number, after: number, threshold: number) =>
-    `Страйки <@${userId}>: **${before}** → **${after}** / ${threshold}.`,
+    `Предупреждения <@${userId}>: **${before}** → **${after}** / ${threshold}.`,
   strikeTimeoutNote: (durationLabel: string) => `\nТаймаут по лестнице: **${durationLabel}**.`,
   strikeDoneLine: (base: string, timeoutNote: string, shotNote: string, evidenceNote: string) =>
     `${base}${timeoutNote}${shotNote}${evidenceNote}`,
   strikeThresholdTimeoutReason: (staffReason: string, threshold: number) =>
-    `Достигнут порог страйков (${threshold}): ${staffReason}`.slice(0, 500),
+    `Достигнут порог предупреждений (${threshold}): ${staffReason}`.slice(0, 500),
   evidenceInvalidSnowflakeReply: "Некорректный ID сообщения.",
   evidenceCopiedNote: "\nВ отчёт модерации добавлена копия указанного сообщения.",
   evidenceNoteWrongAuthor: "\nУказанное сообщение не от этого пользователя — фрагмент не добавлен.",
@@ -295,9 +295,9 @@ export const discordModerationCommands = {
   modstatusDiscordTimeoutInactive: "**Таймаут Discord**: **нет**.",
   modstatusDiscordTimeoutUnknown: "**Таймаут Discord:** не удалось проверить.",
   modstatusLadder: (tier: number, nextDur: string, ladderSteps: number, threshold: number) =>
-    `**Лестница таймаутов** (после **${threshold}** страйков): следующий шаг **${tier + 1}** / ${ladderSteps}, длительность **${nextDur}**.`,
+    `**Лестница таймаутов** (после **${threshold}** предупреждений): следующий шаг **${tier + 1}** / ${ladderSteps}, длительность **${nextDur}**.`,
   modstatusGlobalWarns: (count: number, threshold: number) =>
-    `**Страйки:** **${count}** / ${threshold}.`,
+    `**Предупреждения:** **${count}** / ${threshold}.`,
   modstatusDecayNone: "**Последнее нарушение:** нет записи — отсчёт до авто-сброса не ведётся.",
   modstatusDecayLine: (agoLabel: string, resetInLabel: string) =>
     `**Последнее нарушение:** ${agoLabel} назад. ${resetInLabel}`,
@@ -306,7 +306,7 @@ export const discordModerationCommands = {
   modstatusDecayDue: "Порог бездействия для сброса уже пройден — сброс произойдёт при следующей проверке нарушения.",
   staffDmFooter: "Сообщение от модераторов сервера",
   staffDmTitleMute: "Таймаут",
-  staffDmTitleStrike: "Страйк",
+  staffDmTitleStrike: "Предупреждение",
   staffDmTitleUnmute: "Таймаут снят",
   staffDmUnmuteBody: "Модератор снял с вас таймаут на этом сервере.",
   staffDmTitleBan: "Блокировка на сервере",
