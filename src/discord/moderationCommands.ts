@@ -555,7 +555,6 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       member,
       channelId: scopeChannelId,
       reason,
-      warnCount: after,
       timeoutMs,
     });
     void notifyStaffModerationUser(interaction, member, strikeDm).catch((err) => {
