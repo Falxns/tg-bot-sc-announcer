@@ -580,10 +580,12 @@ export function buildStaffManualStrikeEmbed(opts: {
     lines.push("");
     lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(opts.timeoutMs))}**`);
   }
+  const title =
+    opts.timeoutMs !== undefined ? modTxt.staffDmTitleStrikePunishment : modTxt.staffDmTitleStrikeWarn;
   const description = lines.join("\n").slice(0, 4096);
   return new EmbedBuilder()
     .setColor(MODERATION_USER_EMBED_COLOR)
-    .setTitle(modTxt.staffDmTitleStrike)
+    .setTitle(title)
     .setDescription(description)
     .setTimestamp(new Date())
     .setFooter({ text: modTxt.staffDmFooter });
