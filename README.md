@@ -57,15 +57,15 @@ Edit `.env`:
 | `UPSTASH_REDIS_REST_TOKEN` | No | Upstash Redis REST token (required when `STATE_BACKEND=upstash`) |
 | `UPSTASH_STATE_KEY` | No | Redis key for serialized state JSON (default: `tg-bot-sc-announcer:state`) |
 | `ADMIN_USER_IDS` | No | Comma-separated Telegram user IDs; if empty, all users can use admin commands |
-| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/edit`, `/rolepanel`, `/linkpanel`, `/mute`, `/unmute`, `/warn`, `/unwarn`, `/ban`, `/unban`, `/modstatus` (when empty, any member who passes Discord’s command permissions may use them) |
+| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/edit`, `/rolepanel`, `/linkpanel`, `/mute`, `/unmute`, `/strike`, `/unwarn`, `/ban`, `/unban`, `/modstatus` (when empty, any member who passes Discord’s command permissions may use them) |
 | `DISCORD_ROLE_PANEL_CHANNEL_ID` | No | Restrict `/rolepanel` usage to one channel |
 | `DISCORD_BLOCK_INVITE_LINKS_GLOBAL` | No | `1`/`0` toggle for global Discord invite-link filtering |
 | `DISCORD_INVITE_ALLOWED_ROLE_IDS` | No | Roles allowed to bypass invite-link filter |
-| `DISCORD_MINOR_TIMEOUT_LADDER_MS` | No | Comma-separated minor mute durations (ms); default `3600000,21600000,43200000,86400000` (1h, 6h, 12h, 1d) |
-| `DISCORD_WARNINGS_BEFORE_TIMEOUT` | No | Minor warnings per channel before the minor-timeout ladder applies; also the denominator in mod-log `n/threshold` (default: **3**) |
-| `DISCORD_MAJOR_TIMEOUT_LADDER_MS` | No | Comma-separated major mute durations (ms); default `86400000,259200000,604800000` (1d, 3d, 7d) |
-| `DISCORD_MODERATION_DECAY_MS` | No | No violations for this long resets minor warnings + tiers (default: 259200000 = 3 days) |
-| `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for **full** moderation audit embeds (**automod** + **manual** `/mute` `/unmute` `/warn` `/unwarn` `/ban` `/unban`) |
+| `DISCORD_TIMEOUT_LADDER_MS` | No | Unified automod/staff timeout ladder (ms); default `3600000,21600000,43200000,86400000,259200000,604800000` (1h, 6h, 12h, 1d, 3d, 7d). Manual `/mute` may also use 14d/28d (not on this ladder). |
+| `DISCORD_WARNINGS_BEFORE_TIMEOUT` | No | Server-wide strikes before ladder timeouts apply; mod-log shows `n/threshold` (default: **3**) |
+| `DISCORD_MAJOR_MIN_LADDER_STEP` | No | Ladder index for first major automod hit (default **3** = 1 day) |
+| `DISCORD_MODERATION_DECAY_MS` | No | No violations for this long resets global warns + ladder tier (default: 259200000 = 3 days) |
+| `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for **full** moderation audit embeds (**automod** + **manual** `/mute` `/unmute` `/strike` `/unwarn` `/ban` `/unban`) |
 | `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID` | No | Optional text channel for **one-line** staff-only digests after manual commands; each line mentions the moderator and links to the corresponding message in **`DISCORD_MODERATION_LOG_CHANNEL_ID`** (skipped if the main log send failed or env is empty) |
 | `DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST` | No | Comma-separated or JSON array of hosts; non-invite `http(s)` URLs matching these trigger a **major** hit (empty = disabled) |
 | `DISCORD_SPAM_FILTER_CHANNEL_IDS` | No | Comma-separated channel/thread IDs where **consecutive near-duplicate text** from the **same user** (vs previous message in channel via API) counts as **minor** spam: strict normalized equality, or same **letter/digit skeleton** with similar length, or (for long text only) high **Levenshtein similarity**; empty disables. Bot needs **Read Message History** there. |

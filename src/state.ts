@@ -58,17 +58,12 @@ export const lastSeenByAuthor = new Map<string, string[]>();
 /** Persisted role panel definitions keyed by Discord message ID. */
 export const discordRolePanels = new Map<string, DiscordRolePanelState>();
 
-/** Per-channel minor warning counts: `${guildId}:${warningScopeChannelId}:${userId}`. */
-export const discordMinorWarnings = new Map<string, number>();
-/** Guild-level minor mute escalation: `${guildId}:${userId}` → tier index (applied ladder step). */
-export const discordMinorMuteTier = new Map<string, number>();
-/** Guild-level major mute escalation: `${guildId}:${userId}`. */
-export const discordMajorMuteTier = new Map<string, number>();
+/** Server-wide warn count: `${guildId}:${userId}`. */
+export const discordGlobalWarns = new Map<string, number>();
+/** Unified mute ladder index: `${guildId}:${userId}` → tier (0…last). */
+export const discordMuteTier = new Map<string, number>();
 /** Last moderation violation time (ms): `${guildId}:${userId}` for decay. */
 export const discordModerationLastViolationAt = new Map<string, number>();
-
-/** Migrated guild-wide warnings bucket until merged into a real channel scope. */
-export const LEGACY_MINOR_WARNING_SCOPE = "legacy";
 
 const ROLE_BUTTON_PREFIX = "role:";
 const ROLE_BUTTON_SINGLE_PREFIX = "roleone:";
@@ -77,96 +72,56 @@ export function guildUserKey(guildId: string, userId: string): string {
   return `${guildId}:${userId}`;
 }
 
-export function minorWarningKey(guildId: string, warningScopeChannelId: string, userId: string): string {
-  return `${guildId}:${warningScopeChannelId}:${userId}`;
+export function getGlobalWarnCount(guildId: string, userId: string): number {
+  const v = discordGlobalWarns.get(guildUserKey(guildId, userId));
+  return typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
 }
 
-/** Merge legacy guild-wide count into the first write for this scope. */
-export function getMinorWarningCount(guildId: string, warningScopeChannelId: string, userId: string): number {
-  const scopeKey = minorWarningKey(guildId, warningScopeChannelId, userId);
-  const legacyKey = minorWarningKey(guildId, LEGACY_MINOR_WARNING_SCOPE, userId);
-  const scoped = discordMinorWarnings.get(scopeKey) ?? 0;
-  const legacy = discordMinorWarnings.get(legacyKey) ?? 0;
-  return scoped + legacy;
-}
-
-/** Increment minor warnings for channel scope; consumes legacy bucket into this scope on first touch. */
-export function incrementMinorWarning(guildId: string, warningScopeChannelId: string, userId: string): number {
-  const scopeKey = minorWarningKey(guildId, warningScopeChannelId, userId);
-  const legacyKey = minorWarningKey(guildId, LEGACY_MINOR_WARNING_SCOPE, userId);
-  const legacy = discordMinorWarnings.get(legacyKey) ?? 0;
-  if (legacy > 0) {
-    discordMinorWarnings.delete(legacyKey);
-  }
-  const base = (discordMinorWarnings.get(scopeKey) ?? 0) + legacy;
-  const next = base + 1;
-  discordMinorWarnings.set(scopeKey, next);
+export function incrementGlobalWarns(guildId: string, userId: string, amount = 1): number {
+  const key = guildUserKey(guildId, userId);
+  const next = getGlobalWarnCount(guildId, userId) + Math.max(1, Math.floor(amount));
+  discordGlobalWarns.set(key, next);
   return next;
 }
 
-export function setMinorWarningCount(
-  guildId: string,
-  warningScopeChannelId: string,
-  userId: string,
-  value: number,
-): void {
-  const scopeKey = minorWarningKey(guildId, warningScopeChannelId, userId);
-  const legacyKey = minorWarningKey(guildId, LEGACY_MINOR_WARNING_SCOPE, userId);
-  discordMinorWarnings.delete(legacyKey);
-  if (value <= 0) discordMinorWarnings.delete(scopeKey);
-  else discordMinorWarnings.set(scopeKey, value);
+export function setGlobalWarnCount(guildId: string, userId: string, value: number): number {
+  const key = guildUserKey(guildId, userId);
+  const n = Math.max(0, Math.floor(value));
+  if (n === 0) discordGlobalWarns.delete(key);
+  else discordGlobalWarns.set(key, n);
+  return n;
 }
 
-export function adjustMinorWarningCount(
-  guildId: string,
-  warningScopeChannelId: string,
-  userId: string,
-  delta: number,
-): number {
-  const current = getMinorWarningCount(guildId, warningScopeChannelId, userId);
-  const next = Math.max(0, current + delta);
-  setMinorWarningCount(guildId, warningScopeChannelId, userId, next);
-  return next;
+export function adjustGlobalWarnCount(guildId: string, userId: string, delta: number): number {
+  const next = Math.max(0, getGlobalWarnCount(guildId, userId) + delta);
+  return setGlobalWarnCount(guildId, userId, next);
 }
 
-/** Raw per-scope warning rows from state (excludes zero counts). Sorted by count desc, then scope id. */
-export function listMinorWarningEntriesForGuildUser(guildId: string, userId: string): { scopeId: string; count: number }[] {
-  const prefix = `${guildId}:`;
-  const suffix = `:${userId}`;
-  const out: { scopeId: string; count: number }[] = [];
-  for (const [key, count] of discordMinorWarnings) {
-    if (!key.startsWith(prefix) || !key.endsWith(suffix)) continue;
-    if (typeof count !== "number" || count <= 0) continue;
-    const scopeId = key.slice(prefix.length, key.length - suffix.length);
-    out.push({ scopeId, count });
-  }
-  out.sort((a, b) => b.count - a.count || a.scopeId.localeCompare(b.scopeId));
-  return out;
+export function setGlobalWarnsAtLeast(guildId: string, userId: string, minimum: number): number {
+  const cur = getGlobalWarnCount(guildId, userId);
+  const floor = Math.max(0, Math.floor(minimum));
+  if (cur >= floor) return cur;
+  return setGlobalWarnCount(guildId, userId, floor);
 }
 
-export function getMinorMuteTier(guildId: string, userId: string): number {
-  return discordMinorMuteTier.get(guildUserKey(guildId, userId)) ?? 0;
+export function getMuteTier(guildId: string, userId: string): number {
+  const v = discordMuteTier.get(guildUserKey(guildId, userId));
+  return typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+}
+
+export function setMuteTier(guildId: string, userId: string, tier: number): number {
+  const key = guildUserKey(guildId, userId);
+  const n = Math.max(0, Math.floor(tier));
+  discordMuteTier.set(key, n);
+  return n;
 }
 
 /** Returns ladder index used for this mute; advances stored tier (capped at lastLadderIndex). */
-export function consumeMinorMuteTierForApply(guildId: string, userId: string, lastLadderIndex: number): number {
+export function consumeMuteTierForApply(guildId: string, userId: string, lastLadderIndex: number): number {
   const key = guildUserKey(guildId, userId);
-  const cur = discordMinorMuteTier.get(key) ?? 0;
+  const cur = getMuteTier(guildId, userId);
   const idx = Math.min(cur, lastLadderIndex);
-  discordMinorMuteTier.set(key, Math.min(cur + 1, lastLadderIndex));
-  return idx;
-}
-
-export function getMajorMuteTier(guildId: string, userId: string): number {
-  return discordMajorMuteTier.get(guildUserKey(guildId, userId)) ?? 0;
-}
-
-/** Returns ladder index used for this mute; advances stored tier (capped at lastLadderIndex). */
-export function consumeMajorMuteTierForApply(guildId: string, userId: string, lastLadderIndex: number): number {
-  const key = guildUserKey(guildId, userId);
-  const cur = discordMajorMuteTier.get(key) ?? 0;
-  const idx = Math.min(cur, lastLadderIndex);
-  discordMajorMuteTier.set(key, Math.min(cur + 1, lastLadderIndex));
+  discordMuteTier.set(key, Math.min(cur + 1, lastLadderIndex));
   return idx;
 }
 
@@ -175,7 +130,7 @@ export function touchModerationViolation(guildId: string, userId: string, nowMs:
 }
 
 /**
- * If user had no violations for `decayMs`, reset minor warnings (all channels), minor/major tiers.
+ * If user had no violations for `decayMs`, reset global warns and ladder tier.
  * Returns true if decay was applied.
  */
 export function applyModerationDecayIfNeeded(guildId: string, userId: string, nowMs: number, decayMs: number): boolean {
@@ -184,13 +139,8 @@ export function applyModerationDecayIfNeeded(guildId: string, userId: string, no
   if (last === undefined) return false;
   if (nowMs - last < decayMs) return false;
 
-  for (const k of [...discordMinorWarnings.keys()]) {
-    if (k.startsWith(`${guildId}:`) && k.endsWith(`:${userId}`)) {
-      discordMinorWarnings.delete(k);
-    }
-  }
-  discordMinorMuteTier.delete(key);
-  discordMajorMuteTier.delete(key);
+  discordGlobalWarns.delete(key);
+  discordMuteTier.delete(key);
   discordModerationLastViolationAt.delete(key);
   return true;
 }
@@ -282,22 +232,16 @@ export async function loadState(path: string): Promise<void> {
         }
       }
 
-      const minor = obj.discordMinorWarnings;
-      if (minor && typeof minor === "object" && !Array.isArray(minor)) {
-        for (const [k, v] of parseNumberMap(minor)) {
-          discordMinorWarnings.set(k, v);
+      const globalWarns = obj.discordGlobalWarns;
+      if (globalWarns && typeof globalWarns === "object" && !Array.isArray(globalWarns)) {
+        for (const [k, v] of parseNumberMap(globalWarns)) {
+          if (v > 0) discordGlobalWarns.set(k, v);
         }
       }
-      const minorT = obj.discordMinorMuteTier;
-      if (minorT && typeof minorT === "object" && !Array.isArray(minorT)) {
-        for (const [k, v] of parseNumberMap(minorT)) {
-          discordMinorMuteTier.set(k, v);
-        }
-      }
-      const majorT = obj.discordMajorMuteTier;
-      if (majorT && typeof majorT === "object" && !Array.isArray(majorT)) {
-        for (const [k, v] of parseNumberMap(majorT)) {
-          discordMajorMuteTier.set(k, v);
+      const muteTier = obj.discordMuteTier;
+      if (muteTier && typeof muteTier === "object" && !Array.isArray(muteTier)) {
+        for (const [k, v] of parseNumberMap(muteTier)) {
+          discordMuteTier.set(k, v);
         }
       }
       const lastV = obj.discordModerationLastViolationAt;
@@ -306,30 +250,12 @@ export async function loadState(path: string): Promise<void> {
           discordModerationLastViolationAt.set(k, v);
         }
       }
-
-      const warnings = obj.discordModerationWarnings;
-      if (warnings && typeof warnings === "object" && !Array.isArray(warnings)) {
-        for (const [key, value] of Object.entries(warnings as Record<string, unknown>)) {
-          if (typeof value !== "number" || !Number.isFinite(value) || value < 1) continue;
-          const n = Math.floor(value);
-          const parts = key.split(":");
-          if (parts.length === 2) {
-            const [guildId, userId] = parts;
-            if (guildId && userId) {
-              const legacyKey = minorWarningKey(guildId, LEGACY_MINOR_WARNING_SCOPE, userId);
-              const prev = discordMinorWarnings.get(legacyKey) ?? 0;
-              discordMinorWarnings.set(legacyKey, Math.max(prev, n));
-            }
-          }
-        }
-      }
     }
     if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
       console.log(
         `State loaded (${STATE_BACKEND}): ${exboAuthors.length} authors, ` +
           `${lastSeenByAuthor.size} lastSeen, ${discordRolePanels.size} role panels, ` +
-          `${discordMinorWarnings.size} minor warnings, ${discordMinorMuteTier.size} minor tiers, ` +
-          `${discordMajorMuteTier.size} major tiers.`,
+          `${discordGlobalWarns.size} global warns, ${discordMuteTier.size} mute tiers.`,
       );
     }
   } catch (err) {
@@ -349,9 +275,8 @@ export async function saveState(path: string): Promise<boolean> {
       lastSeenByAuthor: Object.fromEntries(lastSeenByAuthor),
       authors: exboAuthors,
       discordRolePanels: Object.fromEntries(discordRolePanels),
-      discordMinorWarnings: Object.fromEntries(discordMinorWarnings),
-      discordMinorMuteTier: Object.fromEntries(discordMinorMuteTier),
-      discordMajorMuteTier: Object.fromEntries(discordMajorMuteTier),
+      discordGlobalWarns: Object.fromEntries(discordGlobalWarns),
+      discordMuteTier: Object.fromEntries(discordMuteTier),
       discordModerationLastViolationAt: Object.fromEntries(discordModerationLastViolationAt),
     };
     await store.writeState(JSON.stringify(state, null, 2));

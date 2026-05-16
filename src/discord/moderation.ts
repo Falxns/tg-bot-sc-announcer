@@ -13,8 +13,6 @@ import {
   DISCORD_CHANNEL_POLICIES,
   DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST,
   DISCORD_INVITE_ALLOWED_ROLE_IDS,
-  DISCORD_MAJOR_TIMEOUT_LADDER_MS,
-  DISCORD_MINOR_TIMEOUT_LADDER_MS,
   DISCORD_MODERATION_DECAY_MS,
   DISCORD_SPAM_FILTER_CHANNEL_IDS,
   DISCORD_WARNINGS_BEFORE_TIMEOUT,
@@ -29,7 +27,6 @@ import {
   channelIdForReasonPreset,
   formatChannelLineForEmbed,
   formatReasonForEmbed,
-  reasonPlainTextForAudit,
 } from "./moderationReasonPresets";
 import {
   discordAutoMod as autoTxt,
@@ -37,13 +34,10 @@ import {
   discordModerationCommands as modTxt,
   discordModerationLogTitles as logTitles,
 } from "./userStrings";
+import { applyLightModerationSanction, applyMajorModerationSanction } from "./moderationSanction";
 import {
   applyModerationDecayIfNeeded,
-  consumeMajorMuteTierForApply,
-  consumeMinorMuteTierForApply,
-  getMajorMuteTier,
-  getMinorMuteTier,
-  incrementMinorWarning,
+  getMuteTier,
   saveState,
   touchModerationViolation,
 } from "../state";
@@ -564,7 +558,7 @@ export function buildStaffManualMuteEmbed(opts: {
     .setFooter({ text: modTxt.staffDmFooter });
 }
 
-export function buildStaffManualWarnEmbed(opts: {
+export function buildStaffManualStrikeEmbed(opts: {
   guild: Guild;
   member: GuildMember;
   channelId: string;
@@ -591,7 +585,7 @@ export function buildStaffManualWarnEmbed(opts: {
   const description = lines.join("\n").slice(0, 4096);
   return new EmbedBuilder()
     .setColor(MODERATION_USER_EMBED_COLOR)
-    .setTitle(modTxt.staffDmTitleWarn)
+    .setTitle(modTxt.staffDmTitleStrike)
     .setDescription(description)
     .setTimestamp(new Date())
     .setFooter({ text: modTxt.staffDmFooter });
@@ -713,22 +707,13 @@ export async function handleModerationMessage(message: Message): Promise<void> {
   touchModerationViolation(guildId, userId, now);
 
   if (violation.severity === "major") {
-    const lastIdx = DISCORD_MAJOR_TIMEOUT_LADDER_MS.length - 1;
-    const tierBefore = getMajorMuteTier(guildId, userId);
-    const idx = Math.min(tierBefore, lastIdx);
-    const ms = DISCORD_MAJOR_TIMEOUT_LADDER_MS[idx] ?? DISCORD_MAJOR_TIMEOUT_LADDER_MS[lastIdx];
-    let tierAfter = tierBefore;
-    let majorTimeoutApplied = false;
-    if (member.moderatable) {
-      try {
-        await member.timeout(ms, reasonPlainTextForAudit(autoTxt.timeoutMajor(violation.reason)));
-        consumeMajorMuteTierForApply(guildId, userId, lastIdx);
-        tierAfter = getMajorMuteTier(guildId, userId);
-        majorTimeoutApplied = true;
-      } catch (err) {
-        console.error("Discord major moderation timeout failed:", err);
-      }
-    }
+    const tierBefore = getMuteTier(guildId, userId);
+    const major = await applyMajorModerationSanction({
+      guildId,
+      userId,
+      member,
+      reason: violation.reason,
+    });
 
     await saveState(LAST_SEEN_STATE_FILE);
 
@@ -739,16 +724,17 @@ export async function handleModerationMessage(message: Message): Promise<void> {
       channelId: ctx.sourceChannelId,
       parentChannelId: ctx.parentChannelId,
       reason: violation.reason,
-      timeoutMs: ms,
+      minorWarningsInChannel: major.warnCount,
+      timeoutMs: major.timeout.timeoutMs,
       messageExcerpt: excerpt,
     });
 
-    const majorOutcome = majorTimeoutApplied ? "applied" : member.moderatable ? "api_error" : "not_moderatable";
+    const majorOutcome = major.timeout.outcome;
     const majorEmbed = await buildModerationUserNoticeEmbed(message, member, {
       kind: "major",
       reason: violation.reason,
       outcome: majorOutcome,
-      timeoutMs: majorTimeoutApplied ? ms : undefined,
+      timeoutMs: major.timeout.timeoutMs,
     });
     await notifyUserModerationEmbed(message, member, majorEmbed);
 
@@ -756,38 +742,28 @@ export async function handleModerationMessage(message: Message): Promise<void> {
       const userLabel = moderationLogUserLabel(member, message.author);
       const channelLabel = moderationLogChannelLabel(message);
       console.log(
-        `[Discord moderation major] user=${userId} (${userLabel}) channel=${message.channelId} (${channelLabel}) reason=${violation.reason} tier=${tierBefore}->${tierAfter}`,
+        `[Discord moderation major] user=${userId} (${userLabel}) channel=${message.channelId} (${channelLabel}) reason=${violation.reason} tier=${tierBefore}->${major.plan.tierAfter}`,
       );
     }
     return;
   }
 
-  const warnCount = incrementMinorWarning(guildId, ctx.warningScopeChannelId, userId);
-  const lastMinorIdx = DISCORD_MINOR_TIMEOUT_LADDER_MS.length - 1;
-  let timeoutMs: number | undefined;
-  const tierMinorBefore = getMinorMuteTier(guildId, userId);
-  let tierMinorAfter = tierMinorBefore;
-
-  if (warnCount >= DISCORD_WARNINGS_BEFORE_TIMEOUT && member.moderatable) {
-    const tb = getMinorMuteTier(guildId, userId);
-    const idx = Math.min(tb, lastMinorIdx);
-    const ms = DISCORD_MINOR_TIMEOUT_LADDER_MS[idx] ?? DISCORD_MINOR_TIMEOUT_LADDER_MS[lastMinorIdx];
-    try {
-      await member.timeout(ms, reasonPlainTextForAudit(autoTxt.timeoutMinor(violation.reason)));
-      consumeMinorMuteTierForApply(guildId, userId, lastMinorIdx);
-      tierMinorAfter = getMinorMuteTier(guildId, userId);
-      timeoutMs = ms;
-    } catch (err) {
-      console.error("Discord minor moderation timeout failed:", err);
-    }
-  }
+  const tierBefore = getMuteTier(guildId, userId);
+  const light = await applyLightModerationSanction({
+    guildId,
+    userId,
+    member,
+    reason: violation.reason,
+  });
+  const timeoutMs = light.timeoutApplied ? light.timeoutMs : undefined;
+  const tierAfter = getMuteTier(guildId, userId);
 
   await saveState(LAST_SEEN_STATE_FILE);
 
   const minorEmbed = await buildModerationUserNoticeEmbed(message, member, {
     kind: "minor",
     reason: violation.reason,
-    warnCount,
+    warnCount: light.warnCount,
     timeoutMs,
   });
   await notifyUserModerationEmbed(message, member, minorEmbed);
@@ -799,7 +775,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     channelId: ctx.sourceChannelId,
     parentChannelId: ctx.parentChannelId,
     reason: violation.reason,
-    minorWarningsInChannel: warnCount,
+    minorWarningsInChannel: light.warnCount,
     timeoutMs,
     messageExcerpt: excerpt,
   });
@@ -808,7 +784,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     const userLabel = moderationLogUserLabel(member, message.author);
     const channelLabel = moderationLogChannelLabel(message);
     console.log(
-      `[Discord moderation minor] user=${userId} (${userLabel}) channel=${message.channelId} (${channelLabel}) reason=${violation.reason} warnings=${warnCount} minorTier=${tierMinorBefore}->${tierMinorAfter}`,
+      `[Discord moderation light] user=${userId} (${userLabel}) channel=${message.channelId} (${channelLabel}) reason=${violation.reason} warnings=${light.warnCount} tier=${tierBefore}->${tierAfter}`,
     );
   }
 }

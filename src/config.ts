@@ -70,8 +70,14 @@ export const DISCORD_WARNING_MESSAGE_TTL_MS = clampParseInt(
   600_000,
 );
 
-const DEFAULT_MINOR_LADDER_MS = [3_600_000, 21_600_000, 43_200_000, 86_400_000] as const;
-const DEFAULT_MAJOR_LADDER_MS = [86_400_000, 259_200_000, 604_800_000] as const;
+const DEFAULT_TIMEOUT_LADDER_MS = [
+  3_600_000,
+  21_600_000,
+  43_200_000,
+  86_400_000,
+  259_200_000,
+  604_800_000,
+] as const;
 
 function parseMsLadder(raw: string | undefined, fallback: readonly number[]): number[] {
   const s = raw?.trim();
@@ -83,13 +89,17 @@ function parseMsLadder(raw: string | undefined, fallback: readonly number[]): nu
   return parts.length > 0 ? parts : [...fallback];
 }
 
-export const DISCORD_MINOR_TIMEOUT_LADDER_MS = parseMsLadder(
-  process.env.DISCORD_MINOR_TIMEOUT_LADDER_MS,
-  DEFAULT_MINOR_LADDER_MS,
+/** Unified automod/staff timeout ladder (1h, 6h, 12h, 1d, 3d, 7d by default). */
+export const DISCORD_TIMEOUT_LADDER_MS = parseMsLadder(
+  process.env.DISCORD_TIMEOUT_LADDER_MS,
+  DEFAULT_TIMEOUT_LADDER_MS,
 );
-export const DISCORD_MAJOR_TIMEOUT_LADDER_MS = parseMsLadder(
-  process.env.DISCORD_MAJOR_TIMEOUT_LADDER_MS,
-  DEFAULT_MAJOR_LADDER_MS,
+
+/** Ladder index for first major hit (default: 1 day = index 3). */
+export const DISCORD_MAJOR_MIN_LADDER_STEP = clampParseInt(
+  process.env.DISCORD_MAJOR_MIN_LADDER_STEP ?? "3",
+  0,
+  Math.max(0, DISCORD_TIMEOUT_LADDER_MS.length - 1),
 );
 
 /** No violations for this long → reset minor warnings + mute tiers (default 3 days). */

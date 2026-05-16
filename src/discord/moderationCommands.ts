@@ -1,6 +1,5 @@
 import {
   AutocompleteInteraction,
-  ChannelType,
   ChatInputCommandInteraction,
   GuildMember,
   MessageFlags,
@@ -9,35 +8,36 @@ import {
 } from "discord.js";
 import type { Guild, Message, User } from "discord.js";
 import {
-  DISCORD_MAJOR_TIMEOUT_LADDER_MS,
-  DISCORD_MINOR_TIMEOUT_LADDER_MS,
   DISCORD_MODERATION_DECAY_MS,
   DISCORD_MODERATION_LOG_CHANNEL_ID,
+  DISCORD_TIMEOUT_LADDER_MS,
   DISCORD_WARNINGS_BEFORE_TIMEOUT,
   LAST_SEEN_STATE_FILE,
 } from "../config";
 import { logModerationEvent, postStaffModerationSummary } from "./moderationLog";
+import { ladderDurationMs, lastLadderIndex } from "./moderationLadder";
+import {
+  applyManualMuteSanction,
+  applyStrikeModerationSanction,
+} from "./moderationSanction";
 import {
   buildStaffManualBanEmbed,
   buildStaffManualMuteEmbed,
+  buildStaffManualStrikeEmbed,
   buildStaffManualUnbanEmbed,
   buildStaffManualUnmuteEmbed,
-  buildStaffManualWarnEmbed,
   notifyStaffModerationUser,
   notifyStaffUserDmFallback,
 } from "./moderation";
 import {
-  adjustMinorWarningCount,
-  consumeMinorMuteTierForApply,
+  adjustGlobalWarnCount,
+  applyModerationDecayIfNeeded,
   discordModerationLastViolationAt,
-  getMajorMuteTier,
-  getMinorMuteTier,
-  getMinorWarningCount,
+  getGlobalWarnCount,
+  getMuteTier,
   guildUserKey,
-  LEGACY_MINOR_WARNING_SCOPE,
-  listMinorWarningEntriesForGuildUser,
   saveState,
-  setMinorWarningCount,
+  setGlobalWarnCount,
   touchModerationViolation,
 } from "../state";
 import {
@@ -88,7 +88,7 @@ function resolveStaffModerationReason(
 
 export async function handleModerationAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
   const cmd = interaction.commandName;
-  if (cmd !== "mute" && cmd !== "warn" && cmd !== "ban") {
+  if (cmd !== "mute" && cmd !== "strike" && cmd !== "ban") {
     await interaction.respond([]);
     return;
   }
@@ -191,42 +191,30 @@ export const unmuteSlashCommand = new SlashCommandBuilder()
   .addUserOption((o) => o.setName("user").setDescription(slashModTxt.userOption).setRequired(true))
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
-export const warnSlashCommand = new SlashCommandBuilder()
-  .setName("warn")
-  .setDescription(slashModTxt.warn.commandDescription)
+export const strikeSlashCommand = new SlashCommandBuilder()
+  .setName("strike")
+  .setDescription(slashModTxt.strike.commandDescription)
   .addUserOption((o) => o.setName("user").setDescription(slashModTxt.userOption).setRequired(true))
-  .addChannelOption((o) =>
-    o
-      .setName("channel")
-      .setDescription(slashModTxt.warn.channel)
-      .addChannelTypes(
-        ChannelType.GuildText,
-        ChannelType.GuildAnnouncement,
-        ChannelType.PublicThread,
-        ChannelType.PrivateThread,
-      )
-      .setRequired(false),
-  )
   .addIntegerOption((o) =>
-    o.setName("amount").setDescription(slashModTxt.warn.amount).setMinValue(1).setMaxValue(20).setRequired(false),
+    o.setName("amount").setDescription(slashModTxt.strike.amount).setMinValue(1).setMaxValue(20).setRequired(false),
   )
   .addStringOption((o) =>
     o
       .setName("reason_preset")
-      .setDescription(slashModTxt.warn.reasonPreset)
+      .setDescription(slashModTxt.strike.reasonPreset)
       .setAutocomplete(true)
       .setRequired(false),
   )
   .addStringOption((o) =>
-    o.setName("reason").setDescription(slashModTxt.warn.reason).setMaxLength(450).setRequired(false),
+    o.setName("reason").setDescription(slashModTxt.strike.reason).setMaxLength(450).setRequired(false),
   )
   .addAttachmentOption((o) =>
-    o.setName("screenshot").setDescription(slashModTxt.warn.screenshot).setRequired(false),
+    o.setName("screenshot").setDescription(slashModTxt.strike.screenshot).setRequired(false),
   )
   .addStringOption((o) =>
     o
       .setName("message_id")
-      .setDescription(slashModTxt.warn.messageId)
+      .setDescription(slashModTxt.strike.messageId)
       .setRequired(false)
       .setMinLength(17)
       .setMaxLength(22),
@@ -237,18 +225,6 @@ export const unwarnSlashCommand = new SlashCommandBuilder()
   .setName("unwarn")
   .setDescription(slashModTxt.unwarn.commandDescription)
   .addUserOption((o) => o.setName("user").setDescription(slashModTxt.userOption).setRequired(true))
-  .addChannelOption((o) =>
-    o
-      .setName("channel")
-      .setDescription(slashModTxt.unwarn.channel)
-      .addChannelTypes(
-        ChannelType.GuildText,
-        ChannelType.GuildAnnouncement,
-        ChannelType.PublicThread,
-        ChannelType.PrivateThread,
-      )
-      .setRequired(false),
-  )
   .addIntegerOption((o) =>
     o.setName("amount").setDescription(slashModTxt.unwarn.amount).setMinValue(1).setMaxValue(20).setRequired(false),
   )
@@ -304,24 +280,6 @@ export const modstatusSlashCommand = new SlashCommandBuilder()
   .addUserOption((o) => o.setName("user").setDescription(slashModTxt.modstatus.user).setRequired(true))
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
-async function resolveWarningScope(
-  interaction: ChatInputCommandInteraction,
-  channelOptId: string | null,
-): Promise<{ scopeId: string } | { error: string }> {
-  if (!interaction.guildId) return { error: modTxt.guildOnly };
-  if (channelOptId) {
-    const fetched = await interaction.guild!.channels.fetch(channelOptId).catch(() => null);
-    if (!fetched?.isTextBased()) return { error: modTxt.scopeNeedTextChannel };
-    if ("isThread" in fetched && fetched.isThread()) {
-      return { scopeId: fetched.parentId ?? fetched.id };
-    }
-    return { scopeId: fetched.id };
-  }
-  const scope = warningScopeChannelIdFromInteraction(interaction);
-  if (!scope) return { error: modTxt.scopeChannelUnknown };
-  return { scopeId: scope };
-}
-
 export async function handleModerationSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   const guild = interaction.guild;
   if (!guild || !interaction.guildId) {
@@ -363,14 +321,25 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     }
     const ms = Math.min(minutes * 60_000, 2_419_200_000);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    try {
-      await member.timeout(ms, reasonPlainTextForAudit(reason));
-    } catch (err) {
+    const now = Date.now();
+    applyModerationDecayIfNeeded(guild.id, target.id, now, DISCORD_MODERATION_DECAY_MS);
+    const sanction = await applyManualMuteSanction({
+      guildId: guild.id,
+      userId: target.id,
+      member,
+      durationMs: ms,
+      reason,
+    });
+    if (sanction.outcome !== "applied") {
       await interaction.editReply({
-        content: modTxt.muteTimeoutFail(err instanceof Error ? err.message : String(err)),
+        content:
+          sanction.outcome === "not_moderatable"
+            ? modTxt.muteNotModeratable
+            : modTxt.muteTimeoutFail(modTxt.unknownError),
       });
       return;
     }
+    touchModerationViolation(guild.id, target.id, now);
 
     const muteDm = buildStaffManualMuteEmbed({
       guild,
@@ -496,9 +465,8 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     return;
   }
 
-  if (name === "warn") {
+  if (name === "strike") {
     const target = interaction.options.getUser("user", true);
-    const chOpt = interaction.options.getChannel("channel");
     const amount = interaction.options.getInteger("amount") ?? 1;
     const screenshot = interaction.options.getAttachment("screenshot");
     const messageIdRaw = interaction.options.getString("message_id")?.trim();
@@ -510,45 +478,32 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       await interaction.reply({ content: modTxt.evidenceInvalidSnowflakeReply, flags: MessageFlags.Ephemeral });
       return;
     }
-    const resolved = await resolveWarningScope(interaction, chOpt?.id ?? null);
-    if ("error" in resolved) {
-      await interaction.reply({ content: resolved.error, flags: MessageFlags.Ephemeral });
-      return;
-    }
-    const reason = resolveStaffModerationReason(interaction, resolved.scopeId, modTxt.warnDefaultReason);
-    const before = getMinorWarningCount(interaction.guildId, resolved.scopeId, target.id);
-    const after = adjustMinorWarningCount(interaction.guildId, resolved.scopeId, target.id, amount);
+    const scopeChannelId = moderationScopeChannelIdFromInteraction(interaction);
+    const reason = resolveStaffModerationReason(interaction, scopeChannelId, modTxt.strikeDefaultReason);
+    const before = getGlobalWarnCount(guild.id, target.id);
 
-    let timeoutMs: number | undefined;
     let member: GuildMember | null = null;
     try {
       member = await guild.members.fetch({ user: target.id });
     } catch {
-      member = null;
+      await interaction.reply({ content: modTxt.userNotInGuild, flags: MessageFlags.Ephemeral });
+      return;
     }
 
-    /** Same rule as automod minor path: ladder timeout whenever warnings stay at/above threshold after this `/warn`. */
-    const applyMinorLadderTimeout =
-      after >= DISCORD_WARNINGS_BEFORE_TIMEOUT && member !== null && member.moderatable;
+    const now = Date.now();
+    applyModerationDecayIfNeeded(guild.id, target.id, now, DISCORD_MODERATION_DECAY_MS);
+    const strike = await applyStrikeModerationSanction({
+      guildId: guild.id,
+      userId: target.id,
+      member,
+      reason,
+      warnAmount: amount,
+      timeoutAuditReason: modTxt.strikeThresholdTimeoutReason(reason, DISCORD_WARNINGS_BEFORE_TIMEOUT),
+    });
+    touchModerationViolation(guild.id, target.id, now);
+    const after = strike.warnCount;
+    const timeoutMs = strike.timeoutApplied ? strike.timeoutMs : undefined;
 
-    if (applyMinorLadderTimeout && member) {
-      const lastMinorIdx = DISCORD_MINOR_TIMEOUT_LADDER_MS.length - 1;
-      const tb = getMinorMuteTier(guild.id, target.id);
-      const idx = Math.min(tb, lastMinorIdx);
-      const ms = DISCORD_MINOR_TIMEOUT_LADDER_MS[idx] ?? DISCORD_MINOR_TIMEOUT_LADDER_MS[lastMinorIdx];
-      try {
-        await member.timeout(
-          ms,
-          reasonPlainTextForAudit(modTxt.warnThresholdTimeoutReason(reason, DISCORD_WARNINGS_BEFORE_TIMEOUT)),
-        );
-        consumeMinorMuteTierForApply(guild.id, target.id, lastMinorIdx);
-        timeoutMs = ms;
-      } catch (err) {
-        console.error("Discord manual warn threshold timeout failed:", err);
-      }
-    }
-
-    touchModerationViolation(guild.id, target.id, Date.now());
     await saveState(LAST_SEEN_STATE_FILE);
 
     const evidence = await resolveEvidenceFromMessageId({
@@ -565,11 +520,11 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
           ? [{ url: screenshot.url, name: modTxt.screenshotFileFallback }]
           : undefined;
 
-    const logMsgWarn = await logModerationEvent(guild, {
-      title: discordModerationLogTitles.staffWarn,
+    const logMsgStrike = await logModerationEvent(guild, {
+      title: discordModerationLogTitles.staffStrike,
       color: 0x3388cc,
       targetUserId: target.id,
-      channelId: resolved.scopeId,
+      channelId: scopeChannelId,
       reason,
       minorWarningsInChannel: after,
       staffUserId: interaction.user.id,
@@ -580,8 +535,8 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
 
     await postStaffModerationSummary(guild, {
       staffUserId: interaction.user.id,
-      action: "warn",
-      logMessage: logMsgWarn,
+      action: "strike",
+      logMessage: logMsgStrike,
     });
 
     let evidenceDeleteNote = "";
@@ -595,30 +550,28 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       }
     }
 
-    if (member) {
-      const warnDm = buildStaffManualWarnEmbed({
-        guild,
-        member,
-        channelId: resolved.scopeId,
-        reason,
-        warnCount: after,
-        timeoutMs,
-      });
-      void notifyStaffModerationUser(interaction, member, warnDm).catch((err) => {
-        console.error("staff /warn DM notify failed:", err);
-      });
-    }
+    const strikeDm = buildStaffManualStrikeEmbed({
+      guild,
+      member,
+      channelId: scopeChannelId,
+      reason,
+      warnCount: after,
+      timeoutMs,
+    });
+    void notifyStaffModerationUser(interaction, member, strikeDm).catch((err) => {
+      console.error("staff /strike DM notify failed:", err);
+    });
 
     let shotNote = "";
     if (screenshot) {
       shotNote = DISCORD_MODERATION_LOG_CHANNEL_ID ? modTxt.screenshotLogged : modTxt.screenshotNoLogEnv;
     }
     const timeoutNote =
-      timeoutMs !== undefined ? modTxt.warnTimeoutNote(discordFormatDurationRu(timeoutMs)) : "";
+      timeoutMs !== undefined ? modTxt.strikeTimeoutNote(discordFormatDurationRu(timeoutMs)) : "";
 
     await interaction.reply({
-      content: modTxt.warnDoneLine(
-        modTxt.warnCounts(target.id, resolved.scopeId, before, after),
+      content: modTxt.strikeDoneLine(
+        modTxt.strikeCounts(target.id, before, after, DISCORD_WARNINGS_BEFORE_TIMEOUT),
         timeoutNote,
         shotNote,
         evidence.note + evidenceDeleteNote,
@@ -630,32 +583,26 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
 
   if (name === "unwarn") {
     const target = interaction.options.getUser("user", true);
-    const chOpt = interaction.options.getChannel("channel");
     const amount = interaction.options.getInteger("amount") ?? 1;
     const clear = interaction.options.getBoolean("clear") === true;
     if (target.bot) {
       await interaction.reply({ content: modTxt.unmuteBadTarget, flags: MessageFlags.Ephemeral });
       return;
     }
-    const resolved = await resolveWarningScope(interaction, chOpt?.id ?? null);
-    if ("error" in resolved) {
-      await interaction.reply({ content: resolved.error, flags: MessageFlags.Ephemeral });
-      return;
-    }
-    const before = getMinorWarningCount(interaction.guildId, resolved.scopeId, target.id);
+    const before = getGlobalWarnCount(guild.id, target.id);
     let after: number;
     if (clear) {
-      setMinorWarningCount(interaction.guildId, resolved.scopeId, target.id, 0);
-      after = 0;
+      after = setGlobalWarnCount(guild.id, target.id, 0);
     } else {
-      after = adjustMinorWarningCount(interaction.guildId, resolved.scopeId, target.id, -amount);
+      after = adjustGlobalWarnCount(guild.id, target.id, -amount);
     }
     await saveState(LAST_SEEN_STATE_FILE);
+    const scopeChannelId = moderationScopeChannelIdFromInteraction(interaction);
     const logMsgUnwarn = await logModerationEvent(guild, {
       title: discordModerationLogTitles.staffUnwarn,
       color: 0x888888,
       targetUserId: target.id,
-      channelId: resolved.scopeId,
+      channelId: scopeChannelId,
       reason: clear ? modTxt.unwarnReasonClear : modTxt.unwarnReasonIncrement(amount),
       minorWarningsInChannel: after,
       staffUserId: interaction.user.id,
@@ -666,7 +613,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       logMessage: logMsgUnwarn,
     });
     await interaction.reply({
-      content: modTxt.warnCounts(target.id, resolved.scopeId, before, after),
+      content: modTxt.strikeCounts(target.id, before, after, DISCORD_WARNINGS_BEFORE_TIMEOUT),
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -844,15 +791,10 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     }
     const guildId = guild.id;
     const userId = target.id;
-    const entries = listMinorWarningEntriesForGuildUser(guildId, userId);
-    const minorTier = getMinorMuteTier(guildId, userId);
-    const majorTier = getMajorMuteTier(guildId, userId);
-    const lastMinorIdx = DISCORD_MINOR_TIMEOUT_LADDER_MS.length - 1;
-    const lastMajorIdx = DISCORD_MAJOR_TIMEOUT_LADDER_MS.length - 1;
-    const minorNextMs =
-      DISCORD_MINOR_TIMEOUT_LADDER_MS[Math.min(minorTier, lastMinorIdx)] ?? DISCORD_MINOR_TIMEOUT_LADDER_MS[lastMinorIdx];
-    const majorNextMs =
-      DISCORD_MAJOR_TIMEOUT_LADDER_MS[Math.min(majorTier, lastMajorIdx)] ?? DISCORD_MAJOR_TIMEOUT_LADDER_MS[lastMajorIdx];
+    const warnCount = getGlobalWarnCount(guildId, userId);
+    const tier = getMuteTier(guildId, userId);
+    const lastIdx = lastLadderIndex();
+    const nextMs = ladderDurationMs(Math.min(tier, lastIdx));
 
     const lines: string[] = [];
     lines.push(modTxt.modstatusIntro(userId));
@@ -875,36 +817,16 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     lines.push("");
 
     lines.push(
-      modTxt.modstatusMinorLadder(
-        minorTier,
-        discordFormatDurationRu(minorNextMs),
-        DISCORD_MINOR_TIMEOUT_LADDER_MS.length,
+      modTxt.modstatusGlobalWarns(warnCount, DISCORD_WARNINGS_BEFORE_TIMEOUT),
+    );
+    lines.push(
+      modTxt.modstatusLadder(
+        tier,
+        discordFormatDurationRu(nextMs),
+        DISCORD_TIMEOUT_LADDER_MS.length,
         DISCORD_WARNINGS_BEFORE_TIMEOUT,
       ),
     );
-    lines.push(
-      modTxt.modstatusMajorLadder(
-        majorTier,
-        discordFormatDurationRu(majorNextMs),
-        DISCORD_MAJOR_TIMEOUT_LADDER_MS.length,
-      ),
-    );
-    lines.push("");
-    lines.push(modTxt.modstatusWarningsHeader);
-    if (entries.length === 0) {
-      lines.push(modTxt.modstatusWarningsEmpty);
-    } else {
-      const maxLines = 20;
-      for (let i = 0; i < entries.length && i < maxLines; i++) {
-        const e = entries[i]!;
-        const label =
-          e.scopeId === LEGACY_MINOR_WARNING_SCOPE ? modTxt.modstatusLegacyScope : `<#${e.scopeId}>`;
-        lines.push(`• ${label}: **${e.count}** / ${DISCORD_WARNINGS_BEFORE_TIMEOUT}`);
-      }
-      if (entries.length > maxLines) {
-        lines.push(modTxt.modstatusWarningsTruncated(entries.length - maxLines));
-      }
-    }
     lines.push("");
     const lastAt = discordModerationLastViolationAt.get(guildUserKey(guildId, userId));
     const now = Date.now();
