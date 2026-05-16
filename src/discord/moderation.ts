@@ -258,7 +258,7 @@ async function trySpamDuplicateViolation(message: Message): Promise<ViolationHit
   if (normPrev.length === 0) return null;
   if (!isSpamDuplicateContentMatch(norm, normPrev)) return null;
 
-  return { severity: "minor", reason: SPAM_DUPLICATE_REASON };
+  return { severity: "minor", reason: SPAM_DUPLICATE_REASON, logReason: SPAM_DUPLICATE_REASON };
 }
 
 function resolvePolicyContext(message: Message): PolicyContext {
@@ -284,7 +284,13 @@ function resolvePolicyContext(message: Message): PolicyContext {
   };
 }
 
-type ViolationHit = { reason: string; severity: ViolationSeverity };
+type ViolationHit = {
+  /** User-facing reason (channel preset text when configured). */
+  reason: string;
+  /** Automod audit reason for mod log (never preset text). */
+  logReason: string;
+  severity: ViolationSeverity;
+};
 
 function detectViolations(
   message: Message,
@@ -304,7 +310,7 @@ function detectViolations(
     !allowInvitesInChannel && (DISCORD_BLOCK_INVITE_LINKS_GLOBAL || policy?.blockInviteLinks === true);
   if (shouldCheckInvites && hasExternalInvite(inviteScanText) && !hasAnyRole(member, inviteRoleAllow)) {
     const sev = policy?.inviteViolationSeverity ?? "major";
-    hits.push({ reason: autoTxt.invitesForbidden, severity: sev });
+    hits.push({ reason: autoTxt.invitesForbidden, logReason: autoTxt.invitesForbidden, severity: sev });
   }
 
   if (DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST.length > 0) {
@@ -313,7 +319,11 @@ function detectViolations(
       try {
         const host = new URL(url).hostname.replace(/^\[+|\]+$/g, "").toLowerCase();
         if (hostMatchesBlacklist(host, DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST)) {
-          hits.push({ reason: autoTxt.forbiddenDomain(host), severity: "major" });
+          hits.push({
+            reason: autoTxt.forbiddenDomain(host),
+            logReason: autoTxt.forbiddenDomain(host),
+            severity: "major",
+          });
           break;
         }
       } catch {
@@ -325,8 +335,10 @@ function detectViolations(
   if (policy?.blockVideos) {
     const hasVideo = attachments.some((a) => isVideoAttachment(a.contentType, a.name ?? ""));
     if (hasVideo) {
+      const logReason = autoTxt.videoForbidden;
       hits.push({
-        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.videoForbidden),
+        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, logReason),
+        logReason,
         severity: policy.mediaViolationSeverity ?? "minor",
       });
     }
@@ -334,23 +346,29 @@ function detectViolations(
   if (policy?.blockImages) {
     const hasImage = attachments.some((a) => isImageAttachment(a.contentType, a.name ?? ""));
     if (hasImage) {
+      const logReason = autoTxt.imageForbidden;
       hits.push({
-        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.imageForbidden),
+        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, logReason),
+        logReason,
         severity: policy.mediaViolationSeverity ?? "minor",
       });
     }
   }
   if (policy?.blockText && message.content.trim().length > 0) {
+    const logReason = autoTxt.textForbidden;
     hits.push({
-      reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.textForbidden),
+      reason: mediaViolationReason(policy, ctx.warningScopeChannelId, logReason),
+      logReason,
       severity: policy.mediaViolationSeverity ?? "minor",
     });
   }
   if (policy?.blockedKeywords && policy.blockedKeywords.length > 0) {
     const hit = policy.blockedKeywords.find((w) => lowerSearch.includes(w));
     if (hit) {
+      const logReason = autoTxt.keywordHit(hit);
       hits.push({
-        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.keywordHit(hit)),
+        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, logReason),
+        logReason,
         severity: policy.keywordViolationSeverity ?? "minor",
       });
     }
@@ -723,7 +741,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
       targetUserId: userId,
       channelId: ctx.sourceChannelId,
       parentChannelId: ctx.parentChannelId,
-      reason: violation.reason,
+      reason: violation.logReason,
       minorWarningsInChannel: major.warnCount,
       timeoutMs: major.timeout.timeoutMs,
       messageExcerpt: excerpt,
@@ -742,7 +760,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
       const userLabel = moderationLogUserLabel(member, message.author);
       const channelLabel = moderationLogChannelLabel(message);
       console.log(
-        `[Discord moderation major] user=${userId} (${userLabel}) channel=${message.channelId} (${channelLabel}) reason=${violation.reason} tier=${tierBefore}->${major.plan.tierAfter}`,
+        `[Discord moderation major] user=${userId} (${userLabel}) channel=${message.channelId} (${channelLabel}) reason=${violation.logReason} tier=${tierBefore}->${major.plan.tierAfter}`,
       );
     }
     return;
@@ -774,7 +792,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     targetUserId: userId,
     channelId: ctx.sourceChannelId,
     parentChannelId: ctx.parentChannelId,
-    reason: violation.reason,
+    reason: violation.logReason,
     minorWarningsInChannel: light.warnCount,
     timeoutMs,
     messageExcerpt: excerpt,
@@ -784,7 +802,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     const userLabel = moderationLogUserLabel(member, message.author);
     const channelLabel = moderationLogChannelLabel(message);
     console.log(
-      `[Discord moderation light] user=${userId} (${userLabel}) channel=${message.channelId} (${channelLabel}) reason=${violation.reason} warnings=${light.warnCount} tier=${tierBefore}->${tierAfter}`,
+      `[Discord moderation light] user=${userId} (${userLabel}) channel=${message.channelId} (${channelLabel}) reason=${violation.logReason} warnings=${light.warnCount} tier=${tierBefore}->${tierAfter}`,
     );
   }
 }
