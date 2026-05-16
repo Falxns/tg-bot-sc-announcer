@@ -1,5 +1,14 @@
-import { EmbedBuilder, Guild, type ColorResolvable } from "discord.js";
-import { DISCORD_MODERATION_LOG_CHANNEL_ID } from "../config";
+import { EmbedBuilder, Guild, type ColorResolvable, type Message } from "discord.js";
+import {
+  DISCORD_MODERATION_LOG_CHANNEL_ID,
+  DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID,
+  DISCORD_WARNINGS_BEFORE_TIMEOUT,
+} from "../config";
+import {
+  discordModerationLogChannelFieldValue,
+  discordModerationLogFields,
+  discordStaffModerationSummary as staffSumTxt,
+} from "./userStrings";
 
 export type ModerationLogPayload = {
   title: string;
@@ -8,75 +17,121 @@ export type ModerationLogPayload = {
   channelId?: string;
   parentChannelId?: string;
   reason: string;
-  severity?: string;
   minorWarningsInChannel?: number;
-  minorMuteTierBefore?: number;
-  minorMuteTierAfter?: number;
-  majorMuteTierBefore?: number;
-  majorMuteTierAfter?: number;
   timeoutMs?: number;
-  messageId?: string;
   messageExcerpt?: string;
   staffUserId?: string;
+  /** Remote attachment(s) for the log message (e.g. /mute screenshot). */
+  logFiles?: { url: string; name: string }[];
 };
 
-export async function logModerationEvent(guild: Guild, payload: ModerationLogPayload): Promise<void> {
-  if (!DISCORD_MODERATION_LOG_CHANNEL_ID) return;
+export async function logModerationEvent(guild: Guild, payload: ModerationLogPayload): Promise<Message | undefined> {
+  if (!DISCORD_MODERATION_LOG_CHANNEL_ID) return undefined;
   const ch = await guild.channels.fetch(DISCORD_MODERATION_LOG_CHANNEL_ID).catch(() => null);
-  if (!ch?.isTextBased() || !("send" in ch)) return;
+  if (!ch?.isTextBased() || !("send" in ch)) return undefined;
 
   const embed = new EmbedBuilder()
     .setTitle(payload.title.slice(0, 256))
-    .setDescription(payload.reason.slice(0, 4096))
-    .addFields({ name: "Пользователь", value: `<@${payload.targetUserId}> (\`${payload.targetUserId}\`)`, inline: false });
+    .setDescription("**Причина:** " + payload.reason.slice(0, 4096))
+    .addFields({
+      name: discordModerationLogFields.user,
+      value: `<@${payload.targetUserId}>`,
+      inline: false,
+    });
 
   if (payload.channelId) {
     embed.addFields({
-      name: "Канал",
-      value: payload.parentChannelId
-        ? `<#${payload.channelId}> (ветка, родитель <#${payload.parentChannelId}>)`
-        : `<#${payload.channelId}>`,
+      name: discordModerationLogFields.channel,
+      value: discordModerationLogChannelFieldValue(payload.channelId, payload.parentChannelId),
       inline: false,
     });
   }
-  if (payload.severity) embed.addFields({ name: "Тип", value: payload.severity, inline: true });
   if (payload.minorWarningsInChannel !== undefined) {
-    embed.addFields({ name: "Предупреждений (минор, канал)", value: String(payload.minorWarningsInChannel), inline: true });
-  }
-  if (payload.minorMuteTierBefore !== undefined && payload.minorMuteTierAfter !== undefined) {
     embed.addFields({
-      name: "Minor tier",
-      value: `${payload.minorMuteTierBefore} → ${payload.minorMuteTierAfter}`,
-      inline: true,
-    });
-  }
-  if (payload.majorMuteTierBefore !== undefined && payload.majorMuteTierAfter !== undefined) {
-    embed.addFields({
-      name: "Major tier",
-      value: `${payload.majorMuteTierBefore} → ${payload.majorMuteTierAfter}`,
+      name: discordModerationLogFields.minorWarningsChannel,
+      value: `${payload.minorWarningsInChannel}/${DISCORD_WARNINGS_BEFORE_TIMEOUT}`,
       inline: true,
     });
   }
   if (payload.timeoutMs !== undefined) {
-    embed.addFields({ name: "Таймаут", value: `${Math.round(payload.timeoutMs / 60000)} мин`, inline: true });
-  }
-  if (payload.messageId && payload.channelId) {
     embed.addFields({
-      name: "Сообщение",
-      value: `https://discord.com/channels/${guild.id}/${payload.channelId}/${payload.messageId}`,
-      inline: false,
+      name: discordModerationLogFields.timeout,
+      value: discordModerationLogFields.timeoutMinutes(Math.round(payload.timeoutMs / 60000)),
+      inline: true,
     });
   }
   if (payload.messageExcerpt) {
-    embed.addFields({ name: "Фрагмент", value: payload.messageExcerpt.slice(0, 1000), inline: false });
+    embed.addFields({
+      name: discordModerationLogFields.excerpt,
+      value: payload.messageExcerpt.slice(0, 1000),
+      inline: false,
+    });
   }
   if (payload.staffUserId) {
-    embed.addFields({ name: "Модератор", value: `<@${payload.staffUserId}>`, inline: false });
+    embed.addFields({
+      name: discordModerationLogFields.moderator,
+      value: `<@${payload.staffUserId}>`,
+      inline: false,
+    });
   }
   if (payload.color !== undefined) embed.setColor(payload.color);
   embed.setTimestamp(new Date());
 
-  await ch.send({ embeds: [embed] }).catch((err) => {
+  const files = payload.logFiles?.length
+    ? payload.logFiles.map((f) => ({ attachment: f.url, name: f.name.slice(0, 80) || "file" }))
+    : undefined;
+
+  try {
+    return await ch.send({ embeds: [embed], ...(files?.length ? { files } : {}) });
+  } catch (err) {
     console.error("Moderation log channel send failed:", err);
-  });
+    return undefined;
+  }
+}
+
+export type StaffModerationSummaryAction = "mute" | "unmute" | "warn" | "unwarn" | "ban" | "unban";
+
+/** One-line digest for staff (manual commands only). Requires both log channel message id and env summary channel. */
+export async function postStaffModerationSummary(
+  guild: Guild,
+  opts: { staffUserId: string; action: StaffModerationSummaryAction; logMessage: Message | undefined },
+): Promise<void> {
+  if (!DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID || !opts.logMessage?.id) return;
+  const logChannelId = DISCORD_MODERATION_LOG_CHANNEL_ID;
+  if (!logChannelId) return;
+
+  const ch = await guild.channels.fetch(DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID).catch(() => null);
+  if (!ch?.isTextBased() || !("send" in ch)) return;
+
+  const url = `https://discord.com/channels/${guild.id}/${logChannelId}/${opts.logMessage.id}`;
+  const id = opts.staffUserId;
+  let content: string;
+  switch (opts.action) {
+    case "mute":
+      content = staffSumTxt.lineMute(id, url);
+      break;
+    case "unmute":
+      content = staffSumTxt.lineUnmute(id, url);
+      break;
+    case "warn":
+      content = staffSumTxt.lineWarn(id, url);
+      break;
+    case "unwarn":
+      content = staffSumTxt.lineUnwarn(id, url);
+      break;
+    case "ban":
+      content = staffSumTxt.lineBan(id, url);
+      break;
+    case "unban":
+      content = staffSumTxt.lineUnban(id, url);
+      break;
+    default:
+      return;
+  }
+
+  try {
+    await ch.send({ content: content.slice(0, 2000) });
+  } catch (err) {
+    console.error("Moderation staff summary channel send failed:", err);
+  }
 }

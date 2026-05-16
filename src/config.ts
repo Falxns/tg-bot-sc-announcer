@@ -56,7 +56,7 @@ export const DISCORD_INVITE_ALLOWED_ROLE_IDS = (process.env.DISCORD_INVITE_ALLOW
 export const DISCORD_BLOCK_INVITE_LINKS_GLOBAL = !/^0|false$/i.test(
   process.env.DISCORD_BLOCK_INVITE_LINKS_GLOBAL ?? "0",
 );
-/** @deprecated No longer used; minor mutes use DISCORD_MINOR_TIMEOUT_LADDER_MS. */
+/** Minor warnings in a channel required before the minor-timeout ladder applies (must match automod logic). */
 export const DISCORD_WARNINGS_BEFORE_TIMEOUT = clampParseInt(
   process.env.DISCORD_WARNINGS_BEFORE_TIMEOUT ?? "3",
   1,
@@ -101,6 +101,11 @@ export const DISCORD_MODERATION_DECAY_MS = clampParseInt(
 
 export const DISCORD_MODERATION_LOG_CHANNEL_ID = (process.env.DISCORD_MODERATION_LOG_CHANNEL_ID ?? "").trim();
 
+/** Optional one-line staff digest channel (manual `/mute` `/unmute` `/warn` `/unwarn` only); links to rows in `DISCORD_MODERATION_LOG_CHANNEL_ID`. */
+export const DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID = (
+  process.env.DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID ?? ""
+).trim();
+
 function parseSeverity(raw: unknown, fallback: ViolationSeverity): ViolationSeverity {
   if (raw === "major" || raw === "minor") return raw;
   return fallback;
@@ -133,6 +138,10 @@ function parseDiscordChannelPolicies(raw: string): DiscordChannelPolicyMap {
           : [],
         keywordViolationSeverity: parseSeverity(row.keywordViolationSeverity, "minor"),
         mediaViolationSeverity: parseSeverity(row.mediaViolationSeverity, "minor"),
+        reasonPresetId:
+          typeof row.reasonPresetId === "string" && row.reasonPresetId.trim().length > 0
+            ? row.reasonPresetId.trim()
+            : undefined,
       };
       out[channelId] = policy;
     }
@@ -180,6 +189,29 @@ export const chatIds = TELEGRAM_CHANNEL_IDS.split(",")
   .map((id) => id.trim())
   .filter(Boolean);
 export const DISCORD_CHANNEL_POLICIES = parseDiscordChannelPolicies(process.env.DISCORD_CHANNEL_POLICIES_JSON ?? "");
+
+function parseModerationReasonChannelIds(raw: string): Record<string, string> {
+  if (!raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [presetId, channelId] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof channelId === "string" && /^\d{17,20}$/.test(channelId.trim())) {
+        out[presetId] = channelId.trim();
+      }
+    }
+    return out;
+  } catch {
+    console.warn("Invalid DISCORD_MODERATION_REASON_CHANNEL_IDS_JSON, using empty map.");
+    return {};
+  }
+}
+
+/** Preset id → Discord channel snowflake for clickable #channel in reason text. */
+export const DISCORD_MODERATION_REASON_CHANNEL_IDS = parseModerationReasonChannelIds(
+  process.env.DISCORD_MODERATION_REASON_CHANNEL_IDS_JSON ?? "",
+);
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

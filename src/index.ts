@@ -8,7 +8,11 @@ import {
   LAST_SEEN_STATE_FILE,
   LOG_LEVEL,
   POLL_INTERVAL_MS,
+  STATE_BACKEND,
   TELEGRAM_BOT_TOKEN,
+  UPSTASH_REDIS_REST_TOKEN,
+  UPSTASH_REDIS_REST_URL,
+  UPSTASH_STATE_KEY,
 } from "./config";
 import { startDiscordBot, stopDiscordBot } from "./discord/bot";
 import { pollExboAndAnnounce } from "./exbo";
@@ -58,6 +62,19 @@ if (PORT) {
 
 bot
   .launch(async () => {
+    if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
+      if (STATE_BACKEND === "upstash") {
+        console.log(`State backend: upstash (key ${UPSTASH_STATE_KEY})`);
+      } else {
+        console.log(`State backend: file (${LAST_SEEN_STATE_FILE})`);
+        if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
+          console.warn(
+            "UPSTASH_REDIS_REST_URL/TOKEN are set but STATE_BACKEND is not 'upstash'. " +
+              "On Render the filesystem is ephemeral — set STATE_BACKEND=upstash or state will reset every deploy.",
+          );
+        }
+      }
+    }
     await loadState(LAST_SEEN_STATE_FILE);
     await startDiscordBot();
     if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {

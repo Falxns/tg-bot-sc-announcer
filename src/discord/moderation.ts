@@ -1,5 +1,13 @@
 import type { Attachment } from "discord.js";
-import { EmbedBuilder, escapeMarkdown, GuildMember, Message } from "discord.js";
+import {
+  ChatInputCommandInteraction,
+  EmbedBuilder,
+  escapeMarkdown,
+  Guild,
+  GuildMember,
+  Message,
+  User,
+} from "discord.js";
 import {
   DISCORD_BLOCK_INVITE_LINKS_GLOBAL,
   DISCORD_CHANNEL_POLICIES,
@@ -9,12 +17,26 @@ import {
   DISCORD_MINOR_TIMEOUT_LADDER_MS,
   DISCORD_MODERATION_DECAY_MS,
   DISCORD_SPAM_FILTER_CHANNEL_IDS,
+  DISCORD_WARNINGS_BEFORE_TIMEOUT,
   DISCORD_WARNING_MESSAGE_TTL_MS,
   LAST_SEEN_STATE_FILE,
   LOG_LEVEL,
 } from "../config";
 import type { DiscordChannelPolicy, ViolationSeverity } from "./types";
 import { logModerationEvent } from "./moderationLog";
+import {
+  buildChannelPurposeReason,
+  channelIdForReasonPreset,
+  formatChannelLineForEmbed,
+  formatReasonForEmbed,
+  reasonPlainTextForAudit,
+} from "./moderationReasonPresets";
+import {
+  discordAutoMod as autoTxt,
+  discordFormatDurationRu,
+  discordModerationCommands as modTxt,
+  discordModerationLogTitles as logTitles,
+} from "./userStrings";
 import {
   applyModerationDecayIfNeeded,
   consumeMajorMuteTierForApply,
@@ -26,10 +48,9 @@ import {
   touchModerationViolation,
 } from "../state";
 
-const MINOR_WARN_THRESHOLD = 3;
 /** Discord “red” for moderation user notices */
 const MODERATION_USER_EMBED_COLOR = 0xed4245;
-const SPAM_DUPLICATE_REASON = "Повтор одного и того же сообщения подряд (спам).";
+const SPAM_DUPLICATE_REASON = autoTxt.spamDuplicateReason;
 const SPAM_NORMALIZE_MAX_LEN = 1000;
 /** Option F hybrid: max |len(a)−len(b)| for skeleton-based “almost duplicate” (decorated same core). */
 const SPAM_HYBRID_MAX_LEN_DELTA = 8;
@@ -83,6 +104,19 @@ function collectSearchableText(message: Message): string {
       if (f.name) parts.push(f.name);
       if (f.value) parts.push(f.value);
     }
+  }
+  return parts.join("\n");
+}
+
+/**
+ * Text used only for Discord invite detection. Intentionally excludes embed title/description/footer:
+ * rich previews (e.g. YouTube) often repeat the video description, which may contain third-party
+ * `discord.gg` links — that would falsely trigger invite moderation while the user only pasted a video URL.
+ */
+function collectInviteScanText(message: Message): string {
+  const parts: string[] = [message.content];
+  for (const e of message.embeds) {
+    if (e.url) parts.push(e.url);
   }
   return parts.join("\n");
 }
@@ -263,6 +297,7 @@ function detectViolations(
   member: GuildMember,
   ctx: PolicyContext,
   searchable: string,
+  inviteScanText: string,
   lowerSearch: string,
   attachments: readonly Attachment[],
 ): ViolationHit | null {
@@ -273,9 +308,9 @@ function detectViolations(
   const allowInvitesInChannel = policy?.allowDiscordInvites === true;
   const shouldCheckInvites =
     !allowInvitesInChannel && (DISCORD_BLOCK_INVITE_LINKS_GLOBAL || policy?.blockInviteLinks === true);
-  if (shouldCheckInvites && hasExternalInvite(searchable) && !hasAnyRole(member, inviteRoleAllow)) {
+  if (shouldCheckInvites && hasExternalInvite(inviteScanText) && !hasAnyRole(member, inviteRoleAllow)) {
     const sev = policy?.inviteViolationSeverity ?? "major";
-    hits.push({ reason: "В этом канале запрещены приглашения Discord.", severity: sev });
+    hits.push({ reason: autoTxt.invitesForbidden, severity: sev });
   }
 
   if (DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST.length > 0) {
@@ -284,7 +319,7 @@ function detectViolations(
       try {
         const host = new URL(url).hostname.replace(/^\[+|\]+$/g, "").toLowerCase();
         if (hostMatchesBlacklist(host, DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST)) {
-          hits.push({ reason: `Ссылка на запрещённый домен: ${host}`, severity: "major" });
+          hits.push({ reason: autoTxt.forbiddenDomain(host), severity: "major" });
           break;
         }
       } catch {
@@ -297,7 +332,7 @@ function detectViolations(
     const hasVideo = attachments.some((a) => isVideoAttachment(a.contentType, a.name ?? ""));
     if (hasVideo) {
       hits.push({
-        reason: "В этом канале запрещены видеовложения.",
+        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.videoForbidden),
         severity: policy.mediaViolationSeverity ?? "minor",
       });
     }
@@ -306,14 +341,14 @@ function detectViolations(
     const hasImage = attachments.some((a) => isImageAttachment(a.contentType, a.name ?? ""));
     if (hasImage) {
       hits.push({
-        reason: "В этом канале запрещены изображения.",
+        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.imageForbidden),
         severity: policy.mediaViolationSeverity ?? "minor",
       });
     }
   }
   if (policy?.blockText && message.content.trim().length > 0) {
     hits.push({
-      reason: "В этом канале запрещены текстовые сообщения.",
+      reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.textForbidden),
       severity: policy.mediaViolationSeverity ?? "minor",
     });
   }
@@ -321,7 +356,7 @@ function detectViolations(
     const hit = policy.blockedKeywords.find((w) => lowerSearch.includes(w));
     if (hit) {
       hits.push({
-        reason: `Обнаружено запрещённое слово: «${hit}».`,
+        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.keywordHit(hit)),
         severity: policy.keywordViolationSeverity ?? "minor",
       });
     }
@@ -330,6 +365,23 @@ function detectViolations(
   if (hits.length === 0) return null;
   const major = hits.find((h) => h.severity === "major");
   return major ?? hits[0];
+}
+
+function mediaViolationReason(
+  policy: DiscordChannelPolicy | undefined,
+  scopeChannelId: string,
+  fallback: string,
+): string {
+  const presetId = policy?.reasonPresetId?.trim();
+  if (!presetId) return fallback;
+  const channelId = channelIdForReasonPreset(presetId, scopeChannelId) ?? scopeChannelId;
+  return buildChannelPurposeReason(presetId, channelId) ?? fallback;
+}
+
+function moderationEmbedChannelId(message: Message): string {
+  const ch = message.channel;
+  if (ch && "isThread" in ch && ch.isThread() && ch.parentId) return ch.parentId;
+  return message.channelId;
 }
 
 function moderationLogUserLabel(member: GuildMember, author: Message["author"]): string {
@@ -354,17 +406,6 @@ async function deleteLater(message: Message, delayMs: number): Promise<void> {
   setTimeout(() => {
     void message.delete().catch(() => undefined);
   }, delayMs);
-}
-
-function formatDurationRu(ms: number): string {
-  const totalMin = Math.round(ms / 60_000);
-  if (totalMin < 60) return `${totalMin} мин.`;
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (totalMin < 1440) return m > 0 ? `${h} ч ${m} мин.` : `${h} ч`;
-  const d = Math.floor(totalMin / 1440);
-  const remH = Math.floor((totalMin % 1440) / 60);
-  return remH > 0 ? `${d} д ${remH} ч` : `${d} д`;
 }
 
 /** Prefer human-readable channel/thread name; fetch if missing from cache. */
@@ -407,42 +448,38 @@ async function buildModerationUserNoticeEmbed(
   notice: ModerationUserNotice,
 ): Promise<EmbedBuilder> {
   const guild = message.guild;
-  const guildName = (guild?.name ?? "Сервер").trim() || "Сервер";
-  const channelName = await resolveModerationChannelName(message);
+  const guildName = (guild?.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
+  const channelId = moderationEmbedChannelId(message);
   const nick = (member.displayName ?? member.user.username).trim() || member.user.username;
   const userId = member.id;
 
   const lines: string[] = [`<@${userId}>`, ""];
-  lines.push(`**Сервер:** **${escapeMarkdown(guildName)}**`);
-  lines.push(`**Канал:** **${escapeMarkdown(channelName)}**`);
-  lines.push(`**Ник на сервере:** **${escapeMarkdown(nick)}**`);
+  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
+  lines.push(formatChannelLineForEmbed(channelId, autoTxt.labelChannel));
+  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
-  lines.push(`**Причина**`);
-  lines.push(escapeMarkdown(notice.reason));
+  lines.push(`**${autoTxt.labelReason}**`);
+  lines.push(formatReasonForEmbed(notice.reason));
 
   if (notice.kind === "minor") {
     lines.push("");
-    lines.push(
-      `**Предупреждения в этом канале:** **${notice.warnCount}** (порог таймаута: **${MINOR_WARN_THRESHOLD}**).`,
-    );
+    lines.push(autoTxt.labelWarnCount(notice.warnCount, DISCORD_WARNINGS_BEFORE_TIMEOUT));
     if (notice.timeoutMs !== undefined) {
       lines.push("");
-      lines.push(`**Таймаут:** **${escapeMarkdown(formatDurationRu(notice.timeoutMs))}**`);
+      lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(notice.timeoutMs))}**`);
     }
   } else {
     lines.push("");
     if (notice.outcome === "applied" && notice.timeoutMs !== undefined) {
-      lines.push(`**Таймаут:** **${escapeMarkdown(formatDurationRu(notice.timeoutMs))}**`);
+      lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(notice.timeoutMs))}**`);
     } else if (notice.outcome === "api_error") {
-      lines.push("**Таймаут:** не удалось применить (ошибка Discord API).");
+      lines.push(autoTxt.timeoutApplyFail);
     } else {
-      lines.push(
-        "**Таймаут:** не применён — бот не может замутить этого пользователя (проверьте иерархию ролей).",
-      );
+      lines.push(autoTxt.timeoutNotModeratable);
     }
   }
 
-  const title = notice.kind === "major" ? "Серьёзное нарушение" : "Предупреждение";
+  const title = notice.kind === "major" ? autoTxt.titleMajor : autoTxt.titleMinor;
   const description = lines.join("\n").slice(0, 4096);
 
   return new EmbedBuilder()
@@ -450,7 +487,7 @@ async function buildModerationUserNoticeEmbed(
     .setTitle(title)
     .setDescription(description)
     .setTimestamp(new Date())
-    .setFooter({ text: "Автоматическая модерация" });
+    .setFooter({ text: autoTxt.embedFooter });
 }
 
 async function notifyUserModerationEmbed(message: Message, member: GuildMember, embed: EmbedBuilder): Promise<void> {
@@ -465,6 +502,179 @@ async function notifyUserModerationEmbed(message: Message, member: GuildMember, 
   }
 }
 
+/** DM (+ ephemeral fallback to command channel) for manual `/mute`, `/warn`, `/unmute` — mirrors {@link notifyUserModerationEmbed}. */
+export async function notifyStaffModerationUser(
+  interaction: ChatInputCommandInteraction,
+  member: GuildMember,
+  embed: EmbedBuilder,
+): Promise<void> {
+  try {
+    await member.send({ embeds: [embed] });
+  } catch {
+    const ch = interaction.channel;
+    if (ch?.isTextBased() && "send" in ch) {
+      const notice = await ch.send({ embeds: [embed] }).catch(() => null);
+      if (notice) await deleteLater(notice, DISCORD_WARNING_MESSAGE_TTL_MS);
+    }
+  }
+}
+
+/** DM (+ ephemeral fallback to command channel) for `/ban` / `/unban` when the target may not be a guild member. */
+export async function notifyStaffUserDmFallback(
+  interaction: ChatInputCommandInteraction,
+  user: User,
+  embed: EmbedBuilder,
+): Promise<void> {
+  try {
+    await user.send({ embeds: [embed] });
+  } catch {
+    const ch = interaction.channel;
+    if (ch?.isTextBased() && "send" in ch) {
+      const notice = await ch.send({ embeds: [embed] }).catch(() => null);
+      if (notice) await deleteLater(notice, DISCORD_WARNING_MESSAGE_TTL_MS);
+    }
+  }
+}
+
+export function buildStaffManualMuteEmbed(opts: {
+  guild: Guild;
+  member: GuildMember;
+  channelId: string;
+  reason: string;
+  timeoutMs: number;
+}): EmbedBuilder {
+  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
+  const nick = (opts.member.displayName ?? opts.member.user.username).trim() || opts.member.user.username;
+  const userId = opts.member.id;
+  const lines: string[] = [`<@${userId}>`, ""];
+  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
+  lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
+  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
+  lines.push("");
+  lines.push(`**${autoTxt.labelReason}**`);
+  lines.push(formatReasonForEmbed(opts.reason));
+  lines.push("");
+  lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(opts.timeoutMs))}**`);
+  const description = lines.join("\n").slice(0, 4096);
+  return new EmbedBuilder()
+    .setColor(MODERATION_USER_EMBED_COLOR)
+    .setTitle(modTxt.staffDmTitleMute)
+    .setDescription(description)
+    .setTimestamp(new Date())
+    .setFooter({ text: modTxt.staffDmFooter });
+}
+
+export function buildStaffManualWarnEmbed(opts: {
+  guild: Guild;
+  member: GuildMember;
+  channelId: string;
+  reason: string;
+  warnCount: number;
+  timeoutMs?: number;
+}): EmbedBuilder {
+  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
+  const nick = (opts.member.displayName ?? opts.member.user.username).trim() || opts.member.user.username;
+  const userId = opts.member.id;
+  const lines: string[] = [`<@${userId}>`, ""];
+  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
+  lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
+  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
+  lines.push("");
+  lines.push(`**${autoTxt.labelReason}**`);
+  lines.push(formatReasonForEmbed(opts.reason));
+  lines.push("");
+  lines.push(autoTxt.labelWarnCount(opts.warnCount, DISCORD_WARNINGS_BEFORE_TIMEOUT));
+  if (opts.timeoutMs !== undefined) {
+    lines.push("");
+    lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(opts.timeoutMs))}**`);
+  }
+  const description = lines.join("\n").slice(0, 4096);
+  return new EmbedBuilder()
+    .setColor(MODERATION_USER_EMBED_COLOR)
+    .setTitle(modTxt.staffDmTitleWarn)
+    .setDescription(description)
+    .setTimestamp(new Date())
+    .setFooter({ text: modTxt.staffDmFooter });
+}
+
+export function buildStaffManualUnmuteEmbed(opts: {
+  guild: Guild;
+  member: GuildMember;
+  channelId: string;
+}): EmbedBuilder {
+  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
+  const nick = (opts.member.displayName ?? opts.member.user.username).trim() || opts.member.user.username;
+  const userId = opts.member.id;
+  const lines: string[] = [`<@${userId}>`, ""];
+  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
+  lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
+  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
+  lines.push("");
+  lines.push(escapeMarkdown(modTxt.staffDmUnmuteBody));
+  const description = lines.join("\n").slice(0, 4096);
+  return new EmbedBuilder()
+    .setColor(MODERATION_USER_EMBED_COLOR)
+    .setTitle(modTxt.staffDmTitleUnmute)
+    .setDescription(description)
+    .setTimestamp(new Date())
+    .setFooter({ text: modTxt.staffDmFooter });
+}
+
+export function buildStaffManualBanEmbed(opts: {
+  guild: Guild;
+  targetUser: User;
+  member: GuildMember | null;
+  channelId: string;
+  reason: string;
+}): EmbedBuilder {
+  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
+  const nick = (
+    opts.member?.displayName ??
+    opts.targetUser.globalName ??
+    opts.targetUser.username
+  ).trim();
+  const userId = opts.targetUser.id;
+  const lines: string[] = [`<@${userId}>`, ""];
+  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
+  lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
+  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
+  lines.push("");
+  lines.push(`**${autoTxt.labelReason}**`);
+  lines.push(formatReasonForEmbed(opts.reason));
+  lines.push("");
+  lines.push(escapeMarkdown(modTxt.staffDmBanPermanentLine));
+  const description = lines.join("\n").slice(0, 4096);
+  return new EmbedBuilder()
+    .setColor(MODERATION_USER_EMBED_COLOR)
+    .setTitle(modTxt.staffDmTitleBan)
+    .setDescription(description)
+    .setTimestamp(new Date())
+    .setFooter({ text: modTxt.staffDmFooter });
+}
+
+export function buildStaffManualUnbanEmbed(opts: {
+  guild: Guild;
+  user: User;
+  channelId: string;
+}): EmbedBuilder {
+  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
+  const nick = (opts.user.globalName ?? opts.user.username).trim();
+  const userId = opts.user.id;
+  const lines: string[] = [`<@${userId}>`, ""];
+  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
+  lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
+  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
+  lines.push("");
+  lines.push(escapeMarkdown(modTxt.staffDmUnbanFromServerBody));
+  const description = lines.join("\n").slice(0, 4096);
+  return new EmbedBuilder()
+    .setColor(MODERATION_USER_EMBED_COLOR)
+    .setTitle(modTxt.staffDmTitleUnbanFromServer)
+    .setDescription(description)
+    .setTimestamp(new Date())
+    .setFooter({ text: modTxt.staffDmFooter });
+}
+
 export async function handleModerationMessage(message: Message): Promise<void> {
   if (!message.inGuild()) return;
   if (message.author.bot || message.system) return;
@@ -473,6 +683,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
 
   const ctx = resolvePolicyContext(message);
   const searchable = collectSearchableText(message);
+  const inviteScanText = collectInviteScanText(message);
   const lowerSearch = searchable.toLowerCase();
   const attachments = [...message.attachments.values()];
 
@@ -481,7 +692,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     violation = await trySpamDuplicateViolation(message);
   }
   if (!violation) {
-    violation = detectViolations(message, member, ctx, searchable, lowerSearch, attachments);
+    violation = detectViolations(message, member, ctx, searchable, inviteScanText, lowerSearch, attachments);
   }
   if (!violation) return;
 
@@ -491,7 +702,6 @@ export async function handleModerationMessage(message: Message): Promise<void> {
   applyModerationDecayIfNeeded(guildId, userId, now, DISCORD_MODERATION_DECAY_MS);
 
   const excerpt = `${message.content}`.slice(0, 400);
-  const msgId = message.id;
 
   try {
     await message.delete();
@@ -511,7 +721,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     let majorTimeoutApplied = false;
     if (member.moderatable) {
       try {
-        await member.timeout(ms, `Автомодерация (major): ${violation.reason}`.slice(0, 500));
+        await member.timeout(ms, reasonPlainTextForAudit(autoTxt.timeoutMajor(violation.reason)));
         consumeMajorMuteTierForApply(guildId, userId, lastIdx);
         tierAfter = getMajorMuteTier(guildId, userId);
         majorTimeoutApplied = true;
@@ -523,17 +733,13 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     await saveState(LAST_SEEN_STATE_FILE);
 
     await logModerationEvent(message.guild!, {
-      title: "Major: таймаут",
+      title: logTitles.majorTimeout,
       color: 0xcc3333,
       targetUserId: userId,
       channelId: ctx.sourceChannelId,
       parentChannelId: ctx.parentChannelId,
       reason: violation.reason,
-      severity: "major",
-      majorMuteTierBefore: tierBefore,
-      majorMuteTierAfter: tierAfter,
       timeoutMs: ms,
-      messageId: msgId,
       messageExcerpt: excerpt,
     });
 
@@ -562,12 +768,12 @@ export async function handleModerationMessage(message: Message): Promise<void> {
   const tierMinorBefore = getMinorMuteTier(guildId, userId);
   let tierMinorAfter = tierMinorBefore;
 
-  if (warnCount >= MINOR_WARN_THRESHOLD && member.moderatable) {
+  if (warnCount >= DISCORD_WARNINGS_BEFORE_TIMEOUT && member.moderatable) {
     const tb = getMinorMuteTier(guildId, userId);
     const idx = Math.min(tb, lastMinorIdx);
     const ms = DISCORD_MINOR_TIMEOUT_LADDER_MS[idx] ?? DISCORD_MINOR_TIMEOUT_LADDER_MS[lastMinorIdx];
     try {
-      await member.timeout(ms, `Автомодерация (minor): ${violation.reason}`.slice(0, 500));
+      await member.timeout(ms, reasonPlainTextForAudit(autoTxt.timeoutMinor(violation.reason)));
       consumeMinorMuteTierForApply(guildId, userId, lastMinorIdx);
       tierMinorAfter = getMinorMuteTier(guildId, userId);
       timeoutMs = ms;
@@ -587,18 +793,14 @@ export async function handleModerationMessage(message: Message): Promise<void> {
   await notifyUserModerationEmbed(message, member, minorEmbed);
 
   await logModerationEvent(message.guild!, {
-    title: timeoutMs !== undefined ? "Minor: предупреждение + таймаут" : "Minor: предупреждение",
+    title: timeoutMs !== undefined ? logTitles.minorWarnTimeout : logTitles.minorWarnOnly,
     color: timeoutMs !== undefined ? 0xcc8833 : 0x3388cc,
     targetUserId: userId,
     channelId: ctx.sourceChannelId,
     parentChannelId: ctx.parentChannelId,
     reason: violation.reason,
-    severity: "minor",
     minorWarningsInChannel: warnCount,
-    minorMuteTierBefore: tierMinorBefore,
-    minorMuteTierAfter: tierMinorAfter,
     timeoutMs,
-    messageId: msgId,
     messageExcerpt: excerpt,
   });
 

@@ -36,14 +36,18 @@ class UpstashStateStore implements StateStore {
   private readonly key: string;
 
   constructor(url: string, token: string, key: string) {
-    this.redis = new Redis({ url, token });
+    // We persist a JSON string; without this, get() auto-parses it into an object and loadState sees "no data".
+    this.redis = new Redis({ url, token, automaticDeserialization: false });
     this.key = key;
   }
 
   async readState(): Promise<string | null> {
-    const raw = await this.redis.get<string>(this.key);
-    if (typeof raw !== "string") return null;
-    return raw;
+    const raw = await this.redis.get(this.key);
+    if (raw === null || raw === undefined) return null;
+    if (typeof raw === "string") return raw;
+    // Legacy rows written before automaticDeserialization: false (SDK returned parsed object).
+    if (typeof raw === "object") return JSON.stringify(raw);
+    return null;
   }
 
   async writeState(json: string): Promise<void> {
