@@ -31,6 +31,7 @@ import {
 } from "./moderation";
 import {
   adjustGlobalWarnCount,
+  adjustMuteTier,
   applyModerationDecayIfNeeded,
   discordModerationLastViolationAt,
   getGlobalWarnCount,
@@ -38,6 +39,7 @@ import {
   guildUserKey,
   saveState,
   setGlobalWarnCount,
+  setMuteTier,
   touchModerationViolation,
 } from "../state";
 import {
@@ -228,8 +230,27 @@ export const unwarnSlashCommand = new SlashCommandBuilder()
   .addIntegerOption((o) =>
     o.setName("amount").setDescription(slashModTxt.unwarn.amount).setMinValue(1).setMaxValue(20).setRequired(false),
   )
-  .addBooleanOption((o) =>
-    o.setName("clear").setDescription(slashModTxt.unwarn.clear).setRequired(false),
+  .addStringOption((o) =>
+    o
+      .setName("reset_warnings")
+      .setDescription(slashModTxt.unwarn.resetWarningsChoice)
+      .addChoices({ name: slashModTxt.unwarn.resetWarningsLabel, value: "all" })
+      .setRequired(false),
+  )
+  .addStringOption((o) =>
+    o
+      .setName("reset_ladder")
+      .setDescription(slashModTxt.unwarn.resetLadderChoice)
+      .addChoices({ name: slashModTxt.unwarn.resetLadderLabel, value: "all" })
+      .setRequired(false),
+  )
+  .addIntegerOption((o) =>
+    o
+      .setName("lower_ladder")
+      .setDescription(slashModTxt.unwarn.lowerLadder)
+      .setMinValue(1)
+      .setMaxValue(20)
+      .setRequired(false),
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
@@ -582,19 +603,71 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
 
   if (name === "unwarn") {
     const target = interaction.options.getUser("user", true);
-    const amount = interaction.options.getInteger("amount") ?? 1;
-    const clear = interaction.options.getBoolean("clear") === true;
+    const resetWarnings = interaction.options.getString("reset_warnings") === "all";
+    const resetLadder = interaction.options.getString("reset_ladder") === "all";
+    const lowerLadderRaw = interaction.options.getInteger("lower_ladder");
+    const amountOpt = interaction.options.getInteger("amount");
     if (target.bot) {
       await interaction.reply({ content: modTxt.unmuteBadTarget, flags: MessageFlags.Ephemeral });
       return;
     }
-    const before = getGlobalWarnCount(guild.id, target.id);
-    let after: number;
-    if (clear) {
-      after = setGlobalWarnCount(guild.id, target.id, 0);
-    } else {
-      after = adjustGlobalWarnCount(guild.id, target.id, -amount);
+
+    const ladderTouched = resetLadder || (lowerLadderRaw !== null && lowerLadderRaw > 0);
+    let warnTouched = resetWarnings || amountOpt !== null;
+    if (!ladderTouched && !warnTouched) {
+      warnTouched = true;
     }
+
+    if (resetWarnings && amountOpt !== null) {
+      await interaction.reply({
+        content: modTxt.unwarnResetWarningsWithAmount,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (resetLadder && lowerLadderRaw !== null) {
+      await interaction.reply({
+        content: modTxt.unwarnResetLadderWithLower,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const reasonParts: string[] = [];
+    const replyLines: string[] = [];
+
+    let warnAfter: number | undefined;
+    if (warnTouched) {
+      const warnBefore = getGlobalWarnCount(guild.id, target.id);
+      if (resetWarnings) {
+        warnAfter = setGlobalWarnCount(guild.id, target.id, 0);
+        reasonParts.push(modTxt.unwarnReasonClear);
+      } else {
+        const amount = amountOpt ?? 1;
+        warnAfter = adjustGlobalWarnCount(guild.id, target.id, -amount);
+        reasonParts.push(modTxt.unwarnReasonIncrement(amount));
+      }
+      replyLines.push(
+        modTxt.unwarnDoneWarnings(target.id, warnBefore, warnAfter, DISCORD_WARNINGS_BEFORE_TIMEOUT),
+      );
+    }
+
+    let tierAfter: number | undefined;
+    if (ladderTouched) {
+      const tierBefore = getMuteTier(guild.id, target.id);
+      if (resetLadder) {
+        tierAfter = setMuteTier(guild.id, target.id, 0);
+        reasonParts.push(modTxt.unwarnReasonLadderClear);
+      } else {
+        const steps = lowerLadderRaw ?? 1;
+        tierAfter = adjustMuteTier(guild.id, target.id, -steps);
+        reasonParts.push(modTxt.unwarnReasonLadderLower(steps));
+      }
+      replyLines.push(
+        modTxt.unwarnDoneLadder(target.id, tierBefore, tierAfter, DISCORD_TIMEOUT_LADDER_MS.length),
+      );
+    }
+
     await saveState(LAST_SEEN_STATE_FILE);
     const scopeChannelId = moderationScopeChannelIdFromInteraction(interaction);
     const logMsgUnwarn = await logModerationEvent(guild, {
@@ -602,8 +675,8 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       color: 0x888888,
       targetUserId: target.id,
       channelId: scopeChannelId,
-      reason: clear ? modTxt.unwarnReasonClear : modTxt.unwarnReasonIncrement(amount),
-      minorWarningsInChannel: after,
+      reason: reasonParts.join("; ") || modTxt.unwarnReasonClear,
+      minorWarningsInChannel: warnAfter,
       staffUserId: interaction.user.id,
     });
     await postStaffModerationSummary(guild, {
@@ -612,7 +685,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       logMessage: logMsgUnwarn,
     });
     await interaction.reply({
-      content: modTxt.strikeCounts(target.id, before, after, DISCORD_WARNINGS_BEFORE_TIMEOUT),
+      content: replyLines.join("\n"),
       flags: MessageFlags.Ephemeral,
     });
     return;

@@ -140,6 +140,20 @@ export const DISCORD_STAFF_SUMMARY_ROLE_AUDIT_DELAY_MS = clampParseInt(
   10_000,
 );
 
+/** Wait for role rename after create before posting digest (ms); `roleUpdate` can post sooner. */
+export const DISCORD_STAFF_SUMMARY_ROLE_CREATE_NAME_WAIT_MS = clampParseInt(
+  process.env.DISCORD_STAFF_SUMMARY_ROLE_CREATE_NAME_WAIT_MS ?? "60000",
+  2000,
+  60_000,
+);
+
+/** Merge same mod + role assign/remove into one summary line with (+N) counter (ms). */
+export const DISCORD_STAFF_SUMMARY_ROLE_CHANGE_BATCH_MS = clampParseInt(
+  process.env.DISCORD_STAFF_SUMMARY_ROLE_CHANGE_BATCH_MS ?? "300000",
+  10_000,
+  600_000,
+);
+
 /** Creator post summaries: watch messages in these channel IDs (not threads). */
 export const DISCORD_STAFF_SUMMARY_CREATOR_CHANNEL_IDS = parseCommaSeparatedIds(
   process.env.DISCORD_STAFF_SUMMARY_CREATOR_CHANNEL_IDS,

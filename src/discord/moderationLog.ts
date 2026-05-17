@@ -91,15 +91,39 @@ export async function logModerationEvent(guild: Guild, payload: ModerationLogPay
 
 export type StaffModerationSummaryAction = "mute" | "unmute" | "strike" | "unwarn" | "ban" | "unban";
 
-/** One-line digest in `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID` (any source). */
-export async function postStaffSummaryLine(guild: Guild, content: string): Promise<void> {
-  if (!DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID) return;
+async function fetchStaffSummaryChannel(guild: Guild) {
+  if (!DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID) return null;
   const ch = await guild.channels.fetch(DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID).catch(() => null);
-  if (!ch?.isTextBased() || !("send" in ch)) return;
+  if (!ch?.isTextBased() || !("send" in ch)) return null;
+  return ch;
+}
+
+/** One-line digest in `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID` (any source). */
+export async function postStaffSummaryLine(guild: Guild, content: string): Promise<Message | undefined> {
+  const ch = await fetchStaffSummaryChannel(guild);
+  if (!ch) return undefined;
   try {
-    await ch.send({ content: content.slice(0, 2000) });
+    return await ch.send({ content: content.slice(0, 2000) });
   } catch (err) {
     console.error("Staff summary channel send failed:", err);
+    return undefined;
+  }
+}
+
+export async function editStaffSummaryLine(
+  guild: Guild,
+  messageId: string,
+  content: string,
+): Promise<boolean> {
+  const ch = await fetchStaffSummaryChannel(guild);
+  if (!ch) return false;
+  try {
+    const msg = await ch.messages.fetch(messageId);
+    await msg.edit({ content: content.slice(0, 2000) });
+    return true;
+  } catch (err) {
+    console.error("Staff summary channel edit failed:", err);
+    return false;
   }
 }
 

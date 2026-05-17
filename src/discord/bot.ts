@@ -9,6 +9,7 @@ import {
   handleStaffSummaryCreatorMessage,
   handleStaffSummaryMemberUpdate,
   handleStaffSummaryRoleCreate,
+  handleStaffSummaryRoleUpdate,
 } from "./staffSummary";
 
 let discordClient: Client | null = null;
@@ -75,6 +76,12 @@ export async function startDiscordBot(): Promise<void> {
   client.on("roleCreate", (role) => {
     void handleStaffSummaryRoleCreate(role).catch((err) => {
       console.error("Discord staff summary roleCreate handler failed:", err);
+    });
+  });
+
+  client.on("roleUpdate", (oldRole, newRole) => {
+    void handleStaffSummaryRoleUpdate(newRole, oldRole).catch((err) => {
+      console.error("Discord staff summary roleUpdate handler failed:", err);
     });
   });
 
