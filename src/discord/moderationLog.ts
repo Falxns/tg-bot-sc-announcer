@@ -89,7 +89,7 @@ export async function logModerationEvent(guild: Guild, payload: ModerationLogPay
   }
 }
 
-export type StaffModerationSummaryAction = "mute" | "unmute" | "strike" | "unwarn" | "ban" | "unban";
+export type StaffModerationSummaryAction = "mute" | "unmute" | "strike" | "unstrike" | "ban" | "unban";
 
 async function fetchStaffSummaryChannel(guild: Guild) {
   if (!DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID) return null;
@@ -149,8 +149,8 @@ export async function postStaffModerationSummary(
     case "strike":
       content = staffSumTxt.lineStrike(id, url);
       break;
-    case "unwarn":
-      content = staffSumTxt.lineUnwarn(id, url);
+    case "unstrike":
+      content = staffSumTxt.lineUnstrike(id, url);
       break;
     case "ban":
       content = staffSumTxt.lineBan(id, url);

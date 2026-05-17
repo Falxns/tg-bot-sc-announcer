@@ -11,7 +11,7 @@ Telegram + Discord bot service that polls the [Exbo forum](https://forum.exbo.ru
 - Runs a Discord bot in the same process with:
   - admin slash commands `/post` and `/edit` (post or edit bot messages in a target channel)
   - role assignment message buttons via `/rolepanel`
-  - channel-aware moderation (light/major severity, **server-wide strikes**, unified timeout ladder, decay, DM + channel fallback, optional log + staff-summary channels, staff `/mute` `/unmute` `/strike` `/unwarn` `/ban` `/unban` `/modstatus`, optional external-link domain blacklist)
+  - channel-aware moderation (light/major severity, **server-wide strikes**, unified timeout ladder, decay, DM + channel fallback, optional log + staff-summary channels, staff `/mute` `/unmute` `/strike` `/unstrike` `/ban` `/unban` `/modstatus`, optional external-link domain blacklist)
 - Optional HTTP health-check server (e.g. for PaaS readiness probes)
 
 ## Stack
@@ -57,7 +57,7 @@ Edit `.env`:
 | `UPSTASH_REDIS_REST_TOKEN` | No | Upstash Redis REST token (required when `STATE_BACKEND=upstash`) |
 | `UPSTASH_STATE_KEY` | No | Redis key for serialized state JSON (default: `tg-bot-sc-announcer:state`) |
 | `ADMIN_USER_IDS` | No | Comma-separated Telegram user IDs; if empty, all users can use admin commands |
-| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/edit`, `/rolepanel`, `/linkpanel`, `/mute`, `/unmute`, `/strike`, `/unwarn`, `/ban`, `/unban`, `/modstatus` (when empty, any member who passes Discord’s command permissions may use them) |
+| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/edit`, `/rolepanel`, `/linkpanel`, `/mute`, `/unmute`, `/strike`, `/unstrike`, `/ban`, `/unban`, `/modstatus` (when empty, any member who passes Discord’s command permissions may use them) |
 | `DISCORD_ROLE_PANEL_CHANNEL_ID` | No | Restrict `/rolepanel` usage to one channel |
 | `DISCORD_BLOCK_INVITE_LINKS_GLOBAL` | No | `1`/`0` toggle for global Discord invite-link filtering |
 | `DISCORD_INVITE_ALLOWED_ROLE_IDS` | No | Roles allowed to bypass invite-link filter |
@@ -65,7 +65,7 @@ Edit `.env`:
 | `DISCORD_WARNINGS_BEFORE_TIMEOUT` | No | Server-wide strikes before ladder timeouts apply; mod-log shows `n/threshold` (default: **3**) |
 | `DISCORD_MAJOR_MIN_LADDER_STEP` | No | Ladder index for first major automod hit (default **3** = 1 day) |
 | `DISCORD_MODERATION_DECAY_MS` | No | No violations for this long resets global warns + ladder tier (default: 259200000 = 3 days) |
-| `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for **full** moderation audit embeds (**automod** + **manual** `/mute` `/unmute` `/strike` `/unwarn` `/ban` `/unban`) |
+| `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for **full** moderation audit embeds (**automod** + **manual** `/mute` `/unmute` `/strike` `/unstrike` `/ban` `/unban`) |
 | `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID` | No | Optional **one-line** staff digest channel: manual mod commands (link to **`DISCORD_MODERATION_LOG_CHANNEL_ID`**), role creates, creator posts |
 | `DISCORD_STAFF_SUMMARY_ROLE_CREATE_TRACKED_ROLE_IDS` | No | Comma-separated staff role IDs; digest when holder **creates** a guild role or **assigns/removes** a role on a member via audit log (needs **View Audit Log**; excludes bot role-panel toggles) |
 | `DISCORD_STAFF_SUMMARY_ROLE_AUDIT_DELAY_MS` | No | Wait before reading audit log for role events (default **1000** ms; alias: `DISCORD_STAFF_SUMMARY_ROLE_CREATE_AUDIT_DELAY_MS`) |
@@ -114,7 +114,7 @@ Author list and “last seen” state are saved to the state file and restored o
 - `/mute user:<user> duration:<choice> [reason_preset] [reason] [screenshot] [message_id]` — manual timeout at the chosen duration (not `DISCORD_TIMEOUT_LADDER_MS[tier]`); caps server-wide strikes at **`DISCORD_WARNINGS_BEFORE_TIMEOUT`** and advances the unified ladder tier on success; **`duration`**: 1h, 6h, 12h, 1d, 3d, 7d, 14d, 28d; **`reason_preset`** autocomplete; **`reason`** overrides preset; optional **`screenshot`** and **`message_id`**
 - `/unmute user:<user>` — clears Discord timeout
 - `/strike user:<user> [amount] [reason_preset] [reason] [screenshot] [message_id]` — same light path as automod: +**global** strike(s); warn-only below **`DISCORD_WARNINGS_BEFORE_TIMEOUT`**, else timeout at **`DISCORD_TIMEOUT_LADDER_MS`** current tier; DM title **«Предупреждение»** or **«Наказание»** when timed out
-- `/unwarn user:<user> [amount] [reset_warnings] [reset_ladder] [lower_ladder]` — decrease or reset **server-wide** strikes and/or timeout ladder tier
+- `/unstrike user:<user> [amount] [reset_warnings] [reset_ladder] [lower_ladder]` — decrease or reset **server-wide** strikes and/or timeout ladder tier
 - `/ban user:<user> [reason_preset] [reason] [screenshot] [message_id]` — permanent server ban; **`reason_preset`** / **`reason`** same as **`/mute`**; tries to **DM** the user **before** banning
 - `/unban user:<user> | user_id:<snowflake>` — remove server ban; specify **either** **`user`** **or** **`user_id`** (use **`user_id`** when the account does not appear in the picker); DM after unban when possible
 - `/modstatus user:<user>` — read-only: active Discord **timeout** (with **`<t:…>`** end time), **global** strikes (`n` / **`DISCORD_WARNINGS_BEFORE_TIMEOUT`**), **next** unified ladder step/duration, and last-violation / **decay** hint for **`DISCORD_MODERATION_DECAY_MS`** (no state changed)

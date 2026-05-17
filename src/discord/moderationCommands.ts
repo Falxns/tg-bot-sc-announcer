@@ -223,31 +223,31 @@ export const strikeSlashCommand = new SlashCommandBuilder()
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
-export const unwarnSlashCommand = new SlashCommandBuilder()
-  .setName("unwarn")
-  .setDescription(slashModTxt.unwarn.commandDescription)
+export const unstrikeSlashCommand = new SlashCommandBuilder()
+  .setName("unstrike")
+  .setDescription(slashModTxt.unstrike.commandDescription)
   .addUserOption((o) => o.setName("user").setDescription(slashModTxt.userOption).setRequired(true))
   .addIntegerOption((o) =>
-    o.setName("amount").setDescription(slashModTxt.unwarn.amount).setMinValue(1).setMaxValue(20).setRequired(false),
+    o.setName("amount").setDescription(slashModTxt.unstrike.amount).setMinValue(1).setMaxValue(20).setRequired(false),
   )
   .addStringOption((o) =>
     o
       .setName("reset_warnings")
-      .setDescription(slashModTxt.unwarn.resetWarningsChoice)
-      .addChoices({ name: slashModTxt.unwarn.resetWarningsLabel, value: "all" })
+      .setDescription(slashModTxt.unstrike.resetWarningsChoice)
+      .addChoices({ name: slashModTxt.unstrike.resetWarningsLabel, value: "all" })
       .setRequired(false),
   )
   .addStringOption((o) =>
     o
       .setName("reset_ladder")
-      .setDescription(slashModTxt.unwarn.resetLadderChoice)
-      .addChoices({ name: slashModTxt.unwarn.resetLadderLabel, value: "all" })
+      .setDescription(slashModTxt.unstrike.resetLadderChoice)
+      .addChoices({ name: slashModTxt.unstrike.resetLadderLabel, value: "all" })
       .setRequired(false),
   )
   .addIntegerOption((o) =>
     o
       .setName("lower_ladder")
-      .setDescription(slashModTxt.unwarn.lowerLadder)
+      .setDescription(slashModTxt.unstrike.lowerLadder)
       .setMinValue(1)
       .setMaxValue(20)
       .setRequired(false),
@@ -601,7 +601,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     return;
   }
 
-  if (name === "unwarn") {
+  if (name === "unstrike") {
     const target = interaction.options.getUser("user", true);
     const resetWarnings = interaction.options.getString("reset_warnings") === "all";
     const resetLadder = interaction.options.getString("reset_ladder") === "all";
@@ -620,14 +620,14 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
 
     if (resetWarnings && amountOpt !== null) {
       await interaction.reply({
-        content: modTxt.unwarnResetWarningsWithAmount,
+        content: modTxt.unstrikeResetWarningsWithAmount,
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
     if (resetLadder && lowerLadderRaw !== null) {
       await interaction.reply({
-        content: modTxt.unwarnResetLadderWithLower,
+        content: modTxt.unstrikeResetLadderWithLower,
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -641,14 +641,14 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       const warnBefore = getGlobalWarnCount(guild.id, target.id);
       if (resetWarnings) {
         warnAfter = setGlobalWarnCount(guild.id, target.id, 0);
-        reasonParts.push(modTxt.unwarnReasonClear);
+        reasonParts.push(modTxt.unstrikeReasonClear);
       } else {
         const amount = amountOpt ?? 1;
         warnAfter = adjustGlobalWarnCount(guild.id, target.id, -amount);
-        reasonParts.push(modTxt.unwarnReasonIncrement(amount));
+        reasonParts.push(modTxt.unstrikeReasonIncrement(amount));
       }
       replyLines.push(
-        modTxt.unwarnDoneWarnings(target.id, warnBefore, warnAfter, DISCORD_WARNINGS_BEFORE_TIMEOUT),
+        modTxt.unstrikeDoneWarnings(target.id, warnBefore, warnAfter, DISCORD_WARNINGS_BEFORE_TIMEOUT),
       );
     }
 
@@ -657,32 +657,32 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       const tierBefore = getMuteTier(guild.id, target.id);
       if (resetLadder) {
         tierAfter = setMuteTier(guild.id, target.id, 0);
-        reasonParts.push(modTxt.unwarnReasonLadderClear);
+        reasonParts.push(modTxt.unstrikeReasonLadderClear);
       } else {
         const steps = lowerLadderRaw ?? 1;
         tierAfter = adjustMuteTier(guild.id, target.id, -steps);
-        reasonParts.push(modTxt.unwarnReasonLadderLower(steps));
+        reasonParts.push(modTxt.unstrikeReasonLadderLower(steps));
       }
       replyLines.push(
-        modTxt.unwarnDoneLadder(target.id, tierBefore, tierAfter, DISCORD_TIMEOUT_LADDER_MS.length),
+        modTxt.unstrikeDoneLadder(target.id, tierBefore, tierAfter, DISCORD_TIMEOUT_LADDER_MS.length),
       );
     }
 
     await saveState(LAST_SEEN_STATE_FILE);
     const scopeChannelId = moderationScopeChannelIdFromInteraction(interaction);
-    const logMsgUnwarn = await logModerationEvent(guild, {
-      title: discordModerationLogTitles.staffUnwarn,
+    const logMsgUnstrike = await logModerationEvent(guild, {
+      title: discordModerationLogTitles.staffUnstrike,
       color: 0x888888,
       targetUserId: target.id,
       channelId: scopeChannelId,
-      reason: reasonParts.join("; ") || modTxt.unwarnReasonClear,
+      reason: reasonParts.join("; ") || modTxt.unstrikeReasonClear,
       minorWarningsInChannel: warnAfter,
       staffUserId: interaction.user.id,
     });
     await postStaffModerationSummary(guild, {
       staffUserId: interaction.user.id,
-      action: "unwarn",
-      logMessage: logMsgUnwarn,
+      action: "unstrike",
+      logMessage: logMsgUnstrike,
     });
     await interaction.reply({
       content: replyLines.join("\n"),

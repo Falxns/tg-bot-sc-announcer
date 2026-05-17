@@ -80,8 +80,8 @@ export const discordSlashModeration = {
     screenshot: "Скриншот нарушения (необязательно)",
     messageId: "ID сообщения нарушителя в текущем канале/треде; сообщение будет удалено автоматически",
   },
-  unwarn: {
-    commandDescription: "Уменьшить или сбросить предупреждения и/или лестницу таймаутов.",
+  unstrike: {
+    commandDescription: "Снять или уменьшить наказание: предупреждения и/или лестницу таймаутов.",
     amount: "Снять столько предупреждений (1–20); не используйте вместе со сбросом",
     resetWarningsChoice: "Сбросить все предупреждения",
     resetWarningsLabel: "Сбросить все предупреждения",
@@ -140,7 +140,7 @@ export const discordModerationLogTitles = {
   staffMute: "Ручной /mute",
   staffUnmute: "Ручной /unmute",
   staffStrike: "Ручной /strike",
-  staffUnwarn: "Ручной /unwarn",
+  staffUnstrike: "Ручной /unstrike",
   staffBan: "Ручной /ban",
   staffUnban: "Ручной /unban",
   majorTimeout: "Серьёзное нарушение",
@@ -241,15 +241,15 @@ export const discordModerationCommands = {
   unmuteReason: "Таймаут снят модератором",
   strikeDefaultReason: "Наказание выдано модератором",
   unmuteLogReason: "Таймаут снят модератором",
-  unwarnReasonIncrement: (n: number) => `−${n} предупр.`,
-  unwarnReasonClear: "Сброс предупреждений",
-  unwarnReasonLadderLower: (n: number) => `лестница −${n}`,
-  unwarnReasonLadderClear: "сброс лестницы",
-  unwarnResetWarningsWithAmount: "Не указывайте amount вместе со сбросом предупреждений — выберите одно.",
-  unwarnResetLadderWithLower: "Не указывайте lower_ladder вместе со сбросом лестницы — выберите одно.",
-  unwarnDoneWarnings: (userId: string, before: number, after: number, threshold: number) =>
+  unstrikeReasonIncrement: (n: number) => `−${n} предупр.`,
+  unstrikeReasonClear: "Сброс предупреждений",
+  unstrikeReasonLadderLower: (n: number) => `лестница −${n}`,
+  unstrikeReasonLadderClear: "Cброс лестницы",
+  unstrikeResetWarningsWithAmount: "Не указывайте amount вместе со сбросом предупреждений — выберите одно.",
+  unstrikeResetLadderWithLower: "Не указывайте lower_ladder вместе со сбросом лестницы — выберите одно.",
+  unstrikeDoneWarnings: (userId: string, before: number, after: number, threshold: number) =>
     `Предупреждения <@${userId}>: **${before}** → **${after}** (порог ${threshold}).`,
-  unwarnDoneLadder: (userId: string, before: number, after: number, ladderSteps: number) =>
+  unstrikeDoneLadder: (userId: string, before: number, after: number, ladderSteps: number) =>
     `Лестница <@${userId}>: ступень **${before}** → **${after}** (всего ${ladderSteps} ступеней).`,
   defaultBanReason: "Блокировка модератором",
   banFail: (err: string) => `Не удалось заблокировать: ${err}`,
@@ -333,7 +333,7 @@ export const discordStaffModerationSummary = {
   lineMute: (staffUserId: string, url: string) => `<@${staffUserId}> выдал **Таймаут** — ${url}`,
   lineUnmute: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Таймаут** — ${url}`,
   lineStrike: (staffUserId: string, url: string) => `<@${staffUserId}> выдал **Наказание** — ${url}`,
-  lineUnwarn: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Предупреждение** — ${url}`,
+  lineUnstrike: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Наказание** — ${url}`,
   lineBan: (staffUserId: string, url: string) => `<@${staffUserId}> выдал **Бан** — ${url}`,
   lineUnban: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Бан** — ${url}`,
   lineRoleCreate: (staffUserId: string, roleName: string) =>

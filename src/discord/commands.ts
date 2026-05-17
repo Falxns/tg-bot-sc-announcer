@@ -28,7 +28,7 @@ import {
   unbanSlashCommand,
   unmuteSlashCommand,
   strikeSlashCommand,
-  unwarnSlashCommand,
+  unstrikeSlashCommand,
 } from "./moderationCommands";
 import { peelFirstCustomDiscordEmojiFromLabel, type ParsedButtonEmoji } from "./buttonEmoji";
 import {
@@ -316,7 +316,7 @@ export async function registerGuildCommands(guild: Guild): Promise<void> {
     muteSlashCommand.toJSON(),
     unmuteSlashCommand.toJSON(),
     strikeSlashCommand.toJSON(),
-    unwarnSlashCommand.toJSON(),
+    unstrikeSlashCommand.toJSON(),
     banSlashCommand.toJSON(),
     unbanSlashCommand.toJSON(),
     modstatusSlashCommand.toJSON(),
@@ -1092,7 +1092,7 @@ export async function handleDiscordCommand(interaction: ChatInputCommandInteract
     interaction.commandName === "mute" ||
     interaction.commandName === "unmute" ||
     interaction.commandName === "strike" ||
-    interaction.commandName === "unwarn" ||
+    interaction.commandName === "unstrike" ||
     interaction.commandName === "ban" ||
     interaction.commandName === "unban" ||
     interaction.commandName === "modstatus"
