@@ -5,7 +5,11 @@ import { handleDiscordCommand, handleDiscordModal, registerGuildCommands } from 
 import { handleModerationAutocomplete } from "./moderationCommands";
 import { handleModerationMessage } from "./moderation";
 import { handleRoleButtonInteraction } from "./roles";
-import { handleStaffSummaryCreatorMessage, handleStaffSummaryRoleCreate } from "./staffSummary";
+import {
+  handleStaffSummaryCreatorMessage,
+  handleStaffSummaryMemberUpdate,
+  handleStaffSummaryRoleCreate,
+} from "./staffSummary";
 
 let discordClient: Client | null = null;
 
@@ -71,6 +75,12 @@ export async function startDiscordBot(): Promise<void> {
   client.on("roleCreate", (role) => {
     void handleStaffSummaryRoleCreate(role).catch((err) => {
       console.error("Discord staff summary roleCreate handler failed:", err);
+    });
+  });
+
+  client.on("guildMemberUpdate", (oldMember, newMember) => {
+    void handleStaffSummaryMemberUpdate(oldMember, newMember).catch((err) => {
+      console.error("Discord staff summary guildMemberUpdate handler failed:", err);
     });
   });
 

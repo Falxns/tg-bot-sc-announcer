@@ -123,9 +123,21 @@ function parseCommaSeparatedIds(raw: string | undefined): string[] {
     .filter(Boolean);
 }
 
-/** Role create summaries: only when audit-log executor has one of these roles. */
+/**
+ * Staff-summary role events: audit-log executor must have one of these roles.
+ * Applies to guild role create, and member role assign/remove (not role-panel bot toggles).
+ */
 export const DISCORD_STAFF_SUMMARY_ROLE_CREATE_TRACKED_ROLE_IDS = parseCommaSeparatedIds(
   process.env.DISCORD_STAFF_SUMMARY_ROLE_CREATE_TRACKED_ROLE_IDS,
+);
+
+/** Delay before reading audit log for role create / member role update (ms). */
+export const DISCORD_STAFF_SUMMARY_ROLE_AUDIT_DELAY_MS = clampParseInt(
+  process.env.DISCORD_STAFF_SUMMARY_ROLE_AUDIT_DELAY_MS ??
+    process.env.DISCORD_STAFF_SUMMARY_ROLE_CREATE_AUDIT_DELAY_MS ??
+    "1000",
+  200,
+  10_000,
 );
 
 /** Creator post summaries: watch messages in these channel IDs (not threads). */
@@ -143,13 +155,6 @@ export const DISCORD_STAFF_SUMMARY_CREATOR_COOLDOWN_MS = clampParseInt(
   process.env.DISCORD_STAFF_SUMMARY_CREATOR_COOLDOWN_MS ?? String(30 * 60_000),
   60_000,
   86_400_000,
-);
-
-/** Delay before reading audit log for role create (ms). */
-export const DISCORD_STAFF_SUMMARY_ROLE_CREATE_AUDIT_DELAY_MS = clampParseInt(
-  process.env.DISCORD_STAFF_SUMMARY_ROLE_CREATE_AUDIT_DELAY_MS ?? "1000",
-  200,
-  10_000,
 );
 
 function parseSeverity(raw: unknown, fallback: ViolationSeverity): ViolationSeverity {
