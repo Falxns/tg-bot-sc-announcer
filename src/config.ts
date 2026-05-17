@@ -56,7 +56,7 @@ export const DISCORD_INVITE_ALLOWED_ROLE_IDS = (process.env.DISCORD_INVITE_ALLOW
 export const DISCORD_BLOCK_INVITE_LINKS_GLOBAL = !/^0|false$/i.test(
   process.env.DISCORD_BLOCK_INVITE_LINKS_GLOBAL ?? "0",
 );
-/** Minor warnings in a channel required before the minor-timeout ladder applies (must match automod logic). */
+/** Server-wide strikes required before ladder timeout applies (must match automod /strike logic). */
 export const DISCORD_WARNINGS_BEFORE_TIMEOUT = clampParseInt(
   process.env.DISCORD_WARNINGS_BEFORE_TIMEOUT ?? "3",
   1,
@@ -102,7 +102,7 @@ export const DISCORD_MAJOR_MIN_LADDER_STEP = clampParseInt(
   Math.max(0, DISCORD_TIMEOUT_LADDER_MS.length - 1),
 );
 
-/** No violations for this long → reset minor warnings + mute tiers (default 3 days). */
+/** No violations for this long → reset global strikes + mute tier (default 3 days). */
 export const DISCORD_MODERATION_DECAY_MS = clampParseInt(
   process.env.DISCORD_MODERATION_DECAY_MS ?? "259200000",
   60_000,

@@ -505,7 +505,7 @@ async function notifyUserModerationEmbed(message: Message, member: GuildMember, 
   }
 }
 
-/** DM (+ ephemeral fallback to command channel) for manual `/mute`, `/warn`, `/unmute` — mirrors {@link notifyUserModerationEmbed}. */
+/** DM (+ ephemeral fallback to command channel) for manual `/mute`, `/strike`, `/unmute` — mirrors {@link notifyUserModerationEmbed}. */
 export async function notifyStaffModerationUser(
   interaction: ChatInputCommandInteraction,
   member: GuildMember,

@@ -84,7 +84,7 @@ tg-bot-sc-announcer/
 │       ├── bot.ts            # Discord client, intents, slash registration, routing
 │       ├── commands.ts       # /post /edit /rolepanel /linkpanel + modals
 │       ├── moderation.ts     # message automod + timeouts + notices
-│       ├── moderationCommands.ts  # /mute /warn /ban … slash handlers
+│       ├── moderationCommands.ts  # /mute /strike /ban … slash handlers
 │       ├── moderationLog.ts  # mod log channel embeds + staff summaries
 │       ├── postPending.ts    # nonce store for slash→modal flows (TTL)
 │       ├── roles.ts          # role panel button interactions
@@ -170,7 +170,7 @@ tg-bot-sc-announcer/
 | `discord/bot.ts` | Intents, `guild.commands.set`, interaction + message routing | 647 |
 | `discord/commands.ts` | `/post`, `/edit`, `/rolepanel`, `/linkpanel`, modals | 11231 |
 | `discord/moderation.ts` | `handleModerationMessage`, timeouts, invite/spam logic | 7172 |
-| `discord/moderationCommands.ts` | `/mute`, `/warn`, `/ban`, … | 7981 |
+| `discord/moderationCommands.ts` | `/mute`, `/strike`, `/ban`, … | 7981 |
 | `discord/moderationLog.ts` | Mod log channel embeds | 1131 |
 | `discord/postPending.ts` | Pending slash→modal nonces (15m TTL) | 1259 |
 | `discord/roles.ts` | Role panel buttons | 1366 |
@@ -242,7 +242,7 @@ sequenceDiagram
   User->>DC: messageCreate
   DC->>Bot: messageCreate handler
   Bot->>MOD: handleModerationMessage
-  MOD->>ST: warnings / decay
+  MOD->>ST: strikes / decay
   MOD->>LOG: logModerationEvent
   MOD->>DC: delete / timeout / DM
 ```

@@ -136,11 +136,7 @@ export async function applyManualMuteSanction(opts: {
   reason: string;
 }): Promise<SanctionTimeoutResult & { warnCount: number }> {
   const tierBefore = getMuteTier(opts.guildId, opts.userId);
-  const applied = await applyMemberTimeout(
-    opts.member,
-    opts.durationMs,
-    reasonPlainTextForAudit(opts.reason),
-  );
+  const applied = await applyMemberTimeout(opts.member, opts.durationMs, opts.reason);
   if (!applied) {
     return {
       warnCount: getGlobalWarnCount(opts.guildId, opts.userId),
