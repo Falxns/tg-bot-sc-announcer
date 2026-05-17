@@ -11,7 +11,7 @@ Telegram + Discord bot service that polls the [Exbo forum](https://forum.exbo.ru
 - Runs a Discord bot in the same process with:
   - admin slash commands `/post` and `/edit` (post or edit bot messages in a target channel)
   - role assignment message buttons via `/rolepanel`
-  - channel-aware moderation (minor/major severity, per-channel warnings, guild mute ladders, 3-day decay, DM + channel fallback, optional log channel, staff `/mute` `/unmute` `/warn` `/unwarn` `/ban` `/unban` `/modstatus`, optional external-link domain blacklist)
+  - channel-aware moderation (light/major severity, **server-wide strikes**, unified timeout ladder, decay, DM + channel fallback, optional log + staff-summary channels, staff `/mute` `/unmute` `/strike` `/unwarn` `/ban` `/unban` `/modstatus`, optional external-link domain blacklist)
 - Optional HTTP health-check server (e.g. for PaaS readiness probes)
 
 ## Stack
@@ -57,16 +57,21 @@ Edit `.env`:
 | `UPSTASH_REDIS_REST_TOKEN` | No | Upstash Redis REST token (required when `STATE_BACKEND=upstash`) |
 | `UPSTASH_STATE_KEY` | No | Redis key for serialized state JSON (default: `tg-bot-sc-announcer:state`) |
 | `ADMIN_USER_IDS` | No | Comma-separated Telegram user IDs; if empty, all users can use admin commands |
-| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/edit`, `/rolepanel`, `/linkpanel`, `/mute`, `/unmute`, `/warn`, `/unwarn`, `/ban`, `/unban`, `/modstatus` (when empty, any member who passes Discord’s command permissions may use them) |
+| `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs allowed to run `/post`, `/edit`, `/rolepanel`, `/linkpanel`, `/mute`, `/unmute`, `/strike`, `/unwarn`, `/ban`, `/unban`, `/modstatus` (when empty, any member who passes Discord’s command permissions may use them) |
 | `DISCORD_ROLE_PANEL_CHANNEL_ID` | No | Restrict `/rolepanel` usage to one channel |
 | `DISCORD_BLOCK_INVITE_LINKS_GLOBAL` | No | `1`/`0` toggle for global Discord invite-link filtering |
 | `DISCORD_INVITE_ALLOWED_ROLE_IDS` | No | Roles allowed to bypass invite-link filter |
-| `DISCORD_MINOR_TIMEOUT_LADDER_MS` | No | Comma-separated minor mute durations (ms); default `3600000,21600000,43200000,86400000` (1h, 6h, 12h, 1d) |
-| `DISCORD_WARNINGS_BEFORE_TIMEOUT` | No | Minor warnings per channel before the minor-timeout ladder applies; also the denominator in mod-log `n/threshold` (default: **3**) |
-| `DISCORD_MAJOR_TIMEOUT_LADDER_MS` | No | Comma-separated major mute durations (ms); default `86400000,259200000,604800000` (1d, 3d, 7d) |
-| `DISCORD_MODERATION_DECAY_MS` | No | No violations for this long resets minor warnings + tiers (default: 259200000 = 3 days) |
-| `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for **full** moderation audit embeds (**automod** + **manual** `/mute` `/unmute` `/warn` `/unwarn` `/ban` `/unban`) |
-| `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID` | No | Optional text channel for **one-line** staff-only digests after manual commands; each line mentions the moderator and links to the corresponding message in **`DISCORD_MODERATION_LOG_CHANNEL_ID`** (skipped if the main log send failed or env is empty) |
+| `DISCORD_TIMEOUT_LADDER_MS` | No | Unified automod/staff timeout ladder (ms); default `3600000,21600000,43200000,86400000,259200000,604800000` (1h, 6h, 12h, 1d, 3d, 7d). Manual `/mute` may also use 14d/28d (not on this ladder). |
+| `DISCORD_WARNINGS_BEFORE_TIMEOUT` | No | Server-wide strikes before ladder timeouts apply; mod-log shows `n/threshold` (default: **3**) |
+| `DISCORD_MAJOR_MIN_LADDER_STEP` | No | Ladder index for first major automod hit (default **3** = 1 day) |
+| `DISCORD_MODERATION_DECAY_MS` | No | No violations for this long resets global warns + ladder tier (default: 259200000 = 3 days) |
+| `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for **full** moderation audit embeds (**automod** + **manual** `/mute` `/unmute` `/strike` `/unwarn` `/ban` `/unban`) |
+| `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID` | No | Optional **one-line** staff digest channel: manual mod commands (link to **`DISCORD_MODERATION_LOG_CHANNEL_ID`**), role creates, creator posts |
+| `DISCORD_STAFF_SUMMARY_ROLE_CREATE_TRACKED_ROLE_IDS` | No | Comma-separated role IDs; post a digest when someone with one of these roles creates a guild role (needs **View Audit Log**) |
+| `DISCORD_STAFF_SUMMARY_ROLE_CREATE_AUDIT_DELAY_MS` | No | Wait before reading audit log for role create (default **1000** ms) |
+| `DISCORD_STAFF_SUMMARY_CREATOR_CHANNEL_IDS` | No | Comma-separated channel IDs; digest when a member with creator roles posts a **top-level** message (not threads) |
+| `DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS` | No | Comma-separated role IDs treated as “creator” for the above |
+| `DISCORD_STAFF_SUMMARY_CREATOR_COOLDOWN_MS` | No | Min gap between creator digests per author+channel (default **1800000** = 30 min) |
 | `DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST` | No | Comma-separated or JSON array of hosts; non-invite `http(s)` URLs matching these trigger a **major** hit (empty = disabled) |
 | `DISCORD_SPAM_FILTER_CHANNEL_IDS` | No | Comma-separated channel/thread IDs where **consecutive near-duplicate text** from the **same user** (vs previous message in channel via API) counts as **minor** spam: strict normalized equality, or same **letter/digit skeleton** with similar length, or (for long text only) high **Levenshtein similarity**; empty disables. Bot needs **Read Message History** there. |
 | `DISCORD_WARNING_MESSAGE_TTL_MS` | No | Auto-delete delay for ephemeral-style channel notices (default: 12000) |
@@ -106,21 +111,25 @@ Author list and “last seen” state are saved to the state file and restored o
 - `/edit channel:<channel> message_id:<snowflake> [image] [embed_*]` — edit **one** existing message **sent by this bot** in that channel (copy message ID with Developer Mode → right‑click → Copy ID); same embed/file options as `/post`; modal sets new body text up to **2000** characters (single Discord message); optional **`image`** replaces attachments when provided
 - `/rolepanel channel:<channel> role1:<role> [label1…label6] [role2…role6] [single_role] [embed_*]` — required **`channel`** + **`role1`** first (Discord rule); optional `single_role:true` makes panel roles mutually exclusive (user keeps only one role from that panel); also supports same **`embed_*`** as `/post`; command opens a modal for optional multiline message text
 - `/linkpanel channel:<channel> url1:<https://...> [label1…label5] [url2…url5] [embed_*]` — creates message buttons that open URLs (no role toggle), then opens a modal for optional multiline message text
-- `/mute user:<user> duration:<choice> [reason_preset] [reason] [screenshot] [message_id]` — manual timeout (does **not** advance auto minor/major ladder tiers); **`duration`** is one of: 1 hour, 6 hours, 12 hours, 1 day, 3 days, 7 days, 14 days, 28 days; **`reason_preset`** is autocomplete (channel-purpose templates); **`reason`** overrides the preset with custom text; optional **`screenshot`** and **`message_id`** as before
+- `/mute user:<user> duration:<choice> [reason_preset] [reason] [screenshot] [message_id]` — manual timeout at the chosen duration (not `DISCORD_TIMEOUT_LADDER_MS[tier]`); caps server-wide strikes at **`DISCORD_WARNINGS_BEFORE_TIMEOUT`** and advances the unified ladder tier on success; **`duration`**: 1h, 6h, 12h, 1d, 3d, 7d, 14d, 28d; **`reason_preset`** autocomplete; **`reason`** overrides preset; optional **`screenshot`** and **`message_id`**
 - `/unmute user:<user>` — clears Discord timeout
+- `/strike user:<user> [amount] [reason_preset] [reason] [screenshot] [message_id]` — same light path as automod: +**global** strike(s); warn-only below **`DISCORD_WARNINGS_BEFORE_TIMEOUT`**, else timeout at **`DISCORD_TIMEOUT_LADDER_MS`** current tier; DM title **«Предупреждение»** or **«Наказание»** when timed out
+- `/unwarn user:<user> [amount] [clear]` — decrease or clear **server-wide** strike count (tier unchanged)
 - `/ban user:<user> [reason_preset] [reason] [screenshot] [message_id]` — permanent server ban; **`reason_preset`** / **`reason`** same as **`/mute`**; tries to **DM** the user **before** banning
 - `/unban user:<user> | user_id:<snowflake>` — remove server ban; specify **either** **`user`** **or** **`user_id`** (use **`user_id`** when the account does not appear in the picker); DM after unban when possible
-- `/warn user:<user> [channel] [amount] [reason_preset] [reason] [screenshot] [message_id]` — increments per-channel minor warning counter; **`reason_preset`** / **`reason`** use the warning **channel** scope for links; optional **`screenshot`** and **`message_id`** behave like **`/mute`**; ladder timeout when count **≥ `DISCORD_WARNINGS_BEFORE_TIMEOUT`**
-- `/unwarn user:<user> [channel] [amount] [clear]` — decrements or clears per-channel minor warnings
-- `/modstatus user:<user>` — read-only: whether Discord **timeout** is active on the member (from **guild member** state, with **`<t:…>`** absolute + relative end time), per-channel **minor** warning rows in bot state, **next** minor/major ladder step/duration, and last-violation / **decay** hint for `DISCORD_MODERATION_DECAY_MS` (no state is changed)
+- `/modstatus user:<user>` — read-only: active Discord **timeout** (with **`<t:…>`** end time), **global** strikes (`n` / **`DISCORD_WARNINGS_BEFORE_TIMEOUT`**), **next** unified ladder step/duration, and last-violation / **decay** hint for **`DISCORD_MODERATION_DECAY_MS`** (no state changed)
 
-**User DMs (staff):** `/mute`, `/warn`, `/unmute`, `/ban`, and `/unban` try to **DM** the target (before ban for **`/ban`**, after successful unban for **`/unban`**) with the same kind of structure as automod where applicable. If DMs are disabled, a short **message is posted in the channel where the command was run** and auto-deleted after **`DISCORD_WARNING_MESSAGE_TTL_MS`** (same as automod fallback).
+**User DMs (staff):** `/mute`, `/strike`, `/unmute`, `/ban`, and `/unban` try to **DM** the target (before ban for **`/ban`**, after successful unban for **`/unban`**) with the same kind of structure as automod where applicable. If DMs are disabled, a short **message is posted in the channel where the command was run** and auto-deleted after **`DISCORD_WARNING_MESSAGE_TTL_MS`** (same as automod fallback).
 
-Role-panel definitions and moderation state (per-channel minor warnings, guild minor/major mute tiers, last-violation timestamps) are saved in shared bot state (`file` or Upstash, depending on `STATE_BACKEND`) and restored on restart. Legacy `discordModerationWarnings` (`guildId:userId`) in old JSON files is migrated into a `legacy` scope bucket and merged on first per-channel write.
+**Mod log (`DISCORD_MODERATION_LOG_CHANNEL_ID`):** full embeds for automod and manual commands. Automod **Причина** uses raw violation text (not preset copy); user DMs still use presets when configured. Strike count field is **server-wide** (`n` / threshold).
+
+**Staff summary (`DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID`):** one-line digests — manual mod commands link to the matching mod-log message; optional role-create and creator-post lines (see env table) do not require the log channel.
+
+Role-panel definitions and moderation state (**`discordGlobalWarns`**, **`discordMuteTier`**, **`discordModerationLastViolationAt`**, creator-summary cooldown timestamps) are saved in shared bot state (`file` or Upstash) and restored on restart. Old per-channel warning / dual-tier keys are **not** loaded after deploy (one-time reset).
 
 ### Discord AutoMod (recommended)
 
-Semantic rules (slurs, cheats, 18+, marketplace phrases) are best handled with **Discord Server Settings → AutoMod** (keyword lists, block/alert, log to a channel). This bot complements AutoMod with mechanical checks (invites, attachments, keyword lists you map in `DISCORD_CHANNEL_POLICIES_JSON`, optional domain blacklist) and staff slash commands. For **wrong-content-in-channel** hits (`blockVideos` / `blockImages` / `blockText`) and **`blockedKeywords`** hits, set **`reasonPresetId`** on the channel policy to use the same channel-purpose reason templates as **`/mute`** / **`/warn`** (requires **`DISCORD_MODERATION_REASON_CHANNEL_IDS_JSON`**); without it, keywords still use the short “forbidden word” line.
+Semantic rules (slurs, cheats, 18+, marketplace phrases) are best handled with **Discord Server Settings → AutoMod** (keyword lists, block/alert, log to a channel). This bot complements AutoMod with mechanical checks (invites, attachments, keyword lists you map in `DISCORD_CHANNEL_POLICIES_JSON`, optional domain blacklist) and staff slash commands. **Light** hits (media/text/keywords/spam) add a **global** strike; at **`DISCORD_WARNINGS_BEFORE_TIMEOUT`** the bot applies **`DISCORD_TIMEOUT_LADDER_MS[tier]`** and advances tier. **Major** hits (invites, blacklisted domains per policy) apply an immediate timeout at **`max(tier, DISCORD_MAJOR_MIN_LADDER_STEP)`** and cap strikes at the threshold. For preset text in **user DMs**, set **`reasonPresetId`** on the channel policy (requires **`DISCORD_MODERATION_REASON_CHANNEL_IDS_JSON`**); the **mod log** still records the short automod reason line.
 
 ## License
 

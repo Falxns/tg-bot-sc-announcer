@@ -89,19 +89,28 @@ export async function logModerationEvent(guild: Guild, payload: ModerationLogPay
   }
 }
 
-export type StaffModerationSummaryAction = "mute" | "unmute" | "warn" | "unwarn" | "ban" | "unban";
+export type StaffModerationSummaryAction = "mute" | "unmute" | "strike" | "unwarn" | "ban" | "unban";
 
-/** One-line digest for staff (manual commands only). Requires both log channel message id and env summary channel. */
+/** One-line digest in `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID` (any source). */
+export async function postStaffSummaryLine(guild: Guild, content: string): Promise<void> {
+  if (!DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID) return;
+  const ch = await guild.channels.fetch(DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID).catch(() => null);
+  if (!ch?.isTextBased() || !("send" in ch)) return;
+  try {
+    await ch.send({ content: content.slice(0, 2000) });
+  } catch (err) {
+    console.error("Staff summary channel send failed:", err);
+  }
+}
+
+/** Manual mod commands: links to the full row in `DISCORD_MODERATION_LOG_CHANNEL_ID`. */
 export async function postStaffModerationSummary(
   guild: Guild,
   opts: { staffUserId: string; action: StaffModerationSummaryAction; logMessage: Message | undefined },
 ): Promise<void> {
-  if (!DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID || !opts.logMessage?.id) return;
+  if (!opts.logMessage?.id) return;
   const logChannelId = DISCORD_MODERATION_LOG_CHANNEL_ID;
   if (!logChannelId) return;
-
-  const ch = await guild.channels.fetch(DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID).catch(() => null);
-  if (!ch?.isTextBased() || !("send" in ch)) return;
 
   const url = `https://discord.com/channels/${guild.id}/${logChannelId}/${opts.logMessage.id}`;
   const id = opts.staffUserId;
@@ -113,8 +122,8 @@ export async function postStaffModerationSummary(
     case "unmute":
       content = staffSumTxt.lineUnmute(id, url);
       break;
-    case "warn":
-      content = staffSumTxt.lineWarn(id, url);
+    case "strike":
+      content = staffSumTxt.lineStrike(id, url);
       break;
     case "unwarn":
       content = staffSumTxt.lineUnwarn(id, url);
@@ -129,9 +138,5 @@ export async function postStaffModerationSummary(
       return;
   }
 
-  try {
-    await ch.send({ content: content.slice(0, 2000) });
-  } catch (err) {
-    console.error("Moderation staff summary channel send failed:", err);
-  }
+  await postStaffSummaryLine(guild, content);
 }

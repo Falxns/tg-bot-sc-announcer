@@ -56,7 +56,7 @@ export const DISCORD_INVITE_ALLOWED_ROLE_IDS = (process.env.DISCORD_INVITE_ALLOW
 export const DISCORD_BLOCK_INVITE_LINKS_GLOBAL = !/^0|false$/i.test(
   process.env.DISCORD_BLOCK_INVITE_LINKS_GLOBAL ?? "0",
 );
-/** Minor warnings in a channel required before the minor-timeout ladder applies (must match automod logic). */
+/** Server-wide strikes required before ladder timeout applies (must match automod /strike logic). */
 export const DISCORD_WARNINGS_BEFORE_TIMEOUT = clampParseInt(
   process.env.DISCORD_WARNINGS_BEFORE_TIMEOUT ?? "3",
   1,
@@ -70,8 +70,14 @@ export const DISCORD_WARNING_MESSAGE_TTL_MS = clampParseInt(
   600_000,
 );
 
-const DEFAULT_MINOR_LADDER_MS = [3_600_000, 21_600_000, 43_200_000, 86_400_000] as const;
-const DEFAULT_MAJOR_LADDER_MS = [86_400_000, 259_200_000, 604_800_000] as const;
+const DEFAULT_TIMEOUT_LADDER_MS = [
+  3_600_000,
+  21_600_000,
+  43_200_000,
+  86_400_000,
+  259_200_000,
+  604_800_000,
+] as const;
 
 function parseMsLadder(raw: string | undefined, fallback: readonly number[]): number[] {
   const s = raw?.trim();
@@ -83,16 +89,20 @@ function parseMsLadder(raw: string | undefined, fallback: readonly number[]): nu
   return parts.length > 0 ? parts : [...fallback];
 }
 
-export const DISCORD_MINOR_TIMEOUT_LADDER_MS = parseMsLadder(
-  process.env.DISCORD_MINOR_TIMEOUT_LADDER_MS,
-  DEFAULT_MINOR_LADDER_MS,
-);
-export const DISCORD_MAJOR_TIMEOUT_LADDER_MS = parseMsLadder(
-  process.env.DISCORD_MAJOR_TIMEOUT_LADDER_MS,
-  DEFAULT_MAJOR_LADDER_MS,
+/** Unified automod/staff timeout ladder (1h, 6h, 12h, 1d, 3d, 7d by default). */
+export const DISCORD_TIMEOUT_LADDER_MS = parseMsLadder(
+  process.env.DISCORD_TIMEOUT_LADDER_MS,
+  DEFAULT_TIMEOUT_LADDER_MS,
 );
 
-/** No violations for this long → reset minor warnings + mute tiers (default 3 days). */
+/** Ladder index for first major hit (default: 1 day = index 3). */
+export const DISCORD_MAJOR_MIN_LADDER_STEP = clampParseInt(
+  process.env.DISCORD_MAJOR_MIN_LADDER_STEP ?? "3",
+  0,
+  Math.max(0, DISCORD_TIMEOUT_LADDER_MS.length - 1),
+);
+
+/** No violations for this long → reset global strikes + mute tier (default 3 days). */
 export const DISCORD_MODERATION_DECAY_MS = clampParseInt(
   process.env.DISCORD_MODERATION_DECAY_MS ?? "259200000",
   60_000,
@@ -101,10 +111,46 @@ export const DISCORD_MODERATION_DECAY_MS = clampParseInt(
 
 export const DISCORD_MODERATION_LOG_CHANNEL_ID = (process.env.DISCORD_MODERATION_LOG_CHANNEL_ID ?? "").trim();
 
-/** Optional one-line staff digest channel (manual `/mute` `/unmute` `/warn` `/unwarn` only); links to rows in `DISCORD_MODERATION_LOG_CHANNEL_ID`. */
+/** Optional one-line staff digest channel (manual mod commands, role creates, creator posts). */
 export const DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID = (
   process.env.DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID ?? ""
 ).trim();
+
+function parseCommaSeparatedIds(raw: string | undefined): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Role create summaries: only when audit-log executor has one of these roles. */
+export const DISCORD_STAFF_SUMMARY_ROLE_CREATE_TRACKED_ROLE_IDS = parseCommaSeparatedIds(
+  process.env.DISCORD_STAFF_SUMMARY_ROLE_CREATE_TRACKED_ROLE_IDS,
+);
+
+/** Creator post summaries: watch messages in these channel IDs (not threads). */
+export const DISCORD_STAFF_SUMMARY_CREATOR_CHANNEL_IDS = parseCommaSeparatedIds(
+  process.env.DISCORD_STAFF_SUMMARY_CREATOR_CHANNEL_IDS,
+);
+
+/** Creator post summaries: author must have one of these roles. */
+export const DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS = parseCommaSeparatedIds(
+  process.env.DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS,
+);
+
+/** Min gap between creator digest lines per author+channel (default 30 min). */
+export const DISCORD_STAFF_SUMMARY_CREATOR_COOLDOWN_MS = clampParseInt(
+  process.env.DISCORD_STAFF_SUMMARY_CREATOR_COOLDOWN_MS ?? String(30 * 60_000),
+  60_000,
+  86_400_000,
+);
+
+/** Delay before reading audit log for role create (ms). */
+export const DISCORD_STAFF_SUMMARY_ROLE_CREATE_AUDIT_DELAY_MS = clampParseInt(
+  process.env.DISCORD_STAFF_SUMMARY_ROLE_CREATE_AUDIT_DELAY_MS ?? "1000",
+  200,
+  10_000,
+);
 
 function parseSeverity(raw: unknown, fallback: ViolationSeverity): ViolationSeverity {
   if (raw === "major" || raw === "minor") return raw;

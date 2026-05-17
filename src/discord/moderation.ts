@@ -13,11 +13,8 @@ import {
   DISCORD_CHANNEL_POLICIES,
   DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST,
   DISCORD_INVITE_ALLOWED_ROLE_IDS,
-  DISCORD_MAJOR_TIMEOUT_LADDER_MS,
-  DISCORD_MINOR_TIMEOUT_LADDER_MS,
   DISCORD_MODERATION_DECAY_MS,
   DISCORD_SPAM_FILTER_CHANNEL_IDS,
-  DISCORD_WARNINGS_BEFORE_TIMEOUT,
   DISCORD_WARNING_MESSAGE_TTL_MS,
   LAST_SEEN_STATE_FILE,
   LOG_LEVEL,
@@ -29,7 +26,6 @@ import {
   channelIdForReasonPreset,
   formatChannelLineForEmbed,
   formatReasonForEmbed,
-  reasonPlainTextForAudit,
 } from "./moderationReasonPresets";
 import {
   discordAutoMod as autoTxt,
@@ -37,13 +33,10 @@ import {
   discordModerationCommands as modTxt,
   discordModerationLogTitles as logTitles,
 } from "./userStrings";
+import { applyLightModerationSanction, applyMajorModerationSanction } from "./moderationSanction";
 import {
   applyModerationDecayIfNeeded,
-  consumeMajorMuteTierForApply,
-  consumeMinorMuteTierForApply,
-  getMajorMuteTier,
-  getMinorMuteTier,
-  incrementMinorWarning,
+  getMuteTier,
   saveState,
   touchModerationViolation,
 } from "../state";
@@ -264,7 +257,7 @@ async function trySpamDuplicateViolation(message: Message): Promise<ViolationHit
   if (normPrev.length === 0) return null;
   if (!isSpamDuplicateContentMatch(norm, normPrev)) return null;
 
-  return { severity: "minor", reason: SPAM_DUPLICATE_REASON };
+  return { severity: "minor", reason: SPAM_DUPLICATE_REASON, logReason: SPAM_DUPLICATE_REASON };
 }
 
 function resolvePolicyContext(message: Message): PolicyContext {
@@ -290,7 +283,13 @@ function resolvePolicyContext(message: Message): PolicyContext {
   };
 }
 
-type ViolationHit = { reason: string; severity: ViolationSeverity };
+type ViolationHit = {
+  /** User-facing reason (channel preset text when configured). */
+  reason: string;
+  /** Automod audit reason for mod log (never preset text). */
+  logReason: string;
+  severity: ViolationSeverity;
+};
 
 function detectViolations(
   message: Message,
@@ -310,7 +309,7 @@ function detectViolations(
     !allowInvitesInChannel && (DISCORD_BLOCK_INVITE_LINKS_GLOBAL || policy?.blockInviteLinks === true);
   if (shouldCheckInvites && hasExternalInvite(inviteScanText) && !hasAnyRole(member, inviteRoleAllow)) {
     const sev = policy?.inviteViolationSeverity ?? "major";
-    hits.push({ reason: autoTxt.invitesForbidden, severity: sev });
+    hits.push({ reason: autoTxt.invitesForbidden, logReason: autoTxt.invitesForbidden, severity: sev });
   }
 
   if (DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST.length > 0) {
@@ -319,7 +318,11 @@ function detectViolations(
       try {
         const host = new URL(url).hostname.replace(/^\[+|\]+$/g, "").toLowerCase();
         if (hostMatchesBlacklist(host, DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST)) {
-          hits.push({ reason: autoTxt.forbiddenDomain(host), severity: "major" });
+          hits.push({
+            reason: autoTxt.forbiddenDomain(host),
+            logReason: autoTxt.forbiddenDomain(host),
+            severity: "major",
+          });
           break;
         }
       } catch {
@@ -331,8 +334,10 @@ function detectViolations(
   if (policy?.blockVideos) {
     const hasVideo = attachments.some((a) => isVideoAttachment(a.contentType, a.name ?? ""));
     if (hasVideo) {
+      const logReason = autoTxt.videoForbidden;
       hits.push({
-        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.videoForbidden),
+        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, logReason),
+        logReason,
         severity: policy.mediaViolationSeverity ?? "minor",
       });
     }
@@ -340,23 +345,29 @@ function detectViolations(
   if (policy?.blockImages) {
     const hasImage = attachments.some((a) => isImageAttachment(a.contentType, a.name ?? ""));
     if (hasImage) {
+      const logReason = autoTxt.imageForbidden;
       hits.push({
-        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.imageForbidden),
+        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, logReason),
+        logReason,
         severity: policy.mediaViolationSeverity ?? "minor",
       });
     }
   }
   if (policy?.blockText && message.content.trim().length > 0) {
+    const logReason = autoTxt.textForbidden;
     hits.push({
-      reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.textForbidden),
+      reason: mediaViolationReason(policy, ctx.warningScopeChannelId, logReason),
+      logReason,
       severity: policy.mediaViolationSeverity ?? "minor",
     });
   }
   if (policy?.blockedKeywords && policy.blockedKeywords.length > 0) {
     const hit = policy.blockedKeywords.find((w) => lowerSearch.includes(w));
     if (hit) {
+      const logReason = autoTxt.keywordHit(hit);
       hits.push({
-        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, autoTxt.keywordHit(hit)),
+        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, logReason),
+        logReason,
         severity: policy.keywordViolationSeverity ?? "minor",
       });
     }
@@ -432,7 +443,6 @@ type ModerationUserNotice =
   | {
       kind: "minor";
       reason: string;
-      warnCount: number;
       timeoutMs?: number;
     }
   | {
@@ -447,23 +457,16 @@ async function buildModerationUserNoticeEmbed(
   member: GuildMember,
   notice: ModerationUserNotice,
 ): Promise<EmbedBuilder> {
-  const guild = message.guild;
-  const guildName = (guild?.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
   const channelId = moderationEmbedChannelId(message);
-  const nick = (member.displayName ?? member.user.username).trim() || member.user.username;
   const userId = member.id;
 
   const lines: string[] = [`<@${userId}>`, ""];
-  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
   lines.push(formatChannelLineForEmbed(channelId, autoTxt.labelChannel));
-  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(`**${autoTxt.labelReason}**`);
   lines.push(formatReasonForEmbed(notice.reason));
 
   if (notice.kind === "minor") {
-    lines.push("");
-    lines.push(autoTxt.labelWarnCount(notice.warnCount, DISCORD_WARNINGS_BEFORE_TIMEOUT));
     if (notice.timeoutMs !== undefined) {
       lines.push("");
       lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(notice.timeoutMs))}**`);
@@ -502,7 +505,7 @@ async function notifyUserModerationEmbed(message: Message, member: GuildMember, 
   }
 }
 
-/** DM (+ ephemeral fallback to command channel) for manual `/mute`, `/warn`, `/unmute` — mirrors {@link notifyUserModerationEmbed}. */
+/** DM (+ ephemeral fallback to command channel) for manual `/mute`, `/strike`, `/unmute` — mirrors {@link notifyUserModerationEmbed}. */
 export async function notifyStaffModerationUser(
   interaction: ChatInputCommandInteraction,
   member: GuildMember,
@@ -543,13 +546,9 @@ export function buildStaffManualMuteEmbed(opts: {
   reason: string;
   timeoutMs: number;
 }): EmbedBuilder {
-  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
-  const nick = (opts.member.displayName ?? opts.member.user.username).trim() || opts.member.user.username;
   const userId = opts.member.id;
   const lines: string[] = [`<@${userId}>`, ""];
-  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
   lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
-  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(`**${autoTxt.labelReason}**`);
   lines.push(formatReasonForEmbed(opts.reason));
@@ -564,34 +563,29 @@ export function buildStaffManualMuteEmbed(opts: {
     .setFooter({ text: modTxt.staffDmFooter });
 }
 
-export function buildStaffManualWarnEmbed(opts: {
+export function buildStaffManualStrikeEmbed(opts: {
   guild: Guild;
   member: GuildMember;
   channelId: string;
   reason: string;
-  warnCount: number;
   timeoutMs?: number;
 }): EmbedBuilder {
-  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
-  const nick = (opts.member.displayName ?? opts.member.user.username).trim() || opts.member.user.username;
   const userId = opts.member.id;
   const lines: string[] = [`<@${userId}>`, ""];
-  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
   lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
-  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(`**${autoTxt.labelReason}**`);
   lines.push(formatReasonForEmbed(opts.reason));
-  lines.push("");
-  lines.push(autoTxt.labelWarnCount(opts.warnCount, DISCORD_WARNINGS_BEFORE_TIMEOUT));
   if (opts.timeoutMs !== undefined) {
     lines.push("");
     lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(opts.timeoutMs))}**`);
   }
+  const title =
+    opts.timeoutMs !== undefined ? modTxt.staffDmTitleStrikePunishment : modTxt.staffDmTitleStrikeWarn;
   const description = lines.join("\n").slice(0, 4096);
   return new EmbedBuilder()
     .setColor(MODERATION_USER_EMBED_COLOR)
-    .setTitle(modTxt.staffDmTitleWarn)
+    .setTitle(title)
     .setDescription(description)
     .setTimestamp(new Date())
     .setFooter({ text: modTxt.staffDmFooter });
@@ -602,13 +596,9 @@ export function buildStaffManualUnmuteEmbed(opts: {
   member: GuildMember;
   channelId: string;
 }): EmbedBuilder {
-  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
-  const nick = (opts.member.displayName ?? opts.member.user.username).trim() || opts.member.user.username;
   const userId = opts.member.id;
   const lines: string[] = [`<@${userId}>`, ""];
-  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
   lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
-  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(escapeMarkdown(modTxt.staffDmUnmuteBody));
   const description = lines.join("\n").slice(0, 4096);
@@ -627,17 +617,9 @@ export function buildStaffManualBanEmbed(opts: {
   channelId: string;
   reason: string;
 }): EmbedBuilder {
-  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
-  const nick = (
-    opts.member?.displayName ??
-    opts.targetUser.globalName ??
-    opts.targetUser.username
-  ).trim();
   const userId = opts.targetUser.id;
   const lines: string[] = [`<@${userId}>`, ""];
-  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
   lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
-  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(`**${autoTxt.labelReason}**`);
   lines.push(formatReasonForEmbed(opts.reason));
@@ -657,13 +639,9 @@ export function buildStaffManualUnbanEmbed(opts: {
   user: User;
   channelId: string;
 }): EmbedBuilder {
-  const guildName = (opts.guild.name ?? autoTxt.guildFallbackName).trim() || autoTxt.guildFallbackName;
-  const nick = (opts.user.globalName ?? opts.user.username).trim();
   const userId = opts.user.id;
   const lines: string[] = [`<@${userId}>`, ""];
-  lines.push(`**${autoTxt.labelServer}:** **${escapeMarkdown(guildName)}**`);
   lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
-  lines.push(`**${autoTxt.labelNick}:** **${escapeMarkdown(nick)}**`);
   lines.push("");
   lines.push(escapeMarkdown(modTxt.staffDmUnbanFromServerBody));
   const description = lines.join("\n").slice(0, 4096);
@@ -713,22 +691,13 @@ export async function handleModerationMessage(message: Message): Promise<void> {
   touchModerationViolation(guildId, userId, now);
 
   if (violation.severity === "major") {
-    const lastIdx = DISCORD_MAJOR_TIMEOUT_LADDER_MS.length - 1;
-    const tierBefore = getMajorMuteTier(guildId, userId);
-    const idx = Math.min(tierBefore, lastIdx);
-    const ms = DISCORD_MAJOR_TIMEOUT_LADDER_MS[idx] ?? DISCORD_MAJOR_TIMEOUT_LADDER_MS[lastIdx];
-    let tierAfter = tierBefore;
-    let majorTimeoutApplied = false;
-    if (member.moderatable) {
-      try {
-        await member.timeout(ms, reasonPlainTextForAudit(autoTxt.timeoutMajor(violation.reason)));
-        consumeMajorMuteTierForApply(guildId, userId, lastIdx);
-        tierAfter = getMajorMuteTier(guildId, userId);
-        majorTimeoutApplied = true;
-      } catch (err) {
-        console.error("Discord major moderation timeout failed:", err);
-      }
-    }
+    const tierBefore = getMuteTier(guildId, userId);
+    const major = await applyMajorModerationSanction({
+      guildId,
+      userId,
+      member,
+      reason: violation.reason,
+    });
 
     await saveState(LAST_SEEN_STATE_FILE);
 
@@ -738,17 +707,18 @@ export async function handleModerationMessage(message: Message): Promise<void> {
       targetUserId: userId,
       channelId: ctx.sourceChannelId,
       parentChannelId: ctx.parentChannelId,
-      reason: violation.reason,
-      timeoutMs: ms,
+      reason: violation.logReason,
+      minorWarningsInChannel: major.warnCount,
+      timeoutMs: major.timeout.timeoutMs,
       messageExcerpt: excerpt,
     });
 
-    const majorOutcome = majorTimeoutApplied ? "applied" : member.moderatable ? "api_error" : "not_moderatable";
+    const majorOutcome = major.timeout.outcome;
     const majorEmbed = await buildModerationUserNoticeEmbed(message, member, {
       kind: "major",
       reason: violation.reason,
       outcome: majorOutcome,
-      timeoutMs: majorTimeoutApplied ? ms : undefined,
+      timeoutMs: major.timeout.timeoutMs,
     });
     await notifyUserModerationEmbed(message, member, majorEmbed);
 
@@ -756,38 +726,27 @@ export async function handleModerationMessage(message: Message): Promise<void> {
       const userLabel = moderationLogUserLabel(member, message.author);
       const channelLabel = moderationLogChannelLabel(message);
       console.log(
-        `[Discord moderation major] user=${userId} (${userLabel}) channel=${message.channelId} (${channelLabel}) reason=${violation.reason} tier=${tierBefore}->${tierAfter}`,
+        `[Discord moderation major] user=${userId} (${userLabel}) channel=${message.channelId} (${channelLabel}) reason=${violation.logReason} tier=${tierBefore}->${major.plan.tierAfter}`,
       );
     }
     return;
   }
 
-  const warnCount = incrementMinorWarning(guildId, ctx.warningScopeChannelId, userId);
-  const lastMinorIdx = DISCORD_MINOR_TIMEOUT_LADDER_MS.length - 1;
-  let timeoutMs: number | undefined;
-  const tierMinorBefore = getMinorMuteTier(guildId, userId);
-  let tierMinorAfter = tierMinorBefore;
-
-  if (warnCount >= DISCORD_WARNINGS_BEFORE_TIMEOUT && member.moderatable) {
-    const tb = getMinorMuteTier(guildId, userId);
-    const idx = Math.min(tb, lastMinorIdx);
-    const ms = DISCORD_MINOR_TIMEOUT_LADDER_MS[idx] ?? DISCORD_MINOR_TIMEOUT_LADDER_MS[lastMinorIdx];
-    try {
-      await member.timeout(ms, reasonPlainTextForAudit(autoTxt.timeoutMinor(violation.reason)));
-      consumeMinorMuteTierForApply(guildId, userId, lastMinorIdx);
-      tierMinorAfter = getMinorMuteTier(guildId, userId);
-      timeoutMs = ms;
-    } catch (err) {
-      console.error("Discord minor moderation timeout failed:", err);
-    }
-  }
+  const tierBefore = getMuteTier(guildId, userId);
+  const light = await applyLightModerationSanction({
+    guildId,
+    userId,
+    member,
+    reason: violation.reason,
+  });
+  const timeoutMs = light.timeoutApplied ? light.timeoutMs : undefined;
+  const tierAfter = getMuteTier(guildId, userId);
 
   await saveState(LAST_SEEN_STATE_FILE);
 
   const minorEmbed = await buildModerationUserNoticeEmbed(message, member, {
     kind: "minor",
     reason: violation.reason,
-    warnCount,
     timeoutMs,
   });
   await notifyUserModerationEmbed(message, member, minorEmbed);
@@ -798,8 +757,8 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     targetUserId: userId,
     channelId: ctx.sourceChannelId,
     parentChannelId: ctx.parentChannelId,
-    reason: violation.reason,
-    minorWarningsInChannel: warnCount,
+    reason: violation.logReason,
+    minorWarningsInChannel: light.warnCount,
     timeoutMs,
     messageExcerpt: excerpt,
   });
@@ -808,7 +767,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     const userLabel = moderationLogUserLabel(member, message.author);
     const channelLabel = moderationLogChannelLabel(message);
     console.log(
-      `[Discord moderation minor] user=${userId} (${userLabel}) channel=${message.channelId} (${channelLabel}) reason=${violation.reason} warnings=${warnCount} minorTier=${tierMinorBefore}->${tierMinorAfter}`,
+      `[Discord moderation light] user=${userId} (${userLabel}) channel=${message.channelId} (${channelLabel}) reason=${violation.logReason} warnings=${light.warnCount} tier=${tierBefore}->${tierAfter}`,
     );
   }
 }
