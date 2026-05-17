@@ -67,8 +67,8 @@ Edit `.env`:
 | `DISCORD_MODERATION_DECAY_MS` | No | No violations for this long resets global warns + ladder tier (default: 259200000 = 3 days) |
 | `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for **full** moderation audit embeds (**automod** + **manual** `/mute` `/unmute` `/strike` `/unwarn` `/ban` `/unban`) |
 | `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID` | No | Optional **one-line** staff digest channel: manual mod commands (link to **`DISCORD_MODERATION_LOG_CHANNEL_ID`**), role creates, creator posts |
-| `DISCORD_STAFF_SUMMARY_ROLE_CREATE_TRACKED_ROLE_IDS` | No | Comma-separated role IDs; post a digest when someone with one of these roles creates a guild role (needs **View Audit Log**) |
-| `DISCORD_STAFF_SUMMARY_ROLE_CREATE_AUDIT_DELAY_MS` | No | Wait before reading audit log for role create (default **1000** ms) |
+| `DISCORD_STAFF_SUMMARY_ROLE_CREATE_TRACKED_ROLE_IDS` | No | Comma-separated staff role IDs; digest when holder **creates** a guild role or **assigns/removes** a role on a member via audit log (needs **View Audit Log**; excludes bot role-panel toggles) |
+| `DISCORD_STAFF_SUMMARY_ROLE_AUDIT_DELAY_MS` | No | Wait before reading audit log for role events (default **1000** ms; alias: `DISCORD_STAFF_SUMMARY_ROLE_CREATE_AUDIT_DELAY_MS`) |
 | `DISCORD_STAFF_SUMMARY_CREATOR_CHANNEL_IDS` | No | Comma-separated channel IDs; digest when a member with creator roles posts a **top-level** message (not threads) |
 | `DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS` | No | Comma-separated role IDs treated as “creator” for the above |
 | `DISCORD_STAFF_SUMMARY_CREATOR_COOLDOWN_MS` | No | Min gap between creator digests per author+channel (default **1800000** = 30 min) |
@@ -123,7 +123,7 @@ Author list and “last seen” state are saved to the state file and restored o
 
 **Mod log (`DISCORD_MODERATION_LOG_CHANNEL_ID`):** full embeds for automod and manual commands. Automod **Причина** uses raw violation text (not preset copy); user DMs still use presets when configured. Strike count field is **server-wide** (`n` / threshold).
 
-**Staff summary (`DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID`):** one-line digests — manual mod commands link to the matching mod-log message; optional role-create and creator-post lines (see env table) do not require the log channel.
+**Staff summary (`DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID`):** one-line digests — manual mod commands link to the matching mod-log message; optional **role create**, **role assign/remove** (tracked staff via audit log), and **creator post** lines do not require the log channel.
 
 Role-panel definitions and moderation state (**`discordGlobalWarns`**, **`discordMuteTier`**, **`discordModerationLastViolationAt`**, creator-summary cooldown timestamps) are saved in shared bot state (`file` or Upstash) and restored on restart. Old per-channel warning / dual-tier keys are **not** loaded after deploy (one-time reset).
 

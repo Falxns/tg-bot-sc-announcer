@@ -326,6 +326,10 @@ export const discordStaffModerationSummary = {
   lineUnban: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Бан** — ${url}`,
   lineRoleCreate: (staffUserId: string, roleName: string) =>
     `<@${staffUserId}> создал роль **${roleName.replace(/\*\*/g, "")}**`,
+  lineRoleAssign: (staffUserId: string, targetUserId: string, roleName: string) =>
+    `<@${staffUserId}> выдал роль **${roleName.replace(/\*\*/g, "")}** — <@${targetUserId}>`,
+  lineRoleRemove: (staffUserId: string, targetUserId: string, roleName: string) =>
+    `<@${staffUserId}> снял роль **${roleName.replace(/\*\*/g, "")}** — <@${targetUserId}>`,
   lineCreatorPost: (authorUserId: string, channelId: string, messageUrl: string) =>
     `<@${authorUserId}> опубликовал пост в <#${channelId}> — ${messageUrl}`,
 } as const;
