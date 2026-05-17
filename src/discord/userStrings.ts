@@ -80,10 +80,14 @@ export const discordSlashModeration = {
     screenshot: "Скриншот нарушения (необязательно)",
     messageId: "ID сообщения нарушителя в текущем канале/треде; сообщение будет удалено автоматически",
   },
-  unwarn: {
-    commandDescription: "Уменьшить или сбросить предупреждения.",
-    amount: "Количество предупреждений (1–20)",
-    clear: "Сбросить счётчик предупреждений",
+  unstrike: {
+    commandDescription: "Снять или уменьшить наказание: предупреждения и/или лестницу таймаутов.",
+    amount: "Снять столько предупреждений (1–20); не используйте вместе со сбросом",
+    resetWarningsChoice: "Сбросить все предупреждения",
+    resetWarningsLabel: "Сбросить все предупреждения",
+    resetLadderChoice: "Сбросить лестницу таймаутов",
+    resetLadderLabel: "Сбросить лестницу таймаутов (след. таймаут с 1-й ступени)",
+    lowerLadder: "Опустить лестницу на столько ступеней (1–20)",
   },
   ban: {
     commandDescription: "Перманентно заблокировать пользователя на сервере.",
@@ -136,7 +140,7 @@ export const discordModerationLogTitles = {
   staffMute: "Ручной /mute",
   staffUnmute: "Ручной /unmute",
   staffStrike: "Ручной /strike",
-  staffUnwarn: "Ручной /unwarn",
+  staffUnstrike: "Ручной /unstrike",
   staffBan: "Ручной /ban",
   staffUnban: "Ручной /unban",
   majorTimeout: "Серьёзное нарушение",
@@ -237,8 +241,16 @@ export const discordModerationCommands = {
   unmuteReason: "Таймаут снят модератором",
   strikeDefaultReason: "Наказание выдано модератором",
   unmuteLogReason: "Таймаут снят модератором",
-  unwarnReasonIncrement: (n: number) => `−${n}`,
-  unwarnReasonClear: "Сброс предупреждений модератором",
+  unstrikeReasonIncrement: (n: number) => `−${n} предупр.`,
+  unstrikeReasonClear: "Сброс предупреждений",
+  unstrikeReasonLadderLower: (n: number) => `лестница −${n}`,
+  unstrikeReasonLadderClear: "Cброс лестницы",
+  unstrikeResetWarningsWithAmount: "Не указывайте amount вместе со сбросом предупреждений — выберите одно.",
+  unstrikeResetLadderWithLower: "Не указывайте lower_ladder вместе со сбросом лестницы — выберите одно.",
+  unstrikeDoneWarnings: (userId: string, before: number, after: number, threshold: number) =>
+    `Предупреждения <@${userId}>: **${before}** → **${after}** (порог ${threshold}).`,
+  unstrikeDoneLadder: (userId: string, before: number, after: number, ladderSteps: number) =>
+    `Лестница <@${userId}>: ступень **${before}** → **${after}** (всего ${ladderSteps} ступеней).`,
   defaultBanReason: "Блокировка модератором",
   banFail: (err: string) => `Не удалось заблокировать: ${err}`,
   banDone: (userId: string, evidenceNote: string, shotNote: string) =>
@@ -321,15 +333,19 @@ export const discordStaffModerationSummary = {
   lineMute: (staffUserId: string, url: string) => `<@${staffUserId}> выдал **Таймаут** — ${url}`,
   lineUnmute: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Таймаут** — ${url}`,
   lineStrike: (staffUserId: string, url: string) => `<@${staffUserId}> выдал **Наказание** — ${url}`,
-  lineUnwarn: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Предупреждение** — ${url}`,
+  lineUnstrike: (staffUserId: string, url: string) => `<@${staffUserId}> уменьшил **Наказание** — ${url}`,
   lineBan: (staffUserId: string, url: string) => `<@${staffUserId}> выдал **Бан** — ${url}`,
   lineUnban: (staffUserId: string, url: string) => `<@${staffUserId}> снял **Бан** — ${url}`,
   lineRoleCreate: (staffUserId: string, roleName: string) =>
     `<@${staffUserId}> создал роль **${roleName.replace(/\*\*/g, "")}**`,
   lineRoleAssign: (staffUserId: string, targetUserId: string, roleName: string) =>
     `<@${staffUserId}> выдал роль **${roleName.replace(/\*\*/g, "")}** — <@${targetUserId}>`,
+  lineRoleAssignBatch: (staffUserId: string, roleName: string, firstTargetUserId: string, extraCount: number) =>
+    `<@${staffUserId}> выдал роль **${roleName.replace(/\*\*/g, "")}** — <@${firstTargetUserId}> (+${extraCount})`,
   lineRoleRemove: (staffUserId: string, targetUserId: string, roleName: string) =>
     `<@${staffUserId}> снял роль **${roleName.replace(/\*\*/g, "")}** — <@${targetUserId}>`,
+  lineRoleRemoveBatch: (staffUserId: string, roleName: string, firstTargetUserId: string, extraCount: number) =>
+    `<@${staffUserId}> снял роль **${roleName.replace(/\*\*/g, "")}** — <@${firstTargetUserId}> (+${extraCount})`,
   lineCreatorPost: (authorUserId: string, channelId: string, messageUrl: string) =>
     `<@${authorUserId}> опубликовал пост в <#${channelId}> — ${messageUrl}`,
 } as const;

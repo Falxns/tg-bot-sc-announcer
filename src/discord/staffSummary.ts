@@ -13,15 +13,40 @@ import {
   DISCORD_STAFF_SUMMARY_CREATOR_COOLDOWN_MS,
   DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS,
   DISCORD_STAFF_SUMMARY_ROLE_AUDIT_DELAY_MS,
+  DISCORD_STAFF_SUMMARY_ROLE_CHANGE_BATCH_MS,
+  DISCORD_STAFF_SUMMARY_ROLE_CREATE_NAME_WAIT_MS,
   DISCORD_STAFF_SUMMARY_ROLE_CREATE_TRACKED_ROLE_IDS,
   LAST_SEEN_STATE_FILE,
   LOG_LEVEL,
 } from "../config";
 import { saveState, tryConsumeCreatorSummaryCooldown } from "../state";
-import { postStaffSummaryLine } from "./moderationLog";
+import { editStaffSummaryLine, postStaffSummaryLine } from "./moderationLog";
 import { discordStaffModerationSummary as staffSumTxt } from "./userStrings";
 
 const MEMBER_ROLE_AUDIT_MAX_AGE_MS = 15_000;
+
+const PLACEHOLDER_ROLE_NAMES = new Set(["new role", "новая роль"]);
+
+type RoleChangeKind = "assign" | "remove";
+
+type RoleChangeBatch = {
+  messageId: string;
+  firstTargetUserId: string;
+  roleName: string;
+  extraCount: number;
+  flushTimer: ReturnType<typeof setTimeout>;
+};
+
+type PendingRoleCreate = {
+  guildId: string;
+  executorId: string | null;
+  createdAt: number;
+  posted: boolean;
+  timeout: ReturnType<typeof setTimeout>;
+};
+
+const roleChangeBatches = new Map<string, RoleChangeBatch>();
+const pendingRoleCreates = new Map<string, PendingRoleCreate>();
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -39,6 +64,30 @@ function staffSummaryRoleTrackingEnabled(): boolean {
   );
 }
 
+function isPlaceholderRoleName(name: string): boolean {
+  return PLACEHOLDER_ROLE_NAMES.has(name.trim().toLowerCase());
+}
+
+function roleChangeBatchKey(
+  guildId: string,
+  kind: RoleChangeKind,
+  executorId: string,
+  roleId: string,
+): string {
+  return `${guildId}:${kind}:${executorId}:${roleId}`;
+}
+
+function clearRoleChangeBatch(key: string): void {
+  const batch = roleChangeBatches.get(key);
+  if (!batch) return;
+  clearTimeout(batch.flushTimer);
+  roleChangeBatches.delete(key);
+}
+
+function scheduleRoleChangeBatchExpiry(key: string): ReturnType<typeof setTimeout> {
+  return setTimeout(() => clearRoleChangeBatch(key), DISCORD_STAFF_SUMMARY_ROLE_CHANGE_BATCH_MS);
+}
+
 async function isTrackedStaffExecutor(guild: Guild, executorId: string): Promise<boolean> {
   if (executorId === guild.client.user?.id) return false;
   const member = await guild.members.fetch(executorId).catch(() => null);
@@ -53,13 +102,39 @@ function roleIdFromAuditChangeValue(value: unknown): string | undefined {
   return undefined;
 }
 
-type RoleChangeAction = "add" | "remove";
+function roleIdsFromAuditChangeValue(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    const ids: string[] = [];
+    for (const item of value) {
+      const id = roleIdFromAuditChangeValue(item);
+      if (id) ids.push(id);
+    }
+    return ids;
+  }
+  const single = roleIdFromAuditChangeValue(value);
+  return single ? [single] : [];
+}
+
+function auditEntryIncludesRoleChange(
+  entry: { changes: readonly { key: string; old?: unknown; new?: unknown }[] },
+  roleId: string,
+  action: RoleChangeKind,
+): boolean {
+  const changeKey = action === "assign" ? "$add" : "$remove";
+  const valueKey = action === "assign" ? "new" : "old";
+  for (const change of entry.changes) {
+    if (change.key !== changeKey) continue;
+    const raw = valueKey === "new" ? change.new : change.old;
+    if (roleIdsFromAuditChangeValue(raw).includes(roleId)) return true;
+  }
+  return false;
+}
 
 async function resolveMemberRoleChangeExecutor(
   guild: Guild,
   targetUserId: string,
   roleId: string,
-  action: RoleChangeAction,
+  action: RoleChangeKind,
 ): Promise<string | undefined> {
   try {
     const logs = await guild.fetchAuditLogs({ type: AuditLogEvent.MemberRoleUpdate, limit: 12 });
@@ -68,14 +143,7 @@ async function resolveMemberRoleChangeExecutor(
       if (entry.targetId !== targetUserId) continue;
       if (now - entry.createdTimestamp > MEMBER_ROLE_AUDIT_MAX_AGE_MS) continue;
       if (!entry.executor || entry.executor.bot) continue;
-      for (const change of entry.changes) {
-        if (action === "add" && change.key === "$add") {
-          if (roleIdFromAuditChangeValue(change.new) === roleId) return entry.executor.id;
-        }
-        if (action === "remove" && change.key === "$remove") {
-          if (roleIdFromAuditChangeValue(change.old) === roleId) return entry.executor.id;
-        }
-      }
+      if (auditEntryIncludesRoleChange(entry, roleId, action)) return entry.executor.id;
     }
   } catch (err) {
     console.error("Staff summary member role audit log fetch failed:", err);
@@ -103,12 +171,112 @@ function diffMemberRoles(
   return { added, removed };
 }
 
+function clearPendingRoleCreate(roleId: string): void {
+  const pending = pendingRoleCreates.get(roleId);
+  if (!pending) return;
+  clearTimeout(pending.timeout);
+  pendingRoleCreates.delete(roleId);
+}
+
+async function postRoleCreateDigest(guild: Guild, roleId: string, force: boolean): Promise<void> {
+  const pending = pendingRoleCreates.get(roleId);
+  if (!pending || pending.posted) return;
+  if (pending.guildId !== guild.id) return;
+  if (!pending.executorId) return;
+
+  const role = await guild.roles.fetch(roleId).catch(() => null);
+  if (!role) {
+    clearPendingRoleCreate(roleId);
+    return;
+  }
+
+  const roleName = role.name.trim() || role.id;
+  if (!force && isPlaceholderRoleName(roleName) && Date.now() - pending.createdAt < DISCORD_STAFF_SUMMARY_ROLE_CREATE_NAME_WAIT_MS) {
+    return;
+  }
+
+  pending.posted = true;
+  clearPendingRoleCreate(roleId);
+
+  await postStaffSummaryLine(guild, staffSumTxt.lineRoleCreate(pending.executorId, roleName));
+
+  if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
+    console.log(`[Staff summary] roleCreate by ${pending.executorId}: ${roleName} (${role.id})`);
+  }
+}
+
+function registerPendingRoleCreate(guild: Guild, roleId: string): void {
+  clearPendingRoleCreate(roleId);
+  const createdAt = Date.now();
+  const timeout = setTimeout(() => {
+    void postRoleCreateDigest(guild, roleId, true).catch((err) => {
+      console.error("Staff summary roleCreate timeout post failed:", err);
+    });
+  }, DISCORD_STAFF_SUMMARY_ROLE_CREATE_NAME_WAIT_MS);
+
+  pendingRoleCreates.set(roleId, {
+    guildId: guild.id,
+    executorId: null,
+    createdAt,
+    posted: false,
+    timeout,
+  });
+}
+
+async function postOrBumpRoleChangeBatch(
+  guild: Guild,
+  kind: RoleChangeKind,
+  executorId: string,
+  roleId: string,
+  roleName: string,
+  targetUserId: string,
+): Promise<void> {
+  const key = roleChangeBatchKey(guild.id, kind, executorId, roleId);
+  const existing = roleChangeBatches.get(key);
+
+  if (existing) {
+    existing.extraCount += 1;
+    clearTimeout(existing.flushTimer);
+    existing.flushTimer = scheduleRoleChangeBatchExpiry(key);
+    const content =
+      kind === "assign"
+        ? staffSumTxt.lineRoleAssignBatch(executorId, roleName, existing.firstTargetUserId, existing.extraCount)
+        : staffSumTxt.lineRoleRemoveBatch(executorId, roleName, existing.firstTargetUserId, existing.extraCount);
+    await editStaffSummaryLine(guild, existing.messageId, content);
+    if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
+      console.log(`[Staff summary] role${kind} batch ${executorId} ${roleName} (+${existing.extraCount})`);
+    }
+    return;
+  }
+
+  const content =
+    kind === "assign"
+      ? staffSumTxt.lineRoleAssign(executorId, targetUserId, roleName)
+      : staffSumTxt.lineRoleRemove(executorId, targetUserId, roleName);
+  const message = await postStaffSummaryLine(guild, content);
+  if (!message) return;
+
+  roleChangeBatches.set(key, {
+    messageId: message.id,
+    firstTargetUserId: targetUserId,
+    roleName,
+    extraCount: 0,
+    flushTimer: scheduleRoleChangeBatchExpiry(key),
+  });
+
+  if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
+    console.log(`[Staff summary] role${kind} ${executorId} → ${targetUserId}: ${roleName}`);
+  }
+}
+
 const creatorChannelSet = () => new Set(DISCORD_STAFF_SUMMARY_CREATOR_CHANNEL_IDS);
 
 export async function handleStaffSummaryRoleCreate(role: Role): Promise<void> {
   if (!staffSummaryRoleTrackingEnabled()) return;
   if (role.guild.id !== DISCORD_GUILD_ID) return;
   if (role.managed) return;
+
+  registerPendingRoleCreate(role.guild, role.id);
 
   await sleep(DISCORD_STAFF_SUMMARY_ROLE_AUDIT_DELAY_MS);
 
@@ -124,15 +292,30 @@ export async function handleStaffSummaryRoleCreate(role: Role): Promise<void> {
     return;
   }
 
-  if (!executorId) return;
-  if (!(await isTrackedStaffExecutor(role.guild, executorId))) return;
-
-  const roleName = role.name.trim() || role.id;
-  await postStaffSummaryLine(role.guild, staffSumTxt.lineRoleCreate(executorId, roleName));
-
-  if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
-    console.log(`[Staff summary] roleCreate by ${executorId}: ${roleName} (${role.id})`);
+  const pending = pendingRoleCreates.get(role.id);
+  if (!executorId || !pending) {
+    clearPendingRoleCreate(role.id);
+    return;
   }
+  if (!(await isTrackedStaffExecutor(role.guild, executorId))) {
+    clearPendingRoleCreate(role.id);
+    return;
+  }
+
+  pending.executorId = executorId;
+  await postRoleCreateDigest(role.guild, role.id, false);
+}
+
+export async function handleStaffSummaryRoleUpdate(role: Role, oldRole: Role): Promise<void> {
+  if (!staffSummaryRoleTrackingEnabled()) return;
+  if (role.guild.id !== DISCORD_GUILD_ID) return;
+  if (role.managed) return;
+  if (oldRole.name === role.name) return;
+
+  const pending = pendingRoleCreates.get(role.id);
+  if (!pending || pending.posted) return;
+
+  await postRoleCreateDigest(role.guild, role.id, false);
 }
 
 export async function handleStaffSummaryMemberUpdate(
@@ -155,15 +338,11 @@ export async function handleStaffSummaryMemberUpdate(
     const role = guild.roles.cache.get(roleId) ?? (await guild.roles.fetch(roleId).catch(() => null));
     if (!role || role.managed) continue;
 
-    const executorId = await resolveMemberRoleChangeExecutor(guild, targetUserId, roleId, "add");
+    const executorId = await resolveMemberRoleChangeExecutor(guild, targetUserId, roleId, "assign");
     if (!executorId || !(await isTrackedStaffExecutor(guild, executorId))) continue;
 
     const roleName = role.name.trim() || role.id;
-    await postStaffSummaryLine(guild, staffSumTxt.lineRoleAssign(executorId, targetUserId, roleName));
-
-    if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
-      console.log(`[Staff summary] roleAssign ${executorId} → ${targetUserId}: ${roleName}`);
-    }
+    await postOrBumpRoleChangeBatch(guild, "assign", executorId, roleId, roleName, targetUserId);
   }
 
   for (const roleId of removed) {
@@ -174,11 +353,7 @@ export async function handleStaffSummaryMemberUpdate(
     if (!executorId || !(await isTrackedStaffExecutor(guild, executorId))) continue;
 
     const roleName = role.name.trim() || role.id;
-    await postStaffSummaryLine(guild, staffSumTxt.lineRoleRemove(executorId, targetUserId, roleName));
-
-    if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
-      console.log(`[Staff summary] roleRemove ${executorId} → ${targetUserId}: ${roleName}`);
-    }
+    await postOrBumpRoleChangeBatch(guild, "remove", executorId, roleId, roleName, targetUserId);
   }
 }
 

@@ -136,8 +136,14 @@ export function getMuteTier(guildId: string, userId: string): number {
 export function setMuteTier(guildId: string, userId: string, tier: number): number {
   const key = guildUserKey(guildId, userId);
   const n = Math.max(0, Math.floor(tier));
-  discordMuteTier.set(key, n);
+  if (n === 0) discordMuteTier.delete(key);
+  else discordMuteTier.set(key, n);
   return n;
+}
+
+export function adjustMuteTier(guildId: string, userId: string, delta: number): number {
+  const next = Math.max(0, getMuteTier(guildId, userId) + Math.floor(delta));
+  return setMuteTier(guildId, userId, next);
 }
 
 /** Returns ladder index used for this mute; advances stored tier (capped at lastLadderIndex). */
