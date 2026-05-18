@@ -17,6 +17,12 @@ import {
 import { logModerationEvent, postStaffModerationSummary } from "./moderationLog";
 import { ladderDurationMs, lastLadderIndex } from "./moderationLadder";
 import {
+  assertModeratorQuota,
+  getModeratorQuotaStatus,
+  isModeratorQuotaExempt,
+  recordModeratorQuotaUse,
+} from "./moderatorQuota";
+import {
   applyManualMuteSanction,
   applyStrikeModerationSanction,
 } from "./moderationSanction";
@@ -340,6 +346,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       await interaction.reply({ content: modTxt.muteNotModeratable, flags: MessageFlags.Ephemeral });
       return;
     }
+    if (!(await assertModeratorQuota(interaction))) return;
     const ms = Math.min(minutes * 60_000, 2_419_200_000);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const now = Date.now();
@@ -359,6 +366,9 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
             : modTxt.muteTimeoutFail(modTxt.unknownError),
       });
       return;
+    }
+    if (!isModeratorQuotaExempt(interaction.member)) {
+      recordModeratorQuotaUse(guild.id, interaction.user.id);
     }
     touchModerationViolation(guild.id, target.id, now);
 
@@ -510,6 +520,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       await interaction.reply({ content: modTxt.userNotInGuild, flags: MessageFlags.Ephemeral });
       return;
     }
+    if (!(await assertModeratorQuota(interaction))) return;
 
     const now = Date.now();
     applyModerationDecayIfNeeded(guild.id, target.id, now, DISCORD_MODERATION_DECAY_MS);
@@ -525,6 +536,9 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const after = strike.warnCount;
     const timeoutMs = strike.timeoutApplied ? strike.timeoutMs : undefined;
 
+    if (!isModeratorQuotaExempt(interaction.member)) {
+      recordModeratorQuotaUse(guild.id, interaction.user.id);
+    }
     await saveState(LAST_SEEN_STATE_FILE);
 
     const evidence = await resolveEvidenceFromMessageId({
@@ -714,6 +728,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       await interaction.reply({ content: modTxt.banNotBannable, flags: MessageFlags.Ephemeral });
       return;
     }
+    if (!(await assertModeratorQuota(interaction))) return;
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const banDmEmbed = buildStaffManualBanEmbed({
       guild,
@@ -731,6 +746,10 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       });
       return;
     }
+    if (!isModeratorQuotaExempt(interaction.member)) {
+      recordModeratorQuotaUse(guild.id, interaction.user.id);
+    }
+    await saveState(LAST_SEEN_STATE_FILE);
 
     const evidence = await resolveEvidenceFromMessageId({
       guild,
@@ -911,6 +930,14 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       const resetLabel =
         remaining <= 0 ? modTxt.modstatusDecayDue : modTxt.modstatusDecayPending(discordFormatDurationRu(remaining));
       lines.push(modTxt.modstatusDecayLine(agoLabel, resetLabel));
+    }
+
+    if (!isModeratorQuotaExempt(interaction.member)) {
+      const quota = getModeratorQuotaStatus(guildId, interaction.user.id, now);
+      if (quota.limit > 0) {
+        lines.push("");
+        lines.push(modTxt.modstatusDailyQuota(quota.used, quota.limit, quota.remaining));
+      }
     }
 
     await interaction.reply({

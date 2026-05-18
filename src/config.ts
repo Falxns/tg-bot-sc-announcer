@@ -113,6 +113,13 @@ export const DISCORD_MODERATION_DECAY_MS = clampParseInt(
   2_419_200_000,
 );
 
+/** Max manual /mute + /strike + /ban per moderator per UTC day (0 = disabled). */
+export const DISCORD_MODERATION_DAILY_QUOTA = clampParseInt(
+  process.env.DISCORD_MODERATION_DAILY_QUOTA ?? "30",
+  0,
+  500,
+);
+
 export const DISCORD_MODERATION_LOG_CHANNEL_ID = (process.env.DISCORD_MODERATION_LOG_CHANNEL_ID ?? "").trim();
 
 /** Optional one-line staff digest channel (manual mod commands, role creates, creator posts). */

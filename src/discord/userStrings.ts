@@ -315,6 +315,10 @@ export const discordModerationCommands = {
     `**Последнее нарушение:** ${agoLabel} назад. ${resetInLabel}`,
   modstatusDecayPending: (dur: string) =>
     `Без новых нарушений сброс предупреждений и лестниц примерно через **${dur}**.`,
+  moderatorQuotaExceeded: (used: number, limit: number) =>
+    `Дневной лимит модерации: **${used}/${limit}** (/mute, /strike, /ban). Обновится в 00:00 UTC.`,
+  modstatusDailyQuota: (used: number, limit: number, remaining: number) =>
+    `**Ваш лимит сегодня (UTC):** **${used}/${limit}** (/mute, /strike, /ban), осталось **${remaining}**.`,
   modstatusDecayDue: "Порог бездействия для сброса уже пройден — сброс произойдёт при следующей проверке нарушения.",
   staffDmFooter: "Сообщение от модераторов сервера",
   staffDmTitleMute: "Таймаут",

@@ -66,6 +66,8 @@ export const discordMuteTier = new Map<string, number>();
 export const discordModerationLastViolationAt = new Map<string, number>();
 /** Last creator staff-summary digest (ms): `${guildId}:${userId}:${channelId}`. */
 export const discordStaffSummaryCreatorLastAt = new Map<string, number>();
+/** Punitive slash uses per UTC day: `${guildId}:${staffUserId}:${YYYY-MM-DD}`. */
+export const discordModeratorDailyQuota = new Map<string, number>();
 
 const ROLE_BUTTON_PREFIX = "role:";
 const ROLE_BUTTON_SINGLE_PREFIX = "roleone:";
@@ -76,6 +78,38 @@ export function guildUserKey(guildId: string, userId: string): string {
 
 export function creatorSummaryKey(guildId: string, userId: string, channelId: string): string {
   return `${guildId}:${userId}:${channelId}`;
+}
+
+export function utcQuotaDateString(nowMs: number): string {
+  return new Date(nowMs).toISOString().slice(0, 10);
+}
+
+export function moderatorDailyQuotaKey(guildId: string, staffUserId: string, dateUtc: string): string {
+  return `${guildId}:${staffUserId}:${dateUtc}`;
+}
+
+export function getModeratorDailyQuotaUsed(guildId: string, staffUserId: string, nowMs: number): number {
+  const key = moderatorDailyQuotaKey(guildId, staffUserId, utcQuotaDateString(nowMs));
+  const v = discordModeratorDailyQuota.get(key);
+  return typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+}
+
+function pruneModeratorQuotaBefore(keepDateUtc: string): void {
+  for (const key of discordModeratorDailyQuota.keys()) {
+    const date = key.slice(key.lastIndexOf(":") + 1);
+    if (date < keepDateUtc) discordModeratorDailyQuota.delete(key);
+  }
+}
+
+/** Increments today's punitive-command count for a moderator. */
+export function recordModeratorDailyQuotaUse(guildId: string, staffUserId: string, nowMs: number): number {
+  const date = utcQuotaDateString(nowMs);
+  const key = moderatorDailyQuotaKey(guildId, staffUserId, date);
+  const next = getModeratorDailyQuotaUsed(guildId, staffUserId, nowMs) + 1;
+  discordModeratorDailyQuota.set(key, next);
+  const yesterday = utcQuotaDateString(nowMs - 86_400_000);
+  pruneModeratorQuotaBefore(yesterday);
+  return next;
 }
 
 /**
@@ -286,6 +320,12 @@ export async function loadState(path: string): Promise<void> {
           discordStaffSummaryCreatorLastAt.set(k, v);
         }
       }
+      const modQuota = obj.discordModeratorDailyQuota;
+      if (modQuota && typeof modQuota === "object" && !Array.isArray(modQuota)) {
+        for (const [k, v] of parseNumberMap(modQuota)) {
+          if (v > 0) discordModeratorDailyQuota.set(k, v);
+        }
+      }
     }
     if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
       console.log(
@@ -315,6 +355,7 @@ export async function saveState(path: string): Promise<boolean> {
       discordMuteTier: Object.fromEntries(discordMuteTier),
       discordModerationLastViolationAt: Object.fromEntries(discordModerationLastViolationAt),
       discordStaffSummaryCreatorLastAt: Object.fromEntries(discordStaffSummaryCreatorLastAt),
+      discordModeratorDailyQuota: Object.fromEntries(discordModeratorDailyQuota),
     };
     await store.writeState(JSON.stringify(state, null, 2));
     return true;

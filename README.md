@@ -65,6 +65,7 @@ Edit `.env`:
 | `DISCORD_WARNINGS_BEFORE_TIMEOUT` | No | Server-wide strikes before ladder timeouts apply; mod-log shows `n/threshold` (default: **3**) |
 | `DISCORD_MAJOR_MIN_LADDER_STEP` | No | Ladder index for first major automod hit (default **3** = 1 day) |
 | `DISCORD_MODERATION_DECAY_MS` | No | No violations for this long resets global warns + ladder tier (default: 259200000 = 3 days) |
+| `DISCORD_MODERATION_DAILY_QUOTA` | No | Per-moderator daily cap on **`/mute`**, **`/strike`**, **`/ban`** combined (UTC day; default **30**; **`0`** = off). Bypass: **`DISCORD_ADMIN_ROLE_IDS`** |
 | `DISCORD_MODERATION_LOG_CHANNEL_ID` | No | Text channel ID for **full** moderation audit embeds (**automod** + **manual** `/mute` `/unmute` `/strike` `/unstrike` `/ban` `/unban`) |
 | `DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID` | No | Optional **one-line** staff digest channel: manual mod commands (link to **`DISCORD_MODERATION_LOG_CHANNEL_ID`**), role creates, creator posts |
 | `DISCORD_STAFF_SUMMARY_ROLE_CREATE_TRACKED_ROLE_IDS` | No | Comma-separated staff role IDs; digest when holder **creates** a guild role or **assigns/removes** a role on a member via audit log (needs **View Audit Log**; excludes bot role-panel toggles) |
@@ -117,7 +118,9 @@ Author list and “last seen” state are saved to the state file and restored o
 - `/unstrike user:<user> [amount] [reset_warnings] [reset_ladder] [lower_ladder]` — decrease or reset **server-wide** strikes and/or timeout ladder tier
 - `/ban user:<user> [reason_preset] [reason] [screenshot] [message_id]` — permanent server ban; **`reason_preset`** / **`reason`** same as **`/mute`**; tries to **DM** the user **before** banning
 - `/unban user:<user> | user_id:<snowflake>` — remove server ban; specify **either** **`user`** **or** **`user_id`** (use **`user_id`** when the account does not appear in the picker); DM after unban when possible
-- `/modstatus user:<user>` — read-only: active Discord **timeout** (with **`<t:…>`** end time), **global** strikes (`n` / **`DISCORD_WARNINGS_BEFORE_TIMEOUT`**), **next** unified ladder step/duration, and last-violation / **decay** hint for **`DISCORD_MODERATION_DECAY_MS`** (no state changed)
+- `/modstatus user:<user>` — read-only: active Discord **timeout** (with **`<t:…>`** end time), **global** strikes (`n` / **`DISCORD_WARNINGS_BEFORE_TIMEOUT`**), **next** unified ladder step/duration, and last-violation / **decay** hint for **`DISCORD_MODERATION_DECAY_MS`** (no state changed); shows **your** remaining daily quota for `/mute` `/strike` `/ban` when limited
+
+**Daily mod quota:** each moderator (not roles in **`DISCORD_ADMIN_ROLE_IDS`**) may use **`/mute`**, **`/strike`**, and **`/ban`** combined **`DISCORD_MODERATION_DAILY_QUOTA`** times per **UTC calendar day** (default **30**; **`0`** disables). `/unmute`, `/unstrike`, `/unban` are not counted.
 
 **User DMs (staff):** `/mute`, `/strike`, `/unmute`, `/ban`, and `/unban` try to **DM** the target (before ban for **`/ban`**, after successful unban for **`/unban`**) with the same kind of structure as automod where applicable. If DMs are disabled, a short **message is posted in the channel where the command was run** and auto-deleted after **`DISCORD_WARNING_MESSAGE_TTL_MS`** (same as automod fallback).
 
