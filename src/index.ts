@@ -3,6 +3,7 @@ import { createServer } from "http";
 import { Telegraf } from "telegraf";
 import {
   chatIds,
+  DISCORD_DEV_MODE,
   DISCORD_BOT_TOKEN,
   DISCORD_GUILD_ID,
   LAST_SEEN_STATE_FILE,
@@ -38,14 +39,50 @@ const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
 registerAdminCommands(bot);
 
 let pollIntervalId: ReturnType<typeof setInterval> | undefined;
+let shutdownInProgress = false;
 
-async function shutdown(): Promise<void> {
+async function shutdown(signal: string): Promise<void> {
+  if (shutdownInProgress) return;
+  shutdownInProgress = true;
+
   if (pollIntervalId !== undefined) clearInterval(pollIntervalId);
+
+  // Discord dev cleanup needs a live gateway; run before slow Telegram/state I/O.
+  await stopDiscordBot();
+
   await flushTelegramSendQueue();
   await saveState(LAST_SEEN_STATE_FILE);
-  await stopDiscordBot();
-  await bot.stop();
+  try {
+    bot.stop(signal);
+  } catch {
+    // Telegraf throws if polling was never started or already stopped.
+  }
   process.exit(0);
+}
+
+function onShutdownSignal(signal: string): void {
+  void shutdown(signal).catch((err) => {
+    console.error("Shutdown failed:", err);
+    process.exit(1);
+  });
+}
+
+/** Dev bot: SIGINT may not fire when Ctrl is remapped (e.g. Karabiner → arrows). */
+function setupDevModeShutdownTriggers(): void {
+  if (!DISCORD_DEV_MODE) return;
+
+  console.log("Dev: q + Enter to stop (clears slash commands).");
+
+  if (process.stdin.isTTY) {
+    process.stdin.resume();
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => {
+      const line = chunk.toString().trim().toLowerCase();
+      if (line === "q" || line === "quit" || line === ".quit") {
+        onShutdownSignal("stdin-q");
+      }
+    });
+  }
 }
 
 const PORT = process.env.PORT;
@@ -77,6 +114,7 @@ bot
     }
     await loadState(LAST_SEEN_STATE_FILE);
     await startDiscordBot();
+    setupDevModeShutdownTriggers();
     if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
       console.log("Bot started.");
       console.log(
@@ -96,5 +134,6 @@ bot
     process.exit(1);
   });
 
-process.once("SIGINT", () => void shutdown());
-process.once("SIGTERM", () => void shutdown());
+process.once("SIGINT", () => onShutdownSignal("SIGINT"));
+process.once("SIGTERM", () => onShutdownSignal("SIGTERM"));
+process.once("SIGHUP", () => onShutdownSignal("SIGHUP"));

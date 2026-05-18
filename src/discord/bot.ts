@@ -1,7 +1,12 @@
 import { Client, GatewayIntentBits, MessageFlags } from "discord.js";
-import { DISCORD_BOT_TOKEN, DISCORD_GUILD_ID, LOG_LEVEL } from "../config";
+import { DISCORD_BOT_TOKEN, DISCORD_DEV_MODE, DISCORD_GUILD_ID, LOG_LEVEL } from "../config";
 import { discordCommonReplies as com } from "./userStrings";
-import { handleDiscordCommand, handleDiscordModal, registerGuildCommands } from "./commands";
+import {
+  handleDiscordCommand,
+  handleDiscordModal,
+  registerGuildCommands,
+  unregisterGuildCommands,
+} from "./commands";
 import { handleModerationAutocomplete } from "./moderationCommands";
 import { handleModerationMessage } from "./moderation";
 import { handleRoleButtonInteraction } from "./roles";
@@ -105,6 +110,21 @@ export async function startDiscordBot(): Promise<void> {
 }
 
 export async function stopDiscordBot(): Promise<void> {
+  if (DISCORD_DEV_MODE) {
+    if (!discordClient) {
+      console.warn("Dev: slash commands not cleared (Discord not connected).");
+    } else {
+      const client = discordClient;
+      try {
+        const guild = await client.guilds.fetch(DISCORD_GUILD_ID);
+        await unregisterGuildCommands(guild);
+        console.log("Dev: slash commands cleared.");
+      } catch (err) {
+        console.error("Dev: failed to clear slash commands:", err);
+      }
+    }
+  }
+
   if (!discordClient) return;
   discordClient.destroy();
   discordClient = null;

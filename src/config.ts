@@ -10,6 +10,10 @@ export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHANNEL_IDS = process.env.TELEGRAM_CHANNEL_IDS ?? "";
 export const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 export const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID?.trim() ?? "";
+/** When true, guild slash commands are removed on graceful shutdown (local dev bot on prod guild). */
+export const DISCORD_DEV_MODE = !/^0|false$/i.test(
+  (process.env.DISCORD_DEV_MODE ?? "0").trim(),
+);
 export type StateBackend = "file" | "upstash";
 export const STATE_BACKEND: StateBackend = process.env.STATE_BACKEND === "upstash" ? "upstash" : "file";
 export const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL?.trim() ?? "";

@@ -307,6 +307,10 @@ const linkPanelCommand = appendSharedPanelEmbedOptions(
     .addStringOption((opt) => opt.setName("label5").setDescription(lp.buttonLabel(5)).setMaxLength(80)),
 ).setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
+export async function unregisterGuildCommands(guild: Guild): Promise<void> {
+  await guild.commands.set([]);
+}
+
 export async function registerGuildCommands(guild: Guild): Promise<void> {
   await guild.commands.set([
     postCommand.toJSON(),
