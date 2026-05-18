@@ -1088,10 +1088,7 @@ export async function handleDiscordCommand(interaction: ChatInputCommandInteract
     await interaction.reply({ content: com.guildOnlyCommand, flags: MessageFlags.Ephemeral });
     return;
   }
-  if (!isElevated(interaction.member)) {
-    await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
-    return;
-  }
+
   if (
     interaction.commandName === "mute" ||
     interaction.commandName === "unmute" ||
@@ -1102,6 +1099,11 @@ export async function handleDiscordCommand(interaction: ChatInputCommandInteract
     interaction.commandName === "modstatus"
   ) {
     await handleModerationSlashCommand(interaction);
+    return;
+  }
+
+  if (!isElevated(interaction.member)) {
+    await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }
   if (interaction.commandName === "post") {
