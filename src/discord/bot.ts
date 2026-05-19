@@ -13,6 +13,7 @@ import { handleModerationMessage } from "./moderation";
 import { handleRoleButtonInteraction } from "./roles";
 import {
   handleStaffSummaryCreatorMessage,
+  handleStaffSummaryMemberAvailable,
   handleStaffSummaryMemberUpdate,
   handleStaffSummaryRoleCreate,
   handleStaffSummaryRoleUpdate,
@@ -94,6 +95,12 @@ export async function startDiscordBot(): Promise<void> {
   client.on("guildMemberUpdate", (oldMember, newMember) => {
     void handleStaffSummaryMemberUpdate(oldMember, newMember).catch((err) => {
       console.error("Discord staff summary guildMemberUpdate handler failed:", err);
+    });
+  });
+
+  client.on("guildMemberAvailable", (member) => {
+    void handleStaffSummaryMemberAvailable(member).catch((err) => {
+      console.error("Discord staff summary guildMemberAvailable handler failed:", err);
     });
   });
 
