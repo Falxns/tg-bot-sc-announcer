@@ -367,6 +367,8 @@ export const discordMessageReview = {
 
 export const discordAutoMod = {
   spamDuplicateReason: "Повтор одного и того же сообщения подряд (спам).",
+  spamCrossAuthorCooldownReason:
+    "Похожее объявление уже публиковалось в этом канале недавно (не чаще одного раза в 6 ч).",
   invitesForbidden: "В этом канале запрещены приглашения Discord.",
   forbiddenDomain: (host: string) => `Ссылка на запрещённый домен: ${host}`,
   videoForbidden: "В этом канале запрещены видеовложения.",

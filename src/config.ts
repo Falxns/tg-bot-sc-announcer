@@ -308,6 +308,65 @@ export const DISCORD_SPAM_FILTER_CHANNEL_IDS: ReadonlySet<string> = new Set(
     .filter(Boolean),
 );
 
+export type SpamFilterChannelOptions = {
+  crossAuthor?: boolean;
+  cooldownMs?: number;
+};
+
+const DEFAULT_CROSS_AUTHOR_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+
+function parseSpamFilterChannelOptions(raw: string): Record<string, SpamFilterChannelOptions> {
+  if (!raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, SpamFilterChannelOptions> = {};
+    for (const [channelId, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!/^\d{17,20}$/.test(channelId.trim())) continue;
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const row = value as Record<string, unknown>;
+      const crossAuthor = row.crossAuthor === true;
+      const cooldownRaw = row.cooldownMs;
+      const cooldownMs =
+        typeof cooldownRaw === "number" && Number.isFinite(cooldownRaw)
+          ? clampParseInt(String(Math.floor(cooldownRaw)), 60_000, 7 * 24 * 60 * 60 * 1000)
+          : crossAuthor
+            ? DEFAULT_CROSS_AUTHOR_COOLDOWN_MS
+            : undefined;
+      out[channelId.trim()] = {
+        ...(crossAuthor ? { crossAuthor: true } : {}),
+        ...(cooldownMs !== undefined ? { cooldownMs } : {}),
+      };
+    }
+    return out;
+  } catch {
+    console.warn("Invalid DISCORD_SPAM_FILTER_CHANNEL_OPTIONS_JSON, using empty options.");
+    return {};
+  }
+}
+
+/** Per-channel overrides: cross-author duplicate cooldown (see README). Keys are channel/thread snowflakes. */
+export const DISCORD_SPAM_FILTER_CHANNEL_OPTIONS = parseSpamFilterChannelOptions(
+  process.env.DISCORD_SPAM_FILTER_CHANNEL_OPTIONS_JSON ?? "",
+);
+
+export const DISCORD_SPAM_FILTER_MAX_FINGERPRINTS_PER_SCOPE = clampParseInt(
+  process.env.DISCORD_SPAM_FILTER_MAX_FINGERPRINTS_PER_SCOPE ?? "200",
+  10,
+  2000,
+);
+
+/** Resolve spam options for message channel or warn-scope parent channel. */
+export function resolveSpamFilterChannelOptions(
+  channelId: string,
+  warningScopeChannelId: string,
+): SpamFilterChannelOptions | undefined {
+  return (
+    DISCORD_SPAM_FILTER_CHANNEL_OPTIONS[channelId] ??
+    DISCORD_SPAM_FILTER_CHANNEL_OPTIONS[warningScopeChannelId]
+  );
+}
+
 export const chatIds = TELEGRAM_CHANNEL_IDS.split(",")
   .map((id) => id.trim())
   .filter(Boolean);

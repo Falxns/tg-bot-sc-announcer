@@ -1,4 +1,9 @@
 import { LOG_LEVEL, POSTS_PER_AUTHOR, STATE_BACKEND } from "./config";
+import {
+  loadSpamFilterFingerprintsFromState,
+  pruneSpamFilterFingerprintsForSave,
+  serializeSpamFilterFingerprintsForState,
+} from "./discord/spamFilterCache";
 import type { DiscordRolePanelState } from "./discord/types";
 import { createStateStore } from "./stateStore";
 
@@ -326,6 +331,7 @@ export async function loadState(path: string): Promise<void> {
           if (v > 0) discordModeratorDailyQuota.set(k, v);
         }
       }
+      loadSpamFilterFingerprintsFromState(obj.discordSpamFilterFingerprints);
     }
     if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
       console.log(
@@ -346,6 +352,7 @@ export async function loadState(path: string): Promise<void> {
 
 export async function saveState(path: string): Promise<boolean> {
   try {
+    pruneSpamFilterFingerprintsForSave();
     const store = createStateStore(path);
     const state = {
       lastSeenByAuthor: Object.fromEntries(lastSeenByAuthor),
@@ -356,6 +363,7 @@ export async function saveState(path: string): Promise<boolean> {
       discordModerationLastViolationAt: Object.fromEntries(discordModerationLastViolationAt),
       discordStaffSummaryCreatorLastAt: Object.fromEntries(discordStaffSummaryCreatorLastAt),
       discordModeratorDailyQuota: Object.fromEntries(discordModeratorDailyQuota),
+      discordSpamFilterFingerprints: serializeSpamFilterFingerprintsForState(),
     };
     await store.writeState(JSON.stringify(state, null, 2));
     return true;

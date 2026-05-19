@@ -18,6 +18,7 @@ import {
   DISCORD_WARNING_MESSAGE_TTL_MS,
   LAST_SEEN_STATE_FILE,
   LOG_LEVEL,
+  resolveSpamFilterChannelOptions,
 } from "../config";
 import type { DiscordChannelPolicy, ViolationSeverity } from "./types";
 import { logModerationEvent } from "./moderationLog";
@@ -36,6 +37,15 @@ import {
 import { evictMessageReviewCache } from "./messageReview";
 import { applyLightModerationSanction, applyMajorModerationSanction } from "./moderationSanction";
 import {
+  hasCrossAuthorSpamDuplicate,
+  recordSpamFilterFingerprint,
+} from "./spamFilterCache";
+import {
+  buildSpamFingerprint,
+  isSpamDuplicateContentMatch,
+  normalizeMessageForSpamCompare,
+} from "./spamFilterCompare";
+import {
   applyModerationDecayIfNeeded,
   getMuteTier,
   saveState,
@@ -45,15 +55,7 @@ import {
 /** Discord “red” for moderation user notices */
 const MODERATION_USER_EMBED_COLOR = 0xed4245;
 const SPAM_DUPLICATE_REASON = autoTxt.spamDuplicateReason;
-const SPAM_NORMALIZE_MAX_LEN = 1000;
-/** Option F hybrid: max |len(a)−len(b)| for skeleton-based “almost duplicate” (decorated same core). */
-const SPAM_HYBRID_MAX_LEN_DELTA = 8;
-/** Minimum skeleton length before skeleton equality counts (reduces short false positives). */
-const SPAM_SKELETON_MIN_LEN = 4;
-/** Option F: fuzzy ratio only when both norms exceed this length (chars). */
-const SPAM_FUZZY_LONG_MIN_LEN = 40;
-/** Normalized Levenshtein similarity ≥ this ⇒ duplicate for long messages (1 − dist/max(len)). */
-const SPAM_FUZZY_MIN_RATIO = 0.92;
+const SPAM_CROSS_AUTHOR_COOLDOWN_REASON = autoTxt.spamCrossAuthorCooldownReason;
 
 type PolicyContext = {
   policy: DiscordChannelPolicy | undefined;
@@ -135,97 +137,6 @@ function hostMatchesBlacklist(host: string, blacklist: readonly string[]): boole
   return false;
 }
 
-/** Strip leading/trailing characters that are not Unicode letters or numbers (decoration / punctuation). */
-function stripSpamEdgeNonCore(s: string): string {
-  let t = s;
-  let prev = "";
-  while (prev !== t) {
-    prev = t;
-    t = t.replace(/^[^\p{L}\p{N}]+/u, "").replace(/[^\p{L}\p{N}]+$/u, "");
-  }
-  return t;
-}
-
-/**
- * Normalize message body for duplicate-spam comparison (same author, consecutive messages).
- * NFKC, zero-width removal, whitespace collapse, lower case, edge stripping; capped length.
- */
-function normalizeMessageForSpamCompare(raw: string): string {
-  let s = raw.normalize("NFKC");
-  s = s.replace(/[\u200B-\u200D\uFEFF\u2060-\u206F]/g, "");
-  s = s.replace(/\s+/g, " ").trim();
-  s = s.toLowerCase();
-  s = stripSpamEdgeNonCore(s);
-  s = s.replace(/\s+/g, " ").trim();
-  if (s.length > SPAM_NORMALIZE_MAX_LEN) s = s.slice(0, SPAM_NORMALIZE_MAX_LEN);
-  return s;
-}
-
-/** Letters and digits only, order preserved (Option C light) — input must already be normalized. */
-function spamSkeleton(normalized: string): string {
-  return normalized.replace(/[^\p{L}\p{N}]+/gu, "");
-}
-
-function spamNormLengthsClose(a: string, b: string): boolean {
-  return Math.abs(a.length - b.length) <= SPAM_HYBRID_MAX_LEN_DELTA;
-}
-
-function levenshteinDistance(s: string, t: string): number {
-  const m = s.length;
-  const n = t.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  const v0 = new Array<number>(n + 1);
-  const v1 = new Array<number>(n + 1);
-  for (let j = 0; j <= n; j++) v0[j] = j;
-  for (let i = 0; i < m; i++) {
-    v1[0] = i + 1;
-    for (let j = 0; j < n; j++) {
-      const cost = s[i] === t[j] ? 0 : 1;
-      v1[j + 1] = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost);
-    }
-    for (let j = 0; j <= n; j++) v0[j] = v1[j];
-  }
-  return v0[n];
-}
-
-/** 1 − dist/max(len); 0 if edit budget cannot reach SPAM_FUZZY_MIN_RATIO. */
-function spamNormalizedLevenshteinSimilarity(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  if (m === 0 && n === 0) return 1;
-  if (m === 0 || n === 0) return 0;
-  const maxLen = Math.max(m, n);
-  const maxDistForRatio = Math.ceil((1 - SPAM_FUZZY_MIN_RATIO) * maxLen);
-  if (Math.abs(m - n) > maxDistForRatio) return 0;
-  const d = levenshteinDistance(a, b);
-  return 1 - d / maxLen;
-}
-
-/**
- * Option F hybrid after Option A normalize: strict equality, or (skeleton + length-close), or long-message fuzzy ratio.
- */
-function isSpamDuplicateContentMatch(norm: string, normPrev: string): boolean {
-  if (norm === normPrev) return true;
-
-  const sk = spamSkeleton(norm);
-  const skPrev = spamSkeleton(normPrev);
-  if (
-    sk.length >= SPAM_SKELETON_MIN_LEN &&
-    skPrev.length >= SPAM_SKELETON_MIN_LEN &&
-    sk === skPrev &&
-    spamNormLengthsClose(norm, normPrev)
-  ) {
-    return true;
-  }
-
-  if (Math.min(norm.length, normPrev.length) > SPAM_FUZZY_LONG_MIN_LEN) {
-    if (spamNormalizedLevenshteinSimilarity(norm, normPrev) >= SPAM_FUZZY_MIN_RATIO) return true;
-  }
-
-  return false;
-}
-
 function isSpamFilterChannel(ctx: PolicyContext, message: Message): boolean {
   if (DISCORD_SPAM_FILTER_CHANNEL_IDS.size === 0) return false;
   return (
@@ -234,11 +145,24 @@ function isSpamFilterChannel(ctx: PolicyContext, message: Message): boolean {
   );
 }
 
+function trySpamCrossAuthorCooldownViolation(message: Message, ctx: PolicyContext): ViolationHit | null {
+  const { norm } = buildSpamFingerprint(message.content);
+  if (norm.length === 0) return null;
+  if (hasCrossAuthorSpamDuplicate(ctx.warningScopeChannelId, norm)) {
+    return {
+      severity: "minor",
+      reason: SPAM_CROSS_AUTHOR_COOLDOWN_REASON,
+      logReason: SPAM_CROSS_AUTHOR_COOLDOWN_REASON,
+    };
+  }
+  return null;
+}
+
 /**
  * Same author as immediate previous message in channel + duplicate/near-duplicate body (Option F hybrid) => minor violation.
  * Uses one history fetch; skips if current normalized body is empty.
  */
-async function trySpamDuplicateViolation(message: Message): Promise<ViolationHit | null> {
+async function trySpamSameAuthorConsecutiveViolation(message: Message): Promise<ViolationHit | null> {
   const norm = normalizeMessageForSpamCompare(message.content);
   if (norm.length === 0) return null;
 
@@ -259,6 +183,23 @@ async function trySpamDuplicateViolation(message: Message): Promise<ViolationHit
   if (!isSpamDuplicateContentMatch(norm, normPrev)) return null;
 
   return { severity: "minor", reason: SPAM_DUPLICATE_REASON, logReason: SPAM_DUPLICATE_REASON };
+}
+
+async function trySpamDuplicateViolation(message: Message, ctx: PolicyContext): Promise<ViolationHit | null> {
+  const opts = resolveSpamFilterChannelOptions(message.channelId, ctx.warningScopeChannelId);
+  if (opts?.crossAuthor) {
+    return trySpamCrossAuthorCooldownViolation(message, ctx);
+  }
+  return trySpamSameAuthorConsecutiveViolation(message);
+}
+
+function maybeRecordSpamFilterFingerprint(message: Message, ctx: PolicyContext): void {
+  if (!isSpamFilterChannel(ctx, message)) return;
+  const opts = resolveSpamFilterChannelOptions(message.channelId, ctx.warningScopeChannelId);
+  if (!opts?.crossAuthor) return;
+  const { norm, skeleton } = buildSpamFingerprint(message.content);
+  if (norm.length === 0) return;
+  recordSpamFilterFingerprint(ctx.warningScopeChannelId, norm, skeleton, message.author.id);
 }
 
 function resolvePolicyContext(message: Message): PolicyContext {
@@ -668,12 +609,15 @@ export async function handleModerationMessage(message: Message): Promise<void> {
 
   let violation: ViolationHit | null = null;
   if (isSpamFilterChannel(ctx, message)) {
-    violation = await trySpamDuplicateViolation(message);
+    violation = await trySpamDuplicateViolation(message, ctx);
   }
   if (!violation) {
     violation = detectViolations(message, member, ctx, searchable, inviteScanText, lowerSearch, attachments);
   }
-  if (!violation) return;
+  if (!violation) {
+    maybeRecordSpamFilterFingerprint(message, ctx);
+    return;
+  }
 
   const guildId = message.guildId;
   const userId = message.author.id;
