@@ -33,6 +33,7 @@ import {
   discordModerationCommands as modTxt,
   discordModerationLogTitles as logTitles,
 } from "./userStrings";
+import { evictMessageReviewCache } from "./messageReview";
 import { applyLightModerationSanction, applyMajorModerationSanction } from "./moderationSanction";
 import {
   applyModerationDecayIfNeeded,
@@ -687,6 +688,8 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     console.error("Discord moderation failed to delete message:", err);
     return;
   }
+
+  evictMessageReviewCache(message.id);
 
   touchModerationViolation(guildId, userId, now);
 

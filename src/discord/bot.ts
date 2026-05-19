@@ -8,6 +8,7 @@ import {
   unregisterGuildCommands,
 } from "./commands";
 import { handleModerationAutocomplete } from "./moderationCommands";
+import { handleMessageReviewCreate, handleMessageReviewDelete } from "./messageReview";
 import { handleModerationMessage } from "./moderation";
 import { handleRoleButtonInteraction } from "./roles";
 import {
@@ -100,8 +101,17 @@ export async function startDiscordBot(): Promise<void> {
     void handleStaffSummaryCreatorMessage(message).catch((err) => {
       console.error("Discord staff summary creator message handler failed:", err);
     });
+    void handleMessageReviewCreate(message).catch((err) => {
+      console.error("Discord message review create handler failed:", err);
+    });
     void handleModerationMessage(message).catch((err) => {
       console.error("Discord moderation handler failed:", err);
+    });
+  });
+
+  client.on("messageDelete", (message) => {
+    void handleMessageReviewDelete(message).catch((err) => {
+      console.error("Discord message review delete handler failed:", err);
     });
   });
 

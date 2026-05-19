@@ -354,6 +354,17 @@ export const discordStaffModerationSummary = {
     `<@${authorUserId}> опубликовал пост в <#${channelId}> — ${messageUrl}`,
 } as const;
 
+/** Self-deleted media/URL messages → `DISCORD_MESSAGE_REVIEW_CHANNEL_ID`. */
+export const discordMessageReview = {
+  deletedPing: (authorUserId: string) => `<@${authorUserId}> удалил сообщение`,
+  deletedHeader: (authorUserId: string, channelId: string, jumpUrl: string) =>
+    `**Автор:** <@${authorUserId}>\n**Канал:** <#${channelId}>\n**Ссылка (недействительна):** ${jumpUrl}`,
+  deletedContentBlock: (text: string) => `**Текст:**\n${text.slice(0, 1800)}`,
+  deletedNoText: "**Текст:** _(пусто)_",
+  attachmentLinkOnly: (name: string, url: string) => `**${name}** (слишком большой файл): ${url}`,
+  attachmentFetchFail: (name: string, url: string) => `**${name}** (не удалось скачать): ${url}`,
+} as const;
+
 export const discordAutoMod = {
   spamDuplicateReason: "Повтор одного и того же сообщения подряд (спам).",
   invitesForbidden: "В этом канале запрещены приглашения Discord.",

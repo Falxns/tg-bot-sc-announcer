@@ -165,6 +165,53 @@ export const DISCORD_STAFF_SUMMARY_ROLE_CHANGE_BATCH_MS = clampParseInt(
   600_000,
 );
 
+/** Mod review: post to this channel when author self-deletes a cached media/URL message. */
+export const DISCORD_MESSAGE_REVIEW_CHANNEL_ID = (
+  process.env.DISCORD_MESSAGE_REVIEW_CHANNEL_ID ?? ""
+).trim();
+
+/** Channels where messages are cached for delete-only review (comma-separated). */
+export const DISCORD_MESSAGE_REVIEW_SOURCE_CHANNEL_IDS = parseCommaSeparatedIds(
+  process.env.DISCORD_MESSAGE_REVIEW_SOURCE_CHANNEL_IDS,
+);
+
+export const DISCORD_MESSAGE_REVIEW_SOURCE_CHANNEL_SET: ReadonlySet<string> = new Set(
+  DISCORD_MESSAGE_REVIEW_SOURCE_CHANNEL_IDS,
+);
+
+/** In-memory cache TTL before eviction (default 1 hour). */
+export const DISCORD_MESSAGE_REVIEW_CACHE_TTL_MS = clampParseInt(
+  process.env.DISCORD_MESSAGE_REVIEW_CACHE_TTL_MS ?? "3600000",
+  60_000,
+  86_400_000,
+);
+
+export const DISCORD_MESSAGE_REVIEW_MAX_CACHE_ENTRIES = clampParseInt(
+  process.env.DISCORD_MESSAGE_REVIEW_MAX_CACHE_ENTRIES ?? "5000",
+  100,
+  50_000,
+);
+
+export const DISCORD_MESSAGE_REVIEW_BYPASS_ROLE_IDS = parseCommaSeparatedIds(
+  process.env.DISCORD_MESSAGE_REVIEW_BYPASS_ROLE_IDS,
+);
+
+export const DISCORD_MESSAGE_REVIEW_INCLUDE_URLS = !/^0|false$/i.test(
+  process.env.DISCORD_MESSAGE_REVIEW_INCLUDE_URLS ?? "1",
+);
+
+export const DISCORD_MESSAGE_REVIEW_MAX_ATTACHMENT_MB = clampParseInt(
+  process.env.DISCORD_MESSAGE_REVIEW_MAX_ATTACHMENT_MB ?? "8",
+  1,
+  25,
+);
+
+export const DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS = clampParseInt(
+  process.env.DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS ?? "500",
+  200,
+  5_000,
+);
+
 /** Creator post summaries: watch messages in these channel IDs (not threads). */
 export const DISCORD_STAFF_SUMMARY_CREATOR_CHANNEL_IDS = parseCommaSeparatedIds(
   process.env.DISCORD_STAFF_SUMMARY_CREATOR_CHANNEL_IDS,

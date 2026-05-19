@@ -73,6 +73,14 @@ Edit `.env`:
 | `DISCORD_STAFF_SUMMARY_CREATOR_CHANNEL_IDS` | No | Comma-separated channel IDs; digest when a member with creator roles posts a **top-level** message (not threads) |
 | `DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS` | No | Comma-separated role IDs treated as “creator” for the above |
 | `DISCORD_STAFF_SUMMARY_CREATOR_COOLDOWN_MS` | No | Min gap between creator digests per author+channel (default **1800000** = 30 min) |
+| `DISCORD_MESSAGE_REVIEW_CHANNEL_ID` | No | When set with **`DISCORD_MESSAGE_REVIEW_SOURCE_CHANNEL_IDS`**: cache media/URL messages in RAM; post copy to this channel **only** when the author **self-deletes** (not persisted across deploy) |
+| `DISCORD_MESSAGE_REVIEW_SOURCE_CHANNEL_IDS` | No | Comma-separated channel IDs to watch |
+| `DISCORD_MESSAGE_REVIEW_CACHE_TTL_MS` | No | In-memory cache TTL (default **3600000** = 1 h) |
+| `DISCORD_MESSAGE_REVIEW_MAX_CACHE_ENTRIES` | No | Max cached messages (default **5000**) |
+| `DISCORD_MESSAGE_REVIEW_BYPASS_ROLE_IDS` | No | Skip caching for these roles |
+| `DISCORD_MESSAGE_REVIEW_INCLUDE_URLS` | No | Cache text-only messages with `http(s)` URLs (default on) |
+| `DISCORD_MESSAGE_REVIEW_MAX_ATTACHMENT_MB` | No | Re-upload limit on delete (default **8** MB) |
+| `DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS` | No | Audit log delay before self-delete check (default **500** ms) |
 | `DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST` | No | Comma-separated or JSON array of hosts; non-invite `http(s)` URLs matching these trigger a **major** hit (empty = disabled) |
 | `DISCORD_SPAM_FILTER_CHANNEL_IDS` | No | Comma-separated channel/thread IDs where **consecutive near-duplicate text** from the **same user** (vs previous message in channel via API) counts as **minor** spam: strict normalized equality, or same **letter/digit skeleton** with similar length, or (for long text only) high **Levenshtein similarity**; empty disables. Bot needs **Read Message History** there. |
 | `DISCORD_WARNING_MESSAGE_TTL_MS` | No | Auto-delete delay for ephemeral-style channel notices (default: 12000) |
@@ -127,6 +135,8 @@ Author list and “last seen” state are saved to the state file and restored o
 **Mod log (`DISCORD_MODERATION_LOG_CHANNEL_ID`):** full embeds for automod and manual commands. Automod **Причина** uses raw violation text (not preset copy); user DMs still use presets when configured. Strike count field is **server-wide** (`n` / threshold).
 
 **Staff summary (`DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID`):** one-line digests — manual mod commands link to the matching mod-log message; optional **role create**, **role assign/remove** (tracked staff via audit log), and **creator post** lines do not require the log channel.
+
+**Message review (`DISCORD_MESSAGE_REVIEW_CHANNEL_ID` + `DISCORD_MESSAGE_REVIEW_SOURCE_CHANNEL_IDS`):** bot caches posts with media or links in RAM (~1 h). If the author **deletes their own message**, a copy is posted to the review channel for moderator follow-up (`/strike`, `/mute`). Automod-deleted messages are not posted here. Cache is cleared on bot restart.
 
 Role-panel definitions and moderation state (**`discordGlobalWarns`**, **`discordMuteTier`**, **`discordModerationLastViolationAt`**, creator-summary cooldown timestamps) are saved in shared bot state (`file` or Upstash) and restored on restart. Old per-channel warning / dual-tier keys are **not** loaded after deploy (one-time reset).
 
