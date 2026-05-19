@@ -95,6 +95,7 @@ export const discordSlashModeration = {
     reason: "Своя причина (перекрывает шаблон)",
     screenshot: "Скриншот нарушения (необязательно)",
     messageId: "ID сообщения нарушителя в текущем канале/треде; сообщение будет удалено автоматически",
+    deleteMessages: "Удалить сообщения пользователя за период (необязательно)",
   },
   unban: {
     commandDescription: "Снять блокировку с пользователя.",
@@ -118,6 +119,30 @@ export const discordMuteDurationChoices: ReadonlyArray<{ name: string; value: st
   { name: "14 дней", value: "20160" },
   { name: "28 дней", value: "40320" },
 ];
+
+/** Values are seconds as strings (Discord `delete_message_seconds` on ban). */
+export const discordBanDeleteMessageChoices: ReadonlyArray<{ name: string; value: string }> = [
+  { name: "1 час", value: "3600" },
+  { name: "6 часов", value: "21600" },
+  { name: "12 часов", value: "43200" },
+  { name: "1 день", value: "86400" },
+  { name: "3 дня", value: "259200" },
+  { name: "1 неделя", value: "604800" },
+];
+
+const BAN_DELETE_SECONDS_ALLOWLIST = new Set(
+  discordBanDeleteMessageChoices.map((c) => c.value),
+);
+
+export function banDeleteSecondsFromChoice(value: string): number | undefined {
+  if (!BAN_DELETE_SECONDS_ALLOWLIST.has(value)) return undefined;
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+export function banDeleteChoiceLabelFromSeconds(seconds: number): string | undefined {
+  return discordBanDeleteMessageChoices.find((c) => c.value === String(seconds))?.name;
+}
 
 export function discordModerationLogChannelFieldValue(channelId: string, parentChannelId?: string): string {
   if (parentChannelId) {
@@ -253,8 +278,12 @@ export const discordModerationCommands = {
     `Лестница <@${userId}>: ступень **${before}** → **${after}** (всего ${ladderSteps} ступеней).`,
   defaultBanReason: "Блокировка модератором",
   banFail: (err: string) => `Не удалось заблокировать: ${err}`,
-  banDone: (userId: string, evidenceNote: string, shotNote: string) =>
-    `Пользователь <@${userId}> заблокирован на сервере.${evidenceNote}${shotNote}`,
+  banDone: (userId: string, deleteNote: string, evidenceNote: string, shotNote: string) =>
+    `Пользователь <@${userId}> заблокирован на сервере.${deleteNote}${evidenceNote}${shotNote}`,
+  banDeleteDoneNote: (periodLabel: string) =>
+    ` Сообщения пользователя за последние ${periodLabel} удаляются по всему серверу.`,
+  banDeleteLogSuffix: (periodLabel: string) => `\n\n**Удаление сообщений:** ${periodLabel}`,
+  banBadDeletePeriod: "Некорректный период удаления сообщений.",
   banSelf: "Нельзя заблокировать себя.",
   banOwner: "Нельзя заблокировать владельца сервера.",
   banNotBannable: "Не могу заблокировать этого пользователя (роль выше или недостаточно прав).",

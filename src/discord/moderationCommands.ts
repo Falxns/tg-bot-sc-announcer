@@ -58,6 +58,9 @@ import {
   discordFormatDurationRu,
   discordModerationCommands as modTxt,
   discordModerationLogTitles,
+  banDeleteChoiceLabelFromSeconds,
+  banDeleteSecondsFromChoice,
+  discordBanDeleteMessageChoices,
   discordMuteDurationChoices,
   discordSlashModeration as slashModTxt,
 } from "./userStrings";
@@ -284,6 +287,13 @@ export const banSlashCommand = new SlashCommandBuilder()
       .setRequired(false)
       .setMinLength(17)
       .setMaxLength(22),
+  )
+  .addStringOption((o) =>
+    o
+      .setName("delete_messages")
+      .setDescription(slashModTxt.ban.deleteMessages)
+      .addChoices(...discordBanDeleteMessageChoices)
+      .setRequired(false),
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers);
 
@@ -729,6 +739,14 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       return;
     }
     if (!(await assertModeratorQuota(interaction))) return;
+
+    const deleteRaw = interaction.options.getString("delete_messages");
+    const deleteMessageSeconds = deleteRaw ? banDeleteSecondsFromChoice(deleteRaw) : 0;
+    if (deleteRaw && deleteMessageSeconds === undefined) {
+      await interaction.reply({ content: modTxt.banBadDeletePeriod, flags: MessageFlags.Ephemeral });
+      return;
+    }
+
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const banDmEmbed = buildStaffManualBanEmbed({
       guild,
@@ -739,7 +757,10 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     });
     await notifyStaffUserDmFallback(interaction, target, banDmEmbed);
     try {
-      await guild.members.ban(target.id, { reason: reasonPlainTextForAudit(reason) });
+      await guild.members.ban(target.id, {
+        reason: reasonPlainTextForAudit(reason),
+        deleteMessageSeconds: deleteMessageSeconds ?? 0,
+      });
     } catch (err) {
       await interaction.editReply({
         content: modTxt.banFail(err instanceof Error ? err.message : String(err)),
@@ -765,13 +786,22 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
           ? [{ url: screenshot.url, name: modTxt.screenshotFileFallback }]
           : undefined;
 
+    const deletePeriodLabel =
+      deleteMessageSeconds && deleteMessageSeconds > 0
+        ? banDeleteChoiceLabelFromSeconds(deleteMessageSeconds)
+        : undefined;
+    const logReason =
+      deletePeriodLabel !== undefined
+        ? reason + modTxt.banDeleteLogSuffix(deletePeriodLabel)
+        : reason;
+
     const logMsg = await logModerationEvent(guild, {
       title: discordModerationLogTitles.staffBan,
       color: 0x992222,
       targetUserId: target.id,
       channelId: interaction.channelId,
       parentChannelId: interaction.channel?.isThread() ? interaction.channel.parentId ?? undefined : undefined,
-      reason,
+      reason: logReason,
       staffUserId: interaction.user.id,
       ...(logFiles ? { logFiles } : {}),
       ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
@@ -799,8 +829,11 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       shotNote = DISCORD_MODERATION_LOG_CHANNEL_ID ? modTxt.screenshotLogged : modTxt.screenshotNoLogEnv;
     }
 
+    const deleteNote =
+      deletePeriodLabel !== undefined ? modTxt.banDeleteDoneNote(deletePeriodLabel) : "";
+
     await interaction.editReply({
-      content: modTxt.banDone(target.id, evidence.note + evidenceDeleteNote, shotNote),
+      content: modTxt.banDone(target.id, deleteNote, evidence.note + evidenceDeleteNote, shotNote),
     });
     return;
   }

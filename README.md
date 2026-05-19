@@ -126,7 +126,7 @@ Author list and “last seen” state are saved to the state file and restored o
 - `/unmute user:<user>` — clears Discord timeout
 - `/strike user:<user> [amount] [reason_preset] [reason] [screenshot] [message_id]` — same light path as automod: +**global** strike(s); warn-only below **`DISCORD_WARNINGS_BEFORE_TIMEOUT`**, else timeout at **`DISCORD_TIMEOUT_LADDER_MS`** current tier; DM title **«Предупреждение»** or **«Наказание»** when timed out
 - `/unstrike user:<user> [amount] [reset_warnings] [reset_ladder] [lower_ladder]` — decrease or reset **server-wide** strikes and/or timeout ladder tier
-- `/ban user:<user> [reason_preset] [reason] [screenshot] [message_id]` — permanent server ban; **`reason_preset`** / **`reason`** same as **`/mute`**; tries to **DM** the user **before** banning
+- `/ban user:<user> [reason_preset] [reason] [screenshot] [message_id] [delete_messages]` — permanent server ban; **`reason_preset`** / **`reason`** same as **`/mute`**; tries to **DM** the user **before** banning. Optional **`delete_messages`**: Discord bulk-deletes that user’s messages **server-wide** from the last **1 h / 6 h / 12 h / 1 d / 3 d / 1 week** (omit = no bulk delete)
 - `/unban user:<user> | user_id:<snowflake>` — remove server ban; specify **either** **`user`** **or** **`user_id`** (use **`user_id`** when the account does not appear in the picker); DM after unban when possible
 - `/modstatus user:<user>` — read-only: active Discord **timeout** (with **`<t:…>`** end time), **global** strikes (`n` / **`DISCORD_WARNINGS_BEFORE_TIMEOUT`**), **next** unified ladder step/duration, and last-violation / **decay** hint for **`DISCORD_MODERATION_DECAY_MS`** (no state changed); shows **your** remaining daily quota for `/mute` `/strike` `/ban` when limited
 
