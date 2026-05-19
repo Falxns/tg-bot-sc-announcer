@@ -107,6 +107,12 @@ export const MODERATION_REASON_PRESETS: readonly ModerationReasonPreset[] = [
     channelSlug: "услуги",
     body: "Ваше сообщение было удалено: канал {channel} предназначен для публикации объявлений об оказании услуг, связанных с STALCRAFT: X.",
   },
+  {
+    id: "otsenka_sborok",
+    choiceLabel: "#оценка-сборок",
+    channelSlug: "оценка-сборок",
+    body: "Ваше сообщение было удалено: канал {channel} предназначен для публикации и оценки сборок, связанных со STALCRAFT: X.",
+  },
 ] as const;
 
 const PRESET_BY_ID = new Map<string, ModerationReasonPreset>(
