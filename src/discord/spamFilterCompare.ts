@@ -4,7 +4,7 @@ const SPAM_NORMALIZE_MAX_LEN = 1000;
 const SPAM_HYBRID_MAX_LEN_DELTA = 8;
 const SPAM_SKELETON_MIN_LEN = 4;
 const SPAM_FUZZY_LONG_MIN_LEN = 40;
-const SPAM_FUZZY_MIN_RATIO = 0.92;
+const SPAM_FUZZY_MIN_RATIO = 0.8;
 
 function stripSpamEdgeNonCore(s: string): string {
   let t = s;
