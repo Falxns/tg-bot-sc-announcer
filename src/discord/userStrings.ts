@@ -64,8 +64,9 @@ export const discordSlashModeration = {
   mute: {
     commandDescription: "Выдать таймаут пользователю.",
     duration: "Длительность таймаута",
-    reasonPreset: "Шаблон причины (начните вводить для поиска)",
-    reason: "Своя причина (перекрывает шаблон)",
+    channelPreset: "Шаблон канала (начните вводить для поиска)",
+    rulePreset: "Правило сервера (начните вводить для поиска)",
+    reason: "Своя причина (перекрывает шаблоны)",
     screenshot: "Скриншот нарушения (необязательно)",
     messageId: "ID сообщения нарушителя в текущем канале/треде; сообщение будет удалено автоматически",
   },
@@ -75,8 +76,9 @@ export const discordSlashModeration = {
   strike: {
     commandDescription: "Выдать наказание пользователю.",
     amount: "Количество предупреждений (1–20)",
-    reasonPreset: "Шаблон причины (начните вводить для поиска)",
-    reason: "Своя причина (перекрывает шаблон)",
+    channelPreset: "Шаблон канала (начните вводить для поиска)",
+    rulePreset: "Правило сервера (начните вводить для поиска)",
+    reason: "Своя причина (перекрывает шаблоны)",
     screenshot: "Скриншот нарушения (необязательно)",
     messageId: "ID сообщения нарушителя в текущем канале/треде; сообщение будет удалено автоматически",
   },
@@ -91,10 +93,12 @@ export const discordSlashModeration = {
   },
   ban: {
     commandDescription: "Перманентно заблокировать пользователя на сервере.",
-    reasonPreset: "Шаблон причины (начните вводить для поиска)",
-    reason: "Своя причина (перекрывает шаблон)",
+    channelPreset: "Шаблон канала (начните вводить для поиска)",
+    rulePreset: "Правило сервера (начните вводить для поиска)",
+    reason: "Своя причина (перекрывает шаблоны)",
     screenshot: "Скриншот нарушения (необязательно)",
     messageId: "ID сообщения нарушителя в текущем канале/треде; сообщение будет удалено автоматически",
+    deleteMessages: "Удалить сообщения пользователя за период (необязательно)",
   },
   unban: {
     commandDescription: "Снять блокировку с пользователя.",
@@ -119,6 +123,30 @@ export const discordMuteDurationChoices: ReadonlyArray<{ name: string; value: st
   { name: "28 дней", value: "40320" },
 ];
 
+/** Values are seconds as strings (Discord `delete_message_seconds` on ban). */
+export const discordBanDeleteMessageChoices: ReadonlyArray<{ name: string; value: string }> = [
+  { name: "1 час", value: "3600" },
+  { name: "6 часов", value: "21600" },
+  { name: "12 часов", value: "43200" },
+  { name: "1 день", value: "86400" },
+  { name: "3 дня", value: "259200" },
+  { name: "1 неделя", value: "604800" },
+];
+
+const BAN_DELETE_SECONDS_ALLOWLIST = new Set(
+  discordBanDeleteMessageChoices.map((c) => c.value),
+);
+
+export function banDeleteSecondsFromChoice(value: string): number | undefined {
+  if (!BAN_DELETE_SECONDS_ALLOWLIST.has(value)) return undefined;
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+export function banDeleteChoiceLabelFromSeconds(seconds: number): string | undefined {
+  return discordBanDeleteMessageChoices.find((c) => c.value === String(seconds))?.name;
+}
+
 export function discordModerationLogChannelFieldValue(channelId: string, parentChannelId?: string): string {
   if (parentChannelId) {
     return `<#${channelId}> (тред в <#${parentChannelId}>)`;
@@ -134,6 +162,9 @@ export const discordModerationLogFields = {
   timeoutMinutes: (m: number) => `${m} мин`,
   excerpt: "Текст сообщения",
   moderator: "Модератор",
+  logChannelViolation: "Нарушение в канале",
+  logRuleServer: (point: string) => `Правило сервера (п. ${point})`,
+  logAutomodDetector: "Автомод (детектор)",
 } as const;
 
 export const discordModerationLogTitles = {
@@ -164,7 +195,8 @@ export const discordCommonReplies = {
   modalWrongInvokerLinkPanel: "Отправить форму может только тот, кто вызвал `/linkpanel`.",
   postModalNeedsContent:
     "Добавьте текст сообщения, прикрепите картинку и/или задайте embed (например `embed_title`, `embed_description`).",
-  panelModalNeedsContent: "Добавьте текст сообщения и/или задайте embed (например `embed_title`, `embed_description`).",
+  panelModalNeedsContent:
+    "Добавьте текст сообщения, прикрепите картинку и/или задайте embed (например `embed_title`, `embed_description`).",
   channelUnavailable: "Канал больше недоступен.",
   internalError: "Произошла внутренняя ошибка.",
 } as const;
@@ -253,8 +285,12 @@ export const discordModerationCommands = {
     `Лестница <@${userId}>: ступень **${before}** → **${after}** (всего ${ladderSteps} ступеней).`,
   defaultBanReason: "Блокировка модератором",
   banFail: (err: string) => `Не удалось заблокировать: ${err}`,
-  banDone: (userId: string, evidenceNote: string, shotNote: string) =>
-    `Пользователь <@${userId}> заблокирован на сервере.${evidenceNote}${shotNote}`,
+  banDone: (userId: string, deleteNote: string, evidenceNote: string, shotNote: string) =>
+    `Пользователь <@${userId}> заблокирован на сервере.${deleteNote}${evidenceNote}${shotNote}`,
+  banDeleteDoneNote: (periodLabel: string) =>
+    ` Сообщения пользователя за последние ${periodLabel} удаляются по всему серверу.`,
+  banDeleteLogSuffix: (periodLabel: string) => `\n\n**Удаление сообщений:** ${periodLabel}`,
+  banBadDeletePeriod: "Некорректный период удаления сообщений.",
   banSelf: "Нельзя заблокировать себя.",
   banOwner: "Нельзя заблокировать владельца сервера.",
   banNotBannable: "Не могу заблокировать этого пользователя (роль выше или недостаточно прав).",
@@ -315,7 +351,14 @@ export const discordModerationCommands = {
     `**Последнее нарушение:** ${agoLabel} назад. ${resetInLabel}`,
   modstatusDecayPending: (dur: string) =>
     `Без новых нарушений сброс предупреждений и лестниц примерно через **${dur}**.`,
+  moderatorQuotaExceeded: (used: number, limit: number) =>
+    `Дневной лимит модерации: **${used}/${limit}** (/mute, /strike, /ban). Обновится в 00:00 UTC.`,
+  modstatusDailyQuota: (used: number, limit: number, remaining: number) =>
+    `**Ваш лимит сегодня (UTC):** **${used}/${limit}** (/mute, /strike, /ban), осталось **${remaining}**.`,
   modstatusDecayDue: "Порог бездействия для сброса уже пройден — сброс произойдёт при следующей проверке нарушения.",
+  staffDmLabelReason: "Причина",
+  staffDmLabelChannelViolation: "Нарушение в канале",
+  staffDmLabelRuleServer: (point: string) => `Правило сервера (п. ${point})`,
   staffDmFooter: "Сообщение от модераторов сервера",
   staffDmTitleMute: "Таймаут",
   staffDmTitleStrikeWarn: "Предупреждение",
@@ -350,8 +393,21 @@ export const discordStaffModerationSummary = {
     `<@${authorUserId}> опубликовал пост в <#${channelId}> — ${messageUrl}`,
 } as const;
 
+/** Self-deleted media/URL messages → `DISCORD_MESSAGE_REVIEW_CHANNEL_ID`. */
+export const discordMessageReview = {
+  deletedPing: (authorUserId: string) => `<@${authorUserId}> удалил сообщение`,
+  deletedHeader: (authorUserId: string, channelId: string, jumpUrl: string) =>
+    `**Автор:** <@${authorUserId}>\n**Канал:** <#${channelId}>\n**Ссылка (недействительна):** ${jumpUrl}`,
+  deletedContentBlock: (text: string) => `**Текст:**\n${text.slice(0, 1800)}`,
+  deletedNoText: "**Текст:** _(пусто)_",
+  attachmentLinkOnly: (name: string, url: string) => `**${name}** (слишком большой файл): ${url}`,
+  attachmentFetchFail: (name: string, url: string) => `**${name}** (не удалось скачать): ${url}`,
+} as const;
+
 export const discordAutoMod = {
   spamDuplicateReason: "Повтор одного и того же сообщения подряд (спам).",
+  spamCrossAuthorCooldownReason:
+    "Похожее объявление уже публиковалось в этом канале недавно (не чаще одного раза в 6 часов).",
   invitesForbidden: "В этом канале запрещены приглашения Discord.",
   forbiddenDomain: (host: string) => `Ссылка на запрещённый домен: ${host}`,
   videoForbidden: "В этом канале запрещены видеовложения.",
@@ -365,6 +421,8 @@ export const discordAutoMod = {
   titleMinor: "Предупреждение",
   labelChannel: "Канал",
   labelReason: "Причина",
+  labelChannelViolation: "Нарушение в канале",
+  labelRuleServer: (point: string) => `Правило сервера (п. ${point})`,
   labelTimeout: "Таймаут",
   timeoutApplyFail: "**Таймаут:** не удалось применить (ошибка Discord API).",
   timeoutNotModeratable:

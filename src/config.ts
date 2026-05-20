@@ -10,6 +10,10 @@ export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHANNEL_IDS = process.env.TELEGRAM_CHANNEL_IDS ?? "";
 export const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 export const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID?.trim() ?? "";
+/** When true, guild slash commands are removed on graceful shutdown (local dev bot on prod guild). */
+export const DISCORD_DEV_MODE = !/^0|false$/i.test(
+  (process.env.DISCORD_DEV_MODE ?? "0").trim(),
+);
 export type StateBackend = "file" | "upstash";
 export const STATE_BACKEND: StateBackend = process.env.STATE_BACKEND === "upstash" ? "upstash" : "file";
 export const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL?.trim() ?? "";
@@ -43,7 +47,7 @@ export const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS ?? "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
-/** Role IDs that may use `/post` and `/rolepanel` (when non-empty; otherwise any member passing Discord command perms). */
+/** Role IDs that may use `/post`, `/edit`, `/rolepanel`, `/linkpanel` (when non-empty; moderation slash uses Discord perms only). */
 export const DISCORD_ADMIN_ROLE_IDS = (process.env.DISCORD_ADMIN_ROLE_IDS ?? "")
   .split(",")
   .map((s) => s.trim())
@@ -62,8 +66,6 @@ export const DISCORD_WARNINGS_BEFORE_TIMEOUT = clampParseInt(
   1,
   20,
 );
-/** @deprecated No longer used. */
-export const DISCORD_TIMEOUT_MS = clampParseInt(process.env.DISCORD_TIMEOUT_MS ?? "600000", 60_000, 604800_000);
 export const DISCORD_WARNING_MESSAGE_TTL_MS = clampParseInt(
   process.env.DISCORD_WARNING_MESSAGE_TTL_MS ?? "12000",
   1000,
@@ -109,6 +111,13 @@ export const DISCORD_MODERATION_DECAY_MS = clampParseInt(
   2_419_200_000,
 );
 
+/** Max manual /mute + /strike + /ban per moderator per UTC day (0 = disabled). */
+export const DISCORD_MODERATION_DAILY_QUOTA = clampParseInt(
+  process.env.DISCORD_MODERATION_DAILY_QUOTA ?? "30",
+  0,
+  500,
+);
+
 export const DISCORD_MODERATION_LOG_CHANNEL_ID = (process.env.DISCORD_MODERATION_LOG_CHANNEL_ID ?? "").trim();
 
 /** Optional one-line staff digest channel (manual mod commands, role creates, creator posts). */
@@ -152,6 +161,53 @@ export const DISCORD_STAFF_SUMMARY_ROLE_CHANGE_BATCH_MS = clampParseInt(
   process.env.DISCORD_STAFF_SUMMARY_ROLE_CHANGE_BATCH_MS ?? "300000",
   10_000,
   600_000,
+);
+
+/** Mod review: post to this channel when author self-deletes a cached media/URL message. */
+export const DISCORD_MESSAGE_REVIEW_CHANNEL_ID = (
+  process.env.DISCORD_MESSAGE_REVIEW_CHANNEL_ID ?? ""
+).trim();
+
+/** Channels where messages are cached for delete-only review (comma-separated). */
+export const DISCORD_MESSAGE_REVIEW_SOURCE_CHANNEL_IDS = parseCommaSeparatedIds(
+  process.env.DISCORD_MESSAGE_REVIEW_SOURCE_CHANNEL_IDS,
+);
+
+export const DISCORD_MESSAGE_REVIEW_SOURCE_CHANNEL_SET: ReadonlySet<string> = new Set(
+  DISCORD_MESSAGE_REVIEW_SOURCE_CHANNEL_IDS,
+);
+
+/** In-memory cache TTL before eviction (default 1 hour). */
+export const DISCORD_MESSAGE_REVIEW_CACHE_TTL_MS = clampParseInt(
+  process.env.DISCORD_MESSAGE_REVIEW_CACHE_TTL_MS ?? "3600000",
+  60_000,
+  86_400_000,
+);
+
+export const DISCORD_MESSAGE_REVIEW_MAX_CACHE_ENTRIES = clampParseInt(
+  process.env.DISCORD_MESSAGE_REVIEW_MAX_CACHE_ENTRIES ?? "5000",
+  100,
+  50_000,
+);
+
+export const DISCORD_MESSAGE_REVIEW_BYPASS_ROLE_IDS = parseCommaSeparatedIds(
+  process.env.DISCORD_MESSAGE_REVIEW_BYPASS_ROLE_IDS,
+);
+
+export const DISCORD_MESSAGE_REVIEW_INCLUDE_URLS = !/^0|false$/i.test(
+  process.env.DISCORD_MESSAGE_REVIEW_INCLUDE_URLS ?? "1",
+);
+
+export const DISCORD_MESSAGE_REVIEW_MAX_ATTACHMENT_MB = clampParseInt(
+  process.env.DISCORD_MESSAGE_REVIEW_MAX_ATTACHMENT_MB ?? "8",
+  1,
+  25,
+);
+
+export const DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS = clampParseInt(
+  process.env.DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS ?? "500",
+  200,
+  5_000,
 );
 
 /** Creator post summaries: watch messages in these channel IDs (not threads). */
@@ -203,9 +259,13 @@ function parseDiscordChannelPolicies(raw: string): DiscordChannelPolicyMap {
           : [],
         keywordViolationSeverity: parseSeverity(row.keywordViolationSeverity, "minor"),
         mediaViolationSeverity: parseSeverity(row.mediaViolationSeverity, "minor"),
-        reasonPresetId:
-          typeof row.reasonPresetId === "string" && row.reasonPresetId.trim().length > 0
-            ? row.reasonPresetId.trim()
+        channelPresetId:
+          typeof row.channelPresetId === "string" && row.channelPresetId.trim().length > 0
+            ? row.channelPresetId.trim()
+            : undefined,
+        rulePresetId:
+          typeof row.rulePresetId === "string" && row.rulePresetId.trim().length > 0
+            ? row.rulePresetId.trim()
             : undefined,
       };
       out[channelId] = policy;
@@ -250,12 +310,71 @@ export const DISCORD_SPAM_FILTER_CHANNEL_IDS: ReadonlySet<string> = new Set(
     .filter(Boolean),
 );
 
+export type SpamFilterChannelOptions = {
+  crossAuthor?: boolean;
+  cooldownMs?: number;
+};
+
+const DEFAULT_CROSS_AUTHOR_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+
+function parseSpamFilterChannelOptions(raw: string): Record<string, SpamFilterChannelOptions> {
+  if (!raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, SpamFilterChannelOptions> = {};
+    for (const [channelId, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!/^\d{17,20}$/.test(channelId.trim())) continue;
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const row = value as Record<string, unknown>;
+      const crossAuthor = row.crossAuthor === true;
+      const cooldownRaw = row.cooldownMs;
+      const cooldownMs =
+        typeof cooldownRaw === "number" && Number.isFinite(cooldownRaw)
+          ? clampParseInt(String(Math.floor(cooldownRaw)), 60_000, 7 * 24 * 60 * 60 * 1000)
+          : crossAuthor
+            ? DEFAULT_CROSS_AUTHOR_COOLDOWN_MS
+            : undefined;
+      out[channelId.trim()] = {
+        ...(crossAuthor ? { crossAuthor: true } : {}),
+        ...(cooldownMs !== undefined ? { cooldownMs } : {}),
+      };
+    }
+    return out;
+  } catch {
+    console.warn("Invalid DISCORD_SPAM_FILTER_CHANNEL_OPTIONS_JSON, using empty options.");
+    return {};
+  }
+}
+
+/** Per-channel overrides: cross-author duplicate cooldown (see README). Keys are channel/thread snowflakes. */
+export const DISCORD_SPAM_FILTER_CHANNEL_OPTIONS = parseSpamFilterChannelOptions(
+  process.env.DISCORD_SPAM_FILTER_CHANNEL_OPTIONS_JSON ?? "",
+);
+
+export const DISCORD_SPAM_FILTER_MAX_FINGERPRINTS_PER_SCOPE = clampParseInt(
+  process.env.DISCORD_SPAM_FILTER_MAX_FINGERPRINTS_PER_SCOPE ?? "200",
+  10,
+  2000,
+);
+
+/** Resolve spam options for message channel or warn-scope parent channel. */
+export function resolveSpamFilterChannelOptions(
+  channelId: string,
+  warningScopeChannelId: string,
+): SpamFilterChannelOptions | undefined {
+  return (
+    DISCORD_SPAM_FILTER_CHANNEL_OPTIONS[channelId] ??
+    DISCORD_SPAM_FILTER_CHANNEL_OPTIONS[warningScopeChannelId]
+  );
+}
+
 export const chatIds = TELEGRAM_CHANNEL_IDS.split(",")
   .map((id) => id.trim())
   .filter(Boolean);
 export const DISCORD_CHANNEL_POLICIES = parseDiscordChannelPolicies(process.env.DISCORD_CHANNEL_POLICIES_JSON ?? "");
 
-function parseModerationReasonChannelIds(raw: string): Record<string, string> {
+function parseModerationChannelPresetChannelIds(raw: string): Record<string, string> {
   if (!raw.trim()) return {};
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -268,14 +387,14 @@ function parseModerationReasonChannelIds(raw: string): Record<string, string> {
     }
     return out;
   } catch {
-    console.warn("Invalid DISCORD_MODERATION_REASON_CHANNEL_IDS_JSON, using empty map.");
+    console.warn("Invalid DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS_JSON, using empty map.");
     return {};
   }
 }
 
-/** Preset id → Discord channel snowflake for clickable #channel in reason text. */
-export const DISCORD_MODERATION_REASON_CHANNEL_IDS = parseModerationReasonChannelIds(
-  process.env.DISCORD_MODERATION_REASON_CHANNEL_IDS_JSON ?? "",
+/** Channel preset id → Discord channel snowflake for clickable #channel in preset text. */
+export const DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS = parseModerationChannelPresetChannelIds(
+  process.env.DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS_JSON ?? "",
 );
 
 export function sleep(ms: number): Promise<void> {

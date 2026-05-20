@@ -2,6 +2,7 @@ import {
   AuditLogEvent,
   GuildMember,
   type Guild,
+  type GuildAuditLogsEntry,
   type Message,
   type PartialGuildMember,
   type Role,
@@ -23,7 +24,9 @@ import { saveState, tryConsumeCreatorSummaryCooldown } from "../state";
 import { editStaffSummaryLine, postStaffSummaryLine } from "./moderationLog";
 import { discordStaffModerationSummary as staffSumTxt } from "./userStrings";
 
-const MEMBER_ROLE_AUDIT_MAX_AGE_MS = 15_000;
+/** How far back to match `MemberRoleUpdate` audit entries after the event. */
+const MEMBER_ROLE_AUDIT_MAX_AGE_MS = 30_000;
+const PROCESSED_ROLE_AUDIT_TTL_MS = 60_000;
 
 const PLACEHOLDER_ROLE_NAMES = new Set(["new role", "новая роль"]);
 
@@ -47,6 +50,15 @@ type PendingRoleCreate = {
 
 const roleChangeBatches = new Map<string, RoleChangeBatch>();
 const pendingRoleCreates = new Map<string, PendingRoleCreate>();
+/** Dedupe audit entries when Discord emits multiple member updates for one role change. */
+const processedRoleAuditEntryIds = new Map<string, number>();
+
+type ParsedMemberRoleAuditChange = {
+  auditEntryId: string;
+  roleId: string;
+  kind: RoleChangeKind;
+  executorId: string;
+};
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -86,6 +98,31 @@ function clearRoleChangeBatch(key: string): void {
 
 function scheduleRoleChangeBatchExpiry(key: string): ReturnType<typeof setTimeout> {
   return setTimeout(() => clearRoleChangeBatch(key), DISCORD_STAFF_SUMMARY_ROLE_CHANGE_BATCH_MS);
+}
+
+function pruneProcessedRoleAuditEntries(now = Date.now()): void {
+  for (const [id, at] of processedRoleAuditEntryIds) {
+    if (now - at > PROCESSED_ROLE_AUDIT_TTL_MS) processedRoleAuditEntryIds.delete(id);
+  }
+}
+
+/** Returns true if this audit entry was not seen before (and marks it consumed). */
+function consumeRoleAuditEntry(entryId: string): boolean {
+  pruneProcessedRoleAuditEntries();
+  if (processedRoleAuditEntryIds.has(entryId)) return false;
+  processedRoleAuditEntryIds.set(entryId, Date.now());
+  return true;
+}
+
+async function isBotUserId(guild: Guild, userId: string): Promise<boolean> {
+  const cached = guild.client.users.cache.get(userId);
+  if (cached) return cached.bot;
+  const user = await guild.client.users.fetch(userId).catch(() => null);
+  return user?.bot ?? false;
+}
+
+function executorIdFromAuditEntry(entry: GuildAuditLogsEntry): string | undefined {
+  return entry.executor?.id ?? entry.executorId ?? undefined;
 }
 
 async function isTrackedStaffExecutor(guild: Guild, executorId: string): Promise<boolean> {
@@ -130,6 +167,58 @@ function auditEntryIncludesRoleChange(
   return false;
 }
 
+function parseMemberRoleChangesFromEntry(
+  entry: GuildAuditLogsEntry,
+  executorId: string,
+): ParsedMemberRoleAuditChange[] {
+  const out: ParsedMemberRoleAuditChange[] = [];
+  for (const change of entry.changes) {
+    if (change.key === "$add" && change.new !== undefined) {
+      for (const roleId of roleIdsFromAuditChangeValue(change.new)) {
+        out.push({ auditEntryId: entry.id, roleId, kind: "assign", executorId });
+      }
+    }
+    if (change.key === "$remove" && change.old !== undefined) {
+      for (const roleId of roleIdsFromAuditChangeValue(change.old)) {
+        out.push({ auditEntryId: entry.id, roleId, kind: "remove", executorId });
+      }
+    }
+  }
+  return out;
+}
+
+async function collectRecentMemberRoleAuditChanges(
+  guild: Guild,
+  targetUserId: string,
+): Promise<ParsedMemberRoleAuditChange[]> {
+  try {
+    const logs = await guild.fetchAuditLogs({ type: AuditLogEvent.MemberRoleUpdate, limit: 20 });
+    const now = Date.now();
+    const out: ParsedMemberRoleAuditChange[] = [];
+    for (const entry of logs.entries.values()) {
+      if (entry.targetId !== targetUserId) continue;
+      if (now - entry.createdTimestamp > MEMBER_ROLE_AUDIT_MAX_AGE_MS) continue;
+      if (!consumeRoleAuditEntry(entry.id)) continue;
+
+      const executorId = executorIdFromAuditEntry(entry);
+      if (!executorId) continue;
+      if (await isBotUserId(guild, executorId)) continue;
+
+      const parsed = parseMemberRoleChangesFromEntry(entry, executorId);
+      if (parsed.length === 0 && entry.changes.length > 0 && LOG_LEVEL === "debug") {
+        console.log(
+          `[Staff summary] member role audit entry ${entry.id} had no $add/$remove parse; keys=${entry.changes.map((c) => c.key).join(",")}`,
+        );
+      }
+      out.push(...parsed);
+    }
+    return out;
+  } catch (err) {
+    console.error("Staff summary member role audit log fetch failed:", err);
+    return [];
+  }
+}
+
 async function resolveMemberRoleChangeExecutor(
   guild: Guild,
   targetUserId: string,
@@ -137,13 +226,15 @@ async function resolveMemberRoleChangeExecutor(
   action: RoleChangeKind,
 ): Promise<string | undefined> {
   try {
-    const logs = await guild.fetchAuditLogs({ type: AuditLogEvent.MemberRoleUpdate, limit: 12 });
+    const logs = await guild.fetchAuditLogs({ type: AuditLogEvent.MemberRoleUpdate, limit: 20 });
     const now = Date.now();
     for (const entry of logs.entries.values()) {
       if (entry.targetId !== targetUserId) continue;
       if (now - entry.createdTimestamp > MEMBER_ROLE_AUDIT_MAX_AGE_MS) continue;
-      if (!entry.executor || entry.executor.bot) continue;
-      if (auditEntryIncludesRoleChange(entry, roleId, action)) return entry.executor.id;
+      const executorId = executorIdFromAuditEntry(entry);
+      if (!executorId) continue;
+      if (await isBotUserId(guild, executorId)) continue;
+      if (auditEntryIncludesRoleChange(entry, roleId, action)) return executorId;
     }
   } catch (err) {
     console.error("Staff summary member role audit log fetch failed:", err);
@@ -284,8 +375,9 @@ export async function handleStaffSummaryRoleCreate(role: Role): Promise<void> {
   try {
     const logs = await role.guild.fetchAuditLogs({ type: AuditLogEvent.RoleCreate, limit: 6 });
     const entry = logs.entries.find((e) => e.targetId === role.id);
-    if (entry?.executor && !entry.executor.bot) {
-      executorId = entry.executor.id;
+    const candidateId = entry ? executorIdFromAuditEntry(entry) : undefined;
+    if (candidateId && !(await isBotUserId(role.guild, candidateId))) {
+      executorId = candidateId;
     }
   } catch (err) {
     console.error("Staff summary roleCreate audit log fetch failed:", err);
@@ -318,6 +410,25 @@ export async function handleStaffSummaryRoleUpdate(role: Role, oldRole: Role): P
   await postRoleCreateDigest(role.guild, role.id, false);
 }
 
+async function processMemberRoleChange(
+  guild: Guild,
+  targetUserId: string,
+  roleId: string,
+  kind: RoleChangeKind,
+  executorId: string,
+): Promise<void> {
+  const role = guild.roles.cache.get(roleId) ?? (await guild.roles.fetch(roleId).catch(() => null));
+  if (!role || role.managed) return;
+  if (!(await isTrackedStaffExecutor(guild, executorId))) {
+    if (LOG_LEVEL === "debug") {
+      console.log(`[Staff summary] role${kind} skipped: executor ${executorId} not in tracked staff roles`);
+    }
+    return;
+  }
+  const roleName = role.name.trim() || role.id;
+  await postOrBumpRoleChangeBatch(guild, kind, executorId, roleId, roleName, targetUserId);
+}
+
 export async function handleStaffSummaryMemberUpdate(
   oldMember: GuildMember | PartialGuildMember,
   newMember: GuildMember,
@@ -333,27 +444,52 @@ export async function handleStaffSummaryMemberUpdate(
 
   const guild = newMember.guild;
   const targetUserId = newMember.id;
+  const auditChanges = await collectRecentMemberRoleAuditChanges(guild, targetUserId);
+
+  if (auditChanges.length > 0) {
+    for (const change of auditChanges) {
+      await processMemberRoleChange(guild, targetUserId, change.roleId, change.kind, change.executorId);
+    }
+    return;
+  }
+
+  if (LOG_LEVEL === "debug") {
+    console.log(
+      `[Staff summary] role change diff for ${targetUserId} (+${added.length}/-${removed.length}) but no audit entries; using fallback resolver`,
+    );
+  }
 
   for (const roleId of added) {
-    const role = guild.roles.cache.get(roleId) ?? (await guild.roles.fetch(roleId).catch(() => null));
-    if (!role || role.managed) continue;
-
     const executorId = await resolveMemberRoleChangeExecutor(guild, targetUserId, roleId, "assign");
-    if (!executorId || !(await isTrackedStaffExecutor(guild, executorId))) continue;
-
-    const roleName = role.name.trim() || role.id;
-    await postOrBumpRoleChangeBatch(guild, "assign", executorId, roleId, roleName, targetUserId);
+    if (!executorId) continue;
+    await processMemberRoleChange(guild, targetUserId, roleId, "assign", executorId);
   }
 
   for (const roleId of removed) {
-    const role = guild.roles.cache.get(roleId) ?? (await guild.roles.fetch(roleId).catch(() => null));
-    if (!role || role.managed) continue;
-
     const executorId = await resolveMemberRoleChangeExecutor(guild, targetUserId, roleId, "remove");
-    if (!executorId || !(await isTrackedStaffExecutor(guild, executorId))) continue;
+    if (!executorId) continue;
+    await processMemberRoleChange(guild, targetUserId, roleId, "remove", executorId);
+  }
+}
 
-    const roleName = role.name.trim() || role.id;
-    await postOrBumpRoleChangeBatch(guild, "remove", executorId, roleId, roleName, targetUserId);
+/** Role assigns on members that were not cached yet emit `guildMemberAvailable` instead of `guildMemberUpdate`. */
+export async function handleStaffSummaryMemberAvailable(
+  member: GuildMember | PartialGuildMember,
+): Promise<void> {
+  if (!staffSummaryRoleTrackingEnabled()) return;
+  if (!member.guild || member.guild.id !== DISCORD_GUILD_ID) return;
+
+  const resolved =
+    member instanceof GuildMember
+      ? member
+      : await member.guild.members.fetch(member.id).catch(() => null);
+  if (!resolved || resolved.user.bot) return;
+
+  await sleep(DISCORD_STAFF_SUMMARY_ROLE_AUDIT_DELAY_MS);
+
+  const auditChanges = await collectRecentMemberRoleAuditChanges(resolved.guild, resolved.id);
+  for (const change of auditChanges) {
+    await processMemberRoleChange(resolved.guild, resolved.id, change.roleId, change.kind, change.executorId);
   }
 }
 

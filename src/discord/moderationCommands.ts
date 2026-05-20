@@ -17,6 +17,12 @@ import {
 import { logModerationEvent, postStaffModerationSummary } from "./moderationLog";
 import { ladderDurationMs, lastLadderIndex } from "./moderationLadder";
 import {
+  assertModeratorQuota,
+  getModeratorQuotaStatus,
+  isModeratorQuotaExempt,
+  recordModeratorQuotaUse,
+} from "./moderatorQuota";
+import {
   applyManualMuteSanction,
   applyStrikeModerationSanction,
 } from "./moderationSanction";
@@ -42,16 +48,16 @@ import {
   setMuteTier,
   touchModerationViolation,
 } from "../state";
-import {
-  filterReasonPresetAutocomplete,
-  isKnownReasonPresetId,
-  reasonPlainTextForAudit,
-  resolveModerationReason,
-} from "./moderationReasonPresets";
+import { moderationLogNoticePayload, resolveModerationNotice, type ResolvedModerationNotice } from "./moderationNotice";
+import { filterChannelPresetAutocomplete, isKnownChannelPresetId } from "./moderationReasonPresets";
+import { filterRulePresetAutocomplete, isKnownRulePresetId } from "./moderationRulePresets";
 import {
   discordFormatDurationRu,
   discordModerationCommands as modTxt,
   discordModerationLogTitles,
+  banDeleteChoiceLabelFromSeconds,
+  banDeleteSecondsFromChoice,
+  discordBanDeleteMessageChoices,
   discordMuteDurationChoices,
   discordSlashModeration as slashModTxt,
 } from "./userStrings";
@@ -73,16 +79,33 @@ function moderationScopeChannelIdFromInteraction(interaction: ChatInputCommandIn
   return warningScopeChannelIdFromInteraction(interaction) ?? interaction.channelId;
 }
 
-function resolveStaffModerationReason(
+/** Scope channel for preset auto-fill and DM «Канал» line (evidence message channel wins over slash channel). */
+function channelScopeIdForStaffNotice(
+  interaction: ChatInputCommandInteraction,
+  evidenceMessage?: Message,
+): string {
+  if (evidenceMessage) {
+    const ch = evidenceMessage.channel;
+    if (ch && "isThread" in ch && ch.isThread() && ch.parentId) return ch.parentId;
+    return evidenceMessage.channelId;
+  }
+  return moderationScopeChannelIdFromInteraction(interaction);
+}
+
+function resolveStaffModerationNotice(
   interaction: ChatInputCommandInteraction,
   scopeChannelId: string,
   defaultReason: string,
-): string {
-  const presetRaw = interaction.options.getString("reason_preset");
-  const presetId = presetRaw && isKnownReasonPresetId(presetRaw) ? presetRaw : undefined;
-  return resolveModerationReason({
+): ResolvedModerationNotice {
+  const channelRaw = interaction.options.getString("channel_preset");
+  const channelPresetId =
+    channelRaw && isKnownChannelPresetId(channelRaw) ? channelRaw : undefined;
+  const ruleRaw = interaction.options.getString("rule_preset");
+  const rulePresetId = ruleRaw && isKnownRulePresetId(ruleRaw) ? ruleRaw : undefined;
+  return resolveModerationNotice({
     custom: interaction.options.getString("reason"),
-    presetId,
+    channelPresetId,
+    rulePresetId,
     scopeChannelId,
     defaultReason,
   });
@@ -95,12 +118,16 @@ export async function handleModerationAutocomplete(interaction: AutocompleteInte
     return;
   }
   const focused = interaction.options.getFocused(true);
-  if (focused.name !== "reason_preset") {
-    await interaction.respond([]);
+  const query = typeof focused.value === "string" ? focused.value : "";
+  if (focused.name === "channel_preset") {
+    await interaction.respond(filterChannelPresetAutocomplete(query));
     return;
   }
-  const choices = filterReasonPresetAutocomplete(typeof focused.value === "string" ? focused.value : "");
-  await interaction.respond(choices);
+  if (focused.name === "rule_preset") {
+    await interaction.respond(filterRulePresetAutocomplete(query));
+    return;
+  }
+  await interaction.respond([]);
 }
 
 /** Plaintext snapshot for mod log (does not render embeds). */
@@ -166,8 +193,15 @@ export const muteSlashCommand = new SlashCommandBuilder()
   )
   .addStringOption((o) =>
     o
-      .setName("reason_preset")
-      .setDescription(slashModTxt.mute.reasonPreset)
+      .setName("channel_preset")
+      .setDescription(slashModTxt.mute.channelPreset)
+      .setAutocomplete(true)
+      .setRequired(false),
+  )
+  .addStringOption((o) =>
+    o
+      .setName("rule_preset")
+      .setDescription(slashModTxt.mute.rulePreset)
       .setAutocomplete(true)
       .setRequired(false),
   )
@@ -202,8 +236,15 @@ export const strikeSlashCommand = new SlashCommandBuilder()
   )
   .addStringOption((o) =>
     o
-      .setName("reason_preset")
-      .setDescription(slashModTxt.strike.reasonPreset)
+      .setName("channel_preset")
+      .setDescription(slashModTxt.strike.channelPreset)
+      .setAutocomplete(true)
+      .setRequired(false),
+  )
+  .addStringOption((o) =>
+    o
+      .setName("rule_preset")
+      .setDescription(slashModTxt.strike.rulePreset)
       .setAutocomplete(true)
       .setRequired(false),
   )
@@ -260,8 +301,15 @@ export const banSlashCommand = new SlashCommandBuilder()
   .addUserOption((o) => o.setName("user").setDescription(slashModTxt.userOption).setRequired(true))
   .addStringOption((o) =>
     o
-      .setName("reason_preset")
-      .setDescription(slashModTxt.ban.reasonPreset)
+      .setName("channel_preset")
+      .setDescription(slashModTxt.ban.channelPreset)
+      .setAutocomplete(true)
+      .setRequired(false),
+  )
+  .addStringOption((o) =>
+    o
+      .setName("rule_preset")
+      .setDescription(slashModTxt.ban.rulePreset)
       .setAutocomplete(true)
       .setRequired(false),
   )
@@ -278,6 +326,13 @@ export const banSlashCommand = new SlashCommandBuilder()
       .setRequired(false)
       .setMinLength(17)
       .setMaxLength(22),
+  )
+  .addStringOption((o) =>
+    o
+      .setName("delete_messages")
+      .setDescription(slashModTxt.ban.deleteMessages)
+      .addChoices(...discordBanDeleteMessageChoices)
+      .setRequired(false),
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers);
 
@@ -313,8 +368,6 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const target = interaction.options.getUser("user", true);
     const durationRaw = interaction.options.getString("duration", true);
     const minutes = parseInt(durationRaw, 10);
-    const scopeChannelId = moderationScopeChannelIdFromInteraction(interaction);
-    const reason = resolveStaffModerationReason(interaction, scopeChannelId, modTxt.defaultMuteReason);
     const screenshot = interaction.options.getAttachment("screenshot");
     const messageIdRaw = interaction.options.getString("message_id")?.trim();
     if (messageIdRaw && !isDiscordSnowflake(messageIdRaw)) {
@@ -340,8 +393,19 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       await interaction.reply({ content: modTxt.muteNotModeratable, flags: MessageFlags.Ephemeral });
       return;
     }
+    if (!(await assertModeratorQuota(interaction))) return;
     const ms = Math.min(minutes * 60_000, 2_419_200_000);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const evidence = await resolveEvidenceFromMessageId({
+      guild,
+      fetchChannelId: interaction.channelId,
+      targetUserId: target.id,
+      messageIdRaw,
+    });
+    const scopeChannelId = channelScopeIdForStaffNotice(interaction, evidence.evidenceMessage);
+    const notice = resolveStaffModerationNotice(interaction, scopeChannelId, modTxt.defaultMuteReason);
+
     const now = Date.now();
     applyModerationDecayIfNeeded(guild.id, target.id, now, DISCORD_MODERATION_DECAY_MS);
     const sanction = await applyManualMuteSanction({
@@ -349,7 +413,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       userId: target.id,
       member,
       durationMs: ms,
-      reason,
+      reason: notice.auditReason,
     });
     if (sanction.outcome !== "applied") {
       await interaction.editReply({
@@ -360,24 +424,20 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       });
       return;
     }
+    if (!isModeratorQuotaExempt(interaction.member)) {
+      recordModeratorQuotaUse(guild.id, interaction.user.id);
+    }
     touchModerationViolation(guild.id, target.id, now);
 
     const muteDm = buildStaffManualMuteEmbed({
       guild,
       member,
       channelId: scopeChannelId,
-      reason,
+      notice,
       timeoutMs: ms,
     });
     void notifyStaffModerationUser(interaction, member, muteDm).catch((err) => {
       console.error("staff /mute DM notify failed:", err);
-    });
-
-    const evidence = await resolveEvidenceFromMessageId({
-      guild,
-      fetchChannelId: interaction.channelId,
-      targetUserId: target.id,
-      messageIdRaw,
     });
 
     await saveState(LAST_SEEN_STATE_FILE);
@@ -393,11 +453,11 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       title: discordModerationLogTitles.staffMute,
       color: 0x9966cc,
       targetUserId: target.id,
-      channelId: interaction.channelId,
+      channelId: scopeChannelId,
       parentChannelId: interaction.channel?.isThread() ? interaction.channel.parentId ?? undefined : undefined,
-      reason,
       staffUserId: interaction.user.id,
       timeoutMs: ms,
+      ...moderationLogNoticePayload(notice),
       ...(logFiles ? { logFiles } : {}),
       ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
     });
@@ -499,9 +559,6 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       await interaction.reply({ content: modTxt.evidenceInvalidSnowflakeReply, flags: MessageFlags.Ephemeral });
       return;
     }
-    const scopeChannelId = moderationScopeChannelIdFromInteraction(interaction);
-    const reason = resolveStaffModerationReason(interaction, scopeChannelId, modTxt.strikeDefaultReason);
-    const before = getGlobalWarnCount(guild.id, target.id);
 
     let member: GuildMember | null = null;
     try {
@@ -510,22 +567,9 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       await interaction.reply({ content: modTxt.userNotInGuild, flags: MessageFlags.Ephemeral });
       return;
     }
+    if (!(await assertModeratorQuota(interaction))) return;
 
-    const now = Date.now();
-    applyModerationDecayIfNeeded(guild.id, target.id, now, DISCORD_MODERATION_DECAY_MS);
-    const strike = await applyStrikeModerationSanction({
-      guildId: guild.id,
-      userId: target.id,
-      member,
-      reason,
-      warnAmount: amount,
-      timeoutAuditReason: modTxt.strikeThresholdTimeoutReason(reason, DISCORD_WARNINGS_BEFORE_TIMEOUT),
-    });
-    touchModerationViolation(guild.id, target.id, now);
-    const after = strike.warnCount;
-    const timeoutMs = strike.timeoutApplied ? strike.timeoutMs : undefined;
-
-    await saveState(LAST_SEEN_STATE_FILE);
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const evidence = await resolveEvidenceFromMessageId({
       guild,
@@ -533,6 +577,31 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       targetUserId: target.id,
       messageIdRaw,
     });
+    const scopeChannelId = channelScopeIdForStaffNotice(interaction, evidence.evidenceMessage);
+    const notice = resolveStaffModerationNotice(interaction, scopeChannelId, modTxt.strikeDefaultReason);
+    const before = getGlobalWarnCount(guild.id, target.id);
+
+    const now = Date.now();
+    applyModerationDecayIfNeeded(guild.id, target.id, now, DISCORD_MODERATION_DECAY_MS);
+    const strike = await applyStrikeModerationSanction({
+      guildId: guild.id,
+      userId: target.id,
+      member,
+      reason: notice.combinedReason,
+      warnAmount: amount,
+      timeoutAuditReason: modTxt.strikeThresholdTimeoutReason(
+        notice.auditReason,
+        DISCORD_WARNINGS_BEFORE_TIMEOUT,
+      ),
+    });
+    touchModerationViolation(guild.id, target.id, now);
+    const after = strike.warnCount;
+    const timeoutMs = strike.timeoutApplied ? strike.timeoutMs : undefined;
+
+    if (!isModeratorQuotaExempt(interaction.member)) {
+      recordModeratorQuotaUse(guild.id, interaction.user.id);
+    }
+    await saveState(LAST_SEEN_STATE_FILE);
 
     const logFiles =
       screenshot?.url && screenshot.name
@@ -546,9 +615,9 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       color: 0x3388cc,
       targetUserId: target.id,
       channelId: scopeChannelId,
-      reason,
       minorWarningsInChannel: after,
       staffUserId: interaction.user.id,
+      ...moderationLogNoticePayload(notice),
       ...(timeoutMs !== undefined ? { timeoutMs } : {}),
       ...(logFiles ? { logFiles } : {}),
       ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
@@ -575,7 +644,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       guild,
       member,
       channelId: scopeChannelId,
-      reason,
+      notice,
       timeoutMs,
     });
     void notifyStaffModerationUser(interaction, member, strikeDm).catch((err) => {
@@ -589,14 +658,13 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const timeoutNote =
       timeoutMs !== undefined ? modTxt.strikeTimeoutNote(discordFormatDurationRu(timeoutMs)) : "";
 
-    await interaction.reply({
+    await interaction.editReply({
       content: modTxt.strikeDoneLine(
         modTxt.strikeCounts(target.id, before, after, DISCORD_WARNINGS_BEFORE_TIMEOUT),
         timeoutNote,
         shotNote,
         evidence.note + evidenceDeleteNote,
       ),
-      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -632,6 +700,8 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       });
       return;
     }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const reasonParts: string[] = [];
     const replyLines: string[] = [];
@@ -684,17 +754,14 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       action: "unstrike",
       logMessage: logMsgUnstrike,
     });
-    await interaction.reply({
+    await interaction.editReply({
       content: replyLines.join("\n"),
-      flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
   if (name === "ban") {
     const target = interaction.options.getUser("user", true);
-    const banScopeChannelId = moderationScopeChannelIdFromInteraction(interaction);
-    const reason = resolveStaffModerationReason(interaction, banScopeChannelId, modTxt.defaultBanReason);
     const screenshot = interaction.options.getAttachment("screenshot");
     const messageIdRaw = interaction.options.getString("message_id")?.trim();
     if (messageIdRaw && !isDiscordSnowflake(messageIdRaw)) {
@@ -714,23 +781,16 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       await interaction.reply({ content: modTxt.banNotBannable, flags: MessageFlags.Ephemeral });
       return;
     }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const banDmEmbed = buildStaffManualBanEmbed({
-      guild,
-      targetUser: target,
-      member,
-      channelId: banScopeChannelId,
-      reason,
-    });
-    await notifyStaffUserDmFallback(interaction, target, banDmEmbed);
-    try {
-      await guild.members.ban(target.id, { reason: reasonPlainTextForAudit(reason) });
-    } catch (err) {
-      await interaction.editReply({
-        content: modTxt.banFail(err instanceof Error ? err.message : String(err)),
-      });
+    if (!(await assertModeratorQuota(interaction))) return;
+
+    const deleteRaw = interaction.options.getString("delete_messages");
+    const deleteMessageSeconds = deleteRaw ? banDeleteSecondsFromChoice(deleteRaw) : 0;
+    if (deleteRaw && deleteMessageSeconds === undefined) {
+      await interaction.reply({ content: modTxt.banBadDeletePeriod, flags: MessageFlags.Ephemeral });
       return;
     }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const evidence = await resolveEvidenceFromMessageId({
       guild,
@@ -738,6 +798,32 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       targetUserId: target.id,
       messageIdRaw,
     });
+    const banScopeChannelId = channelScopeIdForStaffNotice(interaction, evidence.evidenceMessage);
+    const notice = resolveStaffModerationNotice(interaction, banScopeChannelId, modTxt.defaultBanReason);
+
+    const banDmEmbed = buildStaffManualBanEmbed({
+      guild,
+      targetUser: target,
+      member,
+      channelId: banScopeChannelId,
+      notice,
+    });
+    await notifyStaffUserDmFallback(interaction, target, banDmEmbed);
+    try {
+      await guild.members.ban(target.id, {
+        reason: notice.auditReason,
+        deleteMessageSeconds: deleteMessageSeconds ?? 0,
+      });
+    } catch (err) {
+      await interaction.editReply({
+        content: modTxt.banFail(err instanceof Error ? err.message : String(err)),
+      });
+      return;
+    }
+    if (!isModeratorQuotaExempt(interaction.member)) {
+      recordModeratorQuotaUse(guild.id, interaction.user.id);
+    }
+    await saveState(LAST_SEEN_STATE_FILE);
 
     const logFiles =
       screenshot?.url && screenshot.name
@@ -746,14 +832,24 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
           ? [{ url: screenshot.url, name: modTxt.screenshotFileFallback }]
           : undefined;
 
+    const deletePeriodLabel =
+      deleteMessageSeconds && deleteMessageSeconds > 0
+        ? banDeleteChoiceLabelFromSeconds(deleteMessageSeconds)
+        : undefined;
+    const logReason =
+      deletePeriodLabel !== undefined
+        ? notice.combinedReason + modTxt.banDeleteLogSuffix(deletePeriodLabel)
+        : notice.combinedReason;
+
     const logMsg = await logModerationEvent(guild, {
       title: discordModerationLogTitles.staffBan,
       color: 0x992222,
       targetUserId: target.id,
-      channelId: interaction.channelId,
+      channelId: banScopeChannelId,
       parentChannelId: interaction.channel?.isThread() ? interaction.channel.parentId ?? undefined : undefined,
-      reason,
       staffUserId: interaction.user.id,
+      ...moderationLogNoticePayload(notice),
+      reason: logReason,
       ...(logFiles ? { logFiles } : {}),
       ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
     });
@@ -780,8 +876,11 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       shotNote = DISCORD_MODERATION_LOG_CHANNEL_ID ? modTxt.screenshotLogged : modTxt.screenshotNoLogEnv;
     }
 
+    const deleteNote =
+      deletePeriodLabel !== undefined ? modTxt.banDeleteDoneNote(deletePeriodLabel) : "";
+
     await interaction.editReply({
-      content: modTxt.banDone(target.id, evidence.note + evidenceDeleteNote, shotNote),
+      content: modTxt.banDone(target.id, deleteNote, evidence.note + evidenceDeleteNote, shotNote),
     });
     return;
   }
@@ -911,6 +1010,14 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       const resetLabel =
         remaining <= 0 ? modTxt.modstatusDecayDue : modTxt.modstatusDecayPending(discordFormatDurationRu(remaining));
       lines.push(modTxt.modstatusDecayLine(agoLabel, resetLabel));
+    }
+
+    if (!isModeratorQuotaExempt(interaction.member)) {
+      const quota = getModeratorQuotaStatus(guildId, interaction.user.id, now);
+      if (quota.limit > 0) {
+        lines.push("");
+        lines.push(modTxt.modstatusDailyQuota(quota.used, quota.limit, quota.remaining));
+      }
     }
 
     await interaction.reply({

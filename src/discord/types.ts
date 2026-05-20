@@ -29,8 +29,10 @@ export type DiscordChannelPolicy = {
   keywordViolationSeverity?: ViolationSeverity;
   /** Severity for blockVideos / blockImages / blockText (default minor). */
   mediaViolationSeverity?: ViolationSeverity;
-  /** Channel-purpose reason preset id for automod media/text hits (e.g. "vidos"). */
-  reasonPresetId?: string;
+  /** Channel-purpose preset id for automod media/text hits (e.g. "vidos"). */
+  channelPresetId?: string;
+  /** Optional server rule preset id for automod hits in this channel (e.g. "rule_spam"). */
+  rulePresetId?: string;
 };
 
 export type DiscordChannelPolicyMap = Record<string, DiscordChannelPolicy>;
