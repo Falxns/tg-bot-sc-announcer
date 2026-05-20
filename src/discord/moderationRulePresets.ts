@@ -12,7 +12,7 @@ export type ModerationRulePreset = {
 export const MODERATION_RULE_PRESETS: readonly ModerationRulePreset[] = [
   { id: "rule_spam", point: "2.1", choiceLabel: "п. 2.1 — Спам", shortTitle: "Спам", body: "Спам и однотипные сообщения." },
   { id: "rule_media_flood", point: "2.2", choiceLabel: "п. 2.2 — Медиа подряд", shortTitle: "Медиа подряд", body: "Несколько медиа подряд без необходимости." },
-  { id: "rule_offtopic", point: "2.3", choiceLabel: "п. 2.3 — Оффтоп", shortTitle: "Оффтоп", body: "Сообщения не по назначению канала." },
+  { id: "rule_offtopic", point: "2.3", choiceLabel: "п. 2.3 — Оффтоп", shortTitle: "Оффтоп", body: "Сообщения вне темы канала." },
   { id: "rule_ping_abuse", point: "2.4", choiceLabel: "п. 2.4 — Чрезмерные упоминания", shortTitle: "Чрезмерные упоминания", body: "Чрезмерные упоминания без веской причины." },
   { id: "rule_unsafe_links", point: "2.5", choiceLabel: "п. 2.5 — Подозрительные ссылки", shortTitle: "Подозрительные ссылки", body: "Подозрительные ссылки без описания." },
   { id: "rule_recruit_spam", point: "2.6", choiceLabel: "п. 2.6 — Набор 1 раз/6 ч", shortTitle: "Набор 1 раз/6 ч", body: "Набор в клан проводится не чаще, чем раз в 6 часов." },
