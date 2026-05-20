@@ -23,11 +23,13 @@ import {
 import type { DiscordChannelPolicy, ViolationSeverity } from "./types";
 import { logModerationEvent } from "./moderationLog";
 import {
-  buildChannelPurposeReason,
-  channelIdForReasonPreset,
-  formatChannelLineForEmbed,
-  formatReasonForEmbed,
-} from "./moderationReasonPresets";
+  appendResolvedNoticeLines,
+  resolveModerationNotice,
+  type ModerationNoticeEmbedLabels,
+  type ResolvedModerationNotice,
+} from "./moderationNotice";
+import { formatChannelLineForEmbed } from "./moderationReasonPresets";
+import { AUTOMOD_RULE_PRESET_IDS } from "./moderationRulePresets";
 import {
   discordAutoMod as autoTxt,
   discordFormatDurationRu,
@@ -56,6 +58,18 @@ import {
 const MODERATION_USER_EMBED_COLOR = 0xed4245;
 const SPAM_DUPLICATE_REASON = autoTxt.spamDuplicateReason;
 const SPAM_CROSS_AUTHOR_COOLDOWN_REASON = autoTxt.spamCrossAuthorCooldownReason;
+
+const AUTO_NOTICE_LABELS: ModerationNoticeEmbedLabels = {
+  reason: autoTxt.labelReason,
+  channelViolation: autoTxt.labelChannelViolation,
+  ruleServer: autoTxt.labelRuleServer,
+};
+
+const STAFF_NOTICE_LABELS: ModerationNoticeEmbedLabels = {
+  reason: modTxt.staffDmLabelReason,
+  channelViolation: modTxt.staffDmLabelChannelViolation,
+  ruleServer: modTxt.staffDmLabelRuleServer,
+};
 
 type PolicyContext = {
   policy: DiscordChannelPolicy | undefined;
@@ -151,8 +165,9 @@ function trySpamCrossAuthorCooldownViolation(message: Message, ctx: PolicyContex
   if (hasCrossAuthorSpamDuplicate(ctx.warningScopeChannelId, norm)) {
     return {
       severity: "minor",
-      reason: SPAM_CROSS_AUTHOR_COOLDOWN_REASON,
       logReason: SPAM_CROSS_AUTHOR_COOLDOWN_REASON,
+      rulePresetId: AUTOMOD_RULE_PRESET_IDS.recruitSpam,
+      fallbackUserReason: SPAM_CROSS_AUTHOR_COOLDOWN_REASON,
     };
   }
   return null;
@@ -182,7 +197,12 @@ async function trySpamSameAuthorConsecutiveViolation(message: Message): Promise<
   if (normPrev.length === 0) return null;
   if (!isSpamDuplicateContentMatch(norm, normPrev)) return null;
 
-  return { severity: "minor", reason: SPAM_DUPLICATE_REASON, logReason: SPAM_DUPLICATE_REASON };
+  return {
+    severity: "minor",
+    logReason: SPAM_DUPLICATE_REASON,
+    rulePresetId: AUTOMOD_RULE_PRESET_IDS.spam,
+    fallbackUserReason: SPAM_DUPLICATE_REASON,
+  };
 }
 
 async function trySpamDuplicateViolation(message: Message, ctx: PolicyContext): Promise<ViolationHit | null> {
@@ -226,12 +246,29 @@ function resolvePolicyContext(message: Message): PolicyContext {
 }
 
 type ViolationHit = {
-  /** User-facing reason (channel preset text when configured). */
-  reason: string;
-  /** Automod audit reason for mod log (never preset text). */
+  /** Automod audit reason for mod log (short technical line). */
   logReason: string;
   severity: ViolationSeverity;
+  /** Use channel-purpose text from policy.channelPresetId when set. */
+  useChannelPurposeText?: boolean;
+  /** Rule preset for user DM (detector default or policy.rulePresetId). */
+  rulePresetId?: string;
+  /** User-facing fallback when no channel/rule preset text applies. */
+  fallbackUserReason: string;
 };
+
+function buildAutomodUserNotice(
+  policy: DiscordChannelPolicy | undefined,
+  scopeChannelId: string,
+  hit: ViolationHit,
+): ResolvedModerationNotice {
+  return resolveModerationNotice({
+    channelPresetId: hit.useChannelPurposeText ? policy?.channelPresetId : undefined,
+    rulePresetId: hit.rulePresetId ?? policy?.rulePresetId,
+    scopeChannelId,
+    defaultReason: hit.fallbackUserReason,
+  });
+}
 
 function detectViolations(
   message: Message,
@@ -251,7 +288,12 @@ function detectViolations(
     !allowInvitesInChannel && (DISCORD_BLOCK_INVITE_LINKS_GLOBAL || policy?.blockInviteLinks === true);
   if (shouldCheckInvites && hasExternalInvite(inviteScanText) && !hasAnyRole(member, inviteRoleAllow)) {
     const sev = policy?.inviteViolationSeverity ?? "major";
-    hits.push({ reason: autoTxt.invitesForbidden, logReason: autoTxt.invitesForbidden, severity: sev });
+    hits.push({
+      logReason: autoTxt.invitesForbidden,
+      severity: sev,
+      rulePresetId: AUTOMOD_RULE_PRESET_IDS.invites,
+      fallbackUserReason: autoTxt.invitesForbidden,
+    });
   }
 
   if (DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST.length > 0) {
@@ -261,9 +303,10 @@ function detectViolations(
         const host = new URL(url).hostname.replace(/^\[+|\]+$/g, "").toLowerCase();
         if (hostMatchesBlacklist(host, DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST)) {
           hits.push({
-            reason: autoTxt.forbiddenDomain(host),
             logReason: autoTxt.forbiddenDomain(host),
             severity: "major",
+            rulePresetId: AUTOMOD_RULE_PRESET_IDS.forbiddenDomain,
+            fallbackUserReason: autoTxt.forbiddenDomain(host),
           });
           break;
         }
@@ -278,9 +321,10 @@ function detectViolations(
     if (hasVideo) {
       const logReason = autoTxt.videoForbidden;
       hits.push({
-        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, logReason),
         logReason,
         severity: policy.mediaViolationSeverity ?? "minor",
+        useChannelPurposeText: true,
+        fallbackUserReason: logReason,
       });
     }
   }
@@ -289,18 +333,20 @@ function detectViolations(
     if (hasImage) {
       const logReason = autoTxt.imageForbidden;
       hits.push({
-        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, logReason),
         logReason,
         severity: policy.mediaViolationSeverity ?? "minor",
+        useChannelPurposeText: true,
+        fallbackUserReason: logReason,
       });
     }
   }
   if (policy?.blockText && message.content.trim().length > 0) {
     const logReason = autoTxt.textForbidden;
     hits.push({
-      reason: mediaViolationReason(policy, ctx.warningScopeChannelId, logReason),
       logReason,
       severity: policy.mediaViolationSeverity ?? "minor",
+      useChannelPurposeText: true,
+      fallbackUserReason: logReason,
     });
   }
   if (policy?.blockedKeywords && policy.blockedKeywords.length > 0) {
@@ -308,9 +354,10 @@ function detectViolations(
     if (hit) {
       const logReason = autoTxt.keywordHit(hit);
       hits.push({
-        reason: mediaViolationReason(policy, ctx.warningScopeChannelId, logReason),
         logReason,
         severity: policy.keywordViolationSeverity ?? "minor",
+        useChannelPurposeText: true,
+        fallbackUserReason: logReason,
       });
     }
   }
@@ -318,17 +365,6 @@ function detectViolations(
   if (hits.length === 0) return null;
   const major = hits.find((h) => h.severity === "major");
   return major ?? hits[0];
-}
-
-function mediaViolationReason(
-  policy: DiscordChannelPolicy | undefined,
-  scopeChannelId: string,
-  fallback: string,
-): string {
-  const presetId = policy?.reasonPresetId?.trim();
-  if (!presetId) return fallback;
-  const channelId = channelIdForReasonPreset(presetId, scopeChannelId) ?? scopeChannelId;
-  return buildChannelPurposeReason(presetId, channelId) ?? fallback;
 }
 
 function moderationEmbedChannelId(message: Message): string {
@@ -384,12 +420,12 @@ async function resolveModerationChannelName(message: Message): Promise<string> {
 type ModerationUserNotice =
   | {
       kind: "minor";
-      reason: string;
+      resolved: ResolvedModerationNotice;
       timeoutMs?: number;
     }
   | {
       kind: "major";
-      reason: string;
+      resolved: ResolvedModerationNotice;
       outcome: "applied" | "api_error" | "not_moderatable";
       timeoutMs?: number;
     };
@@ -405,8 +441,7 @@ async function buildModerationUserNoticeEmbed(
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(formatChannelLineForEmbed(channelId, autoTxt.labelChannel));
   lines.push("");
-  lines.push(`**${autoTxt.labelReason}**`);
-  lines.push(formatReasonForEmbed(notice.reason));
+  appendResolvedNoticeLines(lines, notice.resolved, AUTO_NOTICE_LABELS);
 
   if (notice.kind === "minor") {
     if (notice.timeoutMs !== undefined) {
@@ -485,15 +520,14 @@ export function buildStaffManualMuteEmbed(opts: {
   guild: Guild;
   member: GuildMember;
   channelId: string;
-  reason: string;
+  notice: ResolvedModerationNotice;
   timeoutMs: number;
 }): EmbedBuilder {
   const userId = opts.member.id;
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
   lines.push("");
-  lines.push(`**${autoTxt.labelReason}**`);
-  lines.push(formatReasonForEmbed(opts.reason));
+  appendResolvedNoticeLines(lines, opts.notice, STAFF_NOTICE_LABELS);
   lines.push("");
   lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(opts.timeoutMs))}**`);
   const description = lines.join("\n").slice(0, 4096);
@@ -509,15 +543,14 @@ export function buildStaffManualStrikeEmbed(opts: {
   guild: Guild;
   member: GuildMember;
   channelId: string;
-  reason: string;
+  notice: ResolvedModerationNotice;
   timeoutMs?: number;
 }): EmbedBuilder {
   const userId = opts.member.id;
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
   lines.push("");
-  lines.push(`**${autoTxt.labelReason}**`);
-  lines.push(formatReasonForEmbed(opts.reason));
+  appendResolvedNoticeLines(lines, opts.notice, STAFF_NOTICE_LABELS);
   if (opts.timeoutMs !== undefined) {
     lines.push("");
     lines.push(`**${autoTxt.labelTimeout}:** **${escapeMarkdown(discordFormatDurationRu(opts.timeoutMs))}**`);
@@ -557,14 +590,13 @@ export function buildStaffManualBanEmbed(opts: {
   targetUser: User;
   member: GuildMember | null;
   channelId: string;
-  reason: string;
+  notice: ResolvedModerationNotice;
 }): EmbedBuilder {
   const userId = opts.targetUser.id;
   const lines: string[] = [`<@${userId}>`, ""];
   lines.push(formatChannelLineForEmbed(opts.channelId, autoTxt.labelChannel));
   lines.push("");
-  lines.push(`**${autoTxt.labelReason}**`);
-  lines.push(formatReasonForEmbed(opts.reason));
+  appendResolvedNoticeLines(lines, opts.notice, STAFF_NOTICE_LABELS);
   lines.push("");
   lines.push(escapeMarkdown(modTxt.staffDmBanPermanentLine));
   const description = lines.join("\n").slice(0, 4096);
@@ -637,13 +669,15 @@ export async function handleModerationMessage(message: Message): Promise<void> {
 
   touchModerationViolation(guildId, userId, now);
 
+  const userNotice = buildAutomodUserNotice(ctx.policy, ctx.warningScopeChannelId, violation);
+
   if (violation.severity === "major") {
     const tierBefore = getMuteTier(guildId, userId);
     const major = await applyMajorModerationSanction({
       guildId,
       userId,
       member,
-      reason: violation.reason,
+      reason: userNotice.combinedReason,
     });
 
     await saveState(LAST_SEEN_STATE_FILE);
@@ -663,7 +697,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     const majorOutcome = major.timeout.outcome;
     const majorEmbed = await buildModerationUserNoticeEmbed(message, member, {
       kind: "major",
-      reason: violation.reason,
+      resolved: userNotice,
       outcome: majorOutcome,
       timeoutMs: major.timeout.timeoutMs,
     });
@@ -684,7 +718,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     guildId,
     userId,
     member,
-    reason: violation.reason,
+    reason: userNotice.combinedReason,
   });
   const timeoutMs = light.timeoutApplied ? light.timeoutMs : undefined;
   const tierAfter = getMuteTier(guildId, userId);
@@ -693,7 +727,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
 
   const minorEmbed = await buildModerationUserNoticeEmbed(message, member, {
     kind: "minor",
-    reason: violation.reason,
+    resolved: userNotice,
     timeoutMs,
   });
   await notifyUserModerationEmbed(message, member, minorEmbed);

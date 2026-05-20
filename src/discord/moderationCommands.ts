@@ -48,12 +48,9 @@ import {
   setMuteTier,
   touchModerationViolation,
 } from "../state";
-import {
-  filterReasonPresetAutocomplete,
-  isKnownReasonPresetId,
-  reasonPlainTextForAudit,
-  resolveModerationReason,
-} from "./moderationReasonPresets";
+import { resolveModerationNotice, type ResolvedModerationNotice } from "./moderationNotice";
+import { filterChannelPresetAutocomplete, isKnownChannelPresetId } from "./moderationReasonPresets";
+import { filterRulePresetAutocomplete, isKnownRulePresetId } from "./moderationRulePresets";
 import {
   discordFormatDurationRu,
   discordModerationCommands as modTxt,
@@ -82,16 +79,20 @@ function moderationScopeChannelIdFromInteraction(interaction: ChatInputCommandIn
   return warningScopeChannelIdFromInteraction(interaction) ?? interaction.channelId;
 }
 
-function resolveStaffModerationReason(
+function resolveStaffModerationNotice(
   interaction: ChatInputCommandInteraction,
   scopeChannelId: string,
   defaultReason: string,
-): string {
-  const presetRaw = interaction.options.getString("reason_preset");
-  const presetId = presetRaw && isKnownReasonPresetId(presetRaw) ? presetRaw : undefined;
-  return resolveModerationReason({
+): ResolvedModerationNotice {
+  const channelRaw = interaction.options.getString("channel_preset");
+  const channelPresetId =
+    channelRaw && isKnownChannelPresetId(channelRaw) ? channelRaw : undefined;
+  const ruleRaw = interaction.options.getString("rule_preset");
+  const rulePresetId = ruleRaw && isKnownRulePresetId(ruleRaw) ? ruleRaw : undefined;
+  return resolveModerationNotice({
     custom: interaction.options.getString("reason"),
-    presetId,
+    channelPresetId,
+    rulePresetId,
     scopeChannelId,
     defaultReason,
   });
@@ -104,12 +105,16 @@ export async function handleModerationAutocomplete(interaction: AutocompleteInte
     return;
   }
   const focused = interaction.options.getFocused(true);
-  if (focused.name !== "reason_preset") {
-    await interaction.respond([]);
+  const query = typeof focused.value === "string" ? focused.value : "";
+  if (focused.name === "channel_preset") {
+    await interaction.respond(filterChannelPresetAutocomplete(query));
     return;
   }
-  const choices = filterReasonPresetAutocomplete(typeof focused.value === "string" ? focused.value : "");
-  await interaction.respond(choices);
+  if (focused.name === "rule_preset") {
+    await interaction.respond(filterRulePresetAutocomplete(query));
+    return;
+  }
+  await interaction.respond([]);
 }
 
 /** Plaintext snapshot for mod log (does not render embeds). */
@@ -175,8 +180,15 @@ export const muteSlashCommand = new SlashCommandBuilder()
   )
   .addStringOption((o) =>
     o
-      .setName("reason_preset")
-      .setDescription(slashModTxt.mute.reasonPreset)
+      .setName("channel_preset")
+      .setDescription(slashModTxt.mute.channelPreset)
+      .setAutocomplete(true)
+      .setRequired(false),
+  )
+  .addStringOption((o) =>
+    o
+      .setName("rule_preset")
+      .setDescription(slashModTxt.mute.rulePreset)
       .setAutocomplete(true)
       .setRequired(false),
   )
@@ -211,8 +223,15 @@ export const strikeSlashCommand = new SlashCommandBuilder()
   )
   .addStringOption((o) =>
     o
-      .setName("reason_preset")
-      .setDescription(slashModTxt.strike.reasonPreset)
+      .setName("channel_preset")
+      .setDescription(slashModTxt.strike.channelPreset)
+      .setAutocomplete(true)
+      .setRequired(false),
+  )
+  .addStringOption((o) =>
+    o
+      .setName("rule_preset")
+      .setDescription(slashModTxt.strike.rulePreset)
       .setAutocomplete(true)
       .setRequired(false),
   )
@@ -269,8 +288,15 @@ export const banSlashCommand = new SlashCommandBuilder()
   .addUserOption((o) => o.setName("user").setDescription(slashModTxt.userOption).setRequired(true))
   .addStringOption((o) =>
     o
-      .setName("reason_preset")
-      .setDescription(slashModTxt.ban.reasonPreset)
+      .setName("channel_preset")
+      .setDescription(slashModTxt.ban.channelPreset)
+      .setAutocomplete(true)
+      .setRequired(false),
+  )
+  .addStringOption((o) =>
+    o
+      .setName("rule_preset")
+      .setDescription(slashModTxt.ban.rulePreset)
       .setAutocomplete(true)
       .setRequired(false),
   )
@@ -330,7 +356,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const durationRaw = interaction.options.getString("duration", true);
     const minutes = parseInt(durationRaw, 10);
     const scopeChannelId = moderationScopeChannelIdFromInteraction(interaction);
-    const reason = resolveStaffModerationReason(interaction, scopeChannelId, modTxt.defaultMuteReason);
+    const notice = resolveStaffModerationNotice(interaction, scopeChannelId, modTxt.defaultMuteReason);
     const screenshot = interaction.options.getAttachment("screenshot");
     const messageIdRaw = interaction.options.getString("message_id")?.trim();
     if (messageIdRaw && !isDiscordSnowflake(messageIdRaw)) {
@@ -366,7 +392,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       userId: target.id,
       member,
       durationMs: ms,
-      reason,
+      reason: notice.auditReason,
     });
     if (sanction.outcome !== "applied") {
       await interaction.editReply({
@@ -386,7 +412,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       guild,
       member,
       channelId: scopeChannelId,
-      reason,
+      notice,
       timeoutMs: ms,
     });
     void notifyStaffModerationUser(interaction, member, muteDm).catch((err) => {
@@ -415,7 +441,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       targetUserId: target.id,
       channelId: interaction.channelId,
       parentChannelId: interaction.channel?.isThread() ? interaction.channel.parentId ?? undefined : undefined,
-      reason,
+      reason: notice.combinedReason,
       staffUserId: interaction.user.id,
       timeoutMs: ms,
       ...(logFiles ? { logFiles } : {}),
@@ -520,7 +546,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       return;
     }
     const scopeChannelId = moderationScopeChannelIdFromInteraction(interaction);
-    const reason = resolveStaffModerationReason(interaction, scopeChannelId, modTxt.strikeDefaultReason);
+    const notice = resolveStaffModerationNotice(interaction, scopeChannelId, modTxt.strikeDefaultReason);
     const before = getGlobalWarnCount(guild.id, target.id);
 
     let member: GuildMember | null = null;
@@ -538,9 +564,12 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       guildId: guild.id,
       userId: target.id,
       member,
-      reason,
+      reason: notice.combinedReason,
       warnAmount: amount,
-      timeoutAuditReason: modTxt.strikeThresholdTimeoutReason(reason, DISCORD_WARNINGS_BEFORE_TIMEOUT),
+      timeoutAuditReason: modTxt.strikeThresholdTimeoutReason(
+        notice.auditReason,
+        DISCORD_WARNINGS_BEFORE_TIMEOUT,
+      ),
     });
     touchModerationViolation(guild.id, target.id, now);
     const after = strike.warnCount;
@@ -570,7 +599,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       color: 0x3388cc,
       targetUserId: target.id,
       channelId: scopeChannelId,
-      reason,
+      reason: notice.combinedReason,
       minorWarningsInChannel: after,
       staffUserId: interaction.user.id,
       ...(timeoutMs !== undefined ? { timeoutMs } : {}),
@@ -599,7 +628,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       guild,
       member,
       channelId: scopeChannelId,
-      reason,
+      notice,
       timeoutMs,
     });
     void notifyStaffModerationUser(interaction, member, strikeDm).catch((err) => {
@@ -718,7 +747,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
   if (name === "ban") {
     const target = interaction.options.getUser("user", true);
     const banScopeChannelId = moderationScopeChannelIdFromInteraction(interaction);
-    const reason = resolveStaffModerationReason(interaction, banScopeChannelId, modTxt.defaultBanReason);
+    const notice = resolveStaffModerationNotice(interaction, banScopeChannelId, modTxt.defaultBanReason);
     const screenshot = interaction.options.getAttachment("screenshot");
     const messageIdRaw = interaction.options.getString("message_id")?.trim();
     if (messageIdRaw && !isDiscordSnowflake(messageIdRaw)) {
@@ -753,12 +782,12 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       targetUser: target,
       member,
       channelId: banScopeChannelId,
-      reason,
+      notice,
     });
     await notifyStaffUserDmFallback(interaction, target, banDmEmbed);
     try {
       await guild.members.ban(target.id, {
-        reason: reasonPlainTextForAudit(reason),
+        reason: notice.auditReason,
         deleteMessageSeconds: deleteMessageSeconds ?? 0,
       });
     } catch (err) {
@@ -792,8 +821,8 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
         : undefined;
     const logReason =
       deletePeriodLabel !== undefined
-        ? reason + modTxt.banDeleteLogSuffix(deletePeriodLabel)
-        : reason;
+        ? notice.combinedReason + modTxt.banDeleteLogSuffix(deletePeriodLabel)
+        : notice.combinedReason;
 
     const logMsg = await logModerationEvent(guild, {
       title: discordModerationLogTitles.staffBan,

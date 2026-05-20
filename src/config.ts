@@ -66,8 +66,6 @@ export const DISCORD_WARNINGS_BEFORE_TIMEOUT = clampParseInt(
   1,
   20,
 );
-/** @deprecated No longer used. */
-export const DISCORD_TIMEOUT_MS = clampParseInt(process.env.DISCORD_TIMEOUT_MS ?? "600000", 60_000, 604800_000);
 export const DISCORD_WARNING_MESSAGE_TTL_MS = clampParseInt(
   process.env.DISCORD_WARNING_MESSAGE_TTL_MS ?? "12000",
   1000,
@@ -261,9 +259,13 @@ function parseDiscordChannelPolicies(raw: string): DiscordChannelPolicyMap {
           : [],
         keywordViolationSeverity: parseSeverity(row.keywordViolationSeverity, "minor"),
         mediaViolationSeverity: parseSeverity(row.mediaViolationSeverity, "minor"),
-        reasonPresetId:
-          typeof row.reasonPresetId === "string" && row.reasonPresetId.trim().length > 0
-            ? row.reasonPresetId.trim()
+        channelPresetId:
+          typeof row.channelPresetId === "string" && row.channelPresetId.trim().length > 0
+            ? row.channelPresetId.trim()
+            : undefined,
+        rulePresetId:
+          typeof row.rulePresetId === "string" && row.rulePresetId.trim().length > 0
+            ? row.rulePresetId.trim()
             : undefined,
       };
       out[channelId] = policy;
@@ -372,7 +374,7 @@ export const chatIds = TELEGRAM_CHANNEL_IDS.split(",")
   .filter(Boolean);
 export const DISCORD_CHANNEL_POLICIES = parseDiscordChannelPolicies(process.env.DISCORD_CHANNEL_POLICIES_JSON ?? "");
 
-function parseModerationReasonChannelIds(raw: string): Record<string, string> {
+function parseModerationChannelPresetChannelIds(raw: string): Record<string, string> {
   if (!raw.trim()) return {};
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -385,14 +387,14 @@ function parseModerationReasonChannelIds(raw: string): Record<string, string> {
     }
     return out;
   } catch {
-    console.warn("Invalid DISCORD_MODERATION_REASON_CHANNEL_IDS_JSON, using empty map.");
+    console.warn("Invalid DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS_JSON, using empty map.");
     return {};
   }
 }
 
-/** Preset id → Discord channel snowflake for clickable #channel in reason text. */
-export const DISCORD_MODERATION_REASON_CHANNEL_IDS = parseModerationReasonChannelIds(
-  process.env.DISCORD_MODERATION_REASON_CHANNEL_IDS_JSON ?? "",
+/** Channel preset id → Discord channel snowflake for clickable #channel in preset text. */
+export const DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS = parseModerationChannelPresetChannelIds(
+  process.env.DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS_JSON ?? "",
 );
 
 export function sleep(ms: number): Promise<void> {

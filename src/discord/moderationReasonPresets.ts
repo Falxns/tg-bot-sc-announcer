@@ -1,7 +1,8 @@
 import type { ApplicationCommandOptionChoiceData } from "discord.js";
-import { DISCORD_CHANNEL_POLICIES, DISCORD_MODERATION_REASON_CHANNEL_IDS } from "../config";
+import { DISCORD_CHANNEL_POLICIES, DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS } from "../config";
 
-export type ModerationReasonPreset = {
+/** Channel-purpose preset (`#видосы`, trade channels, …). */
+export type ModerationChannelPreset = {
   id: string;
   choiceLabel: string;
   channelSlug: string;
@@ -10,7 +11,7 @@ export type ModerationReasonPreset = {
 
 const CHANNEL_PLACEHOLDER = "{channel}";
 
-export const MODERATION_REASON_PRESETS: readonly ModerationReasonPreset[] = [
+export const MODERATION_CHANNEL_PRESETS: readonly ModerationChannelPreset[] = [
   {
     id: "vidos",
     choiceLabel: "#видосы — видеоролики",
@@ -115,23 +116,23 @@ export const MODERATION_REASON_PRESETS: readonly ModerationReasonPreset[] = [
   },
 ] as const;
 
-const PRESET_BY_ID = new Map<string, ModerationReasonPreset>(
-  MODERATION_REASON_PRESETS.map((p) => [p.id, p]),
+const PRESET_BY_ID = new Map<string, ModerationChannelPreset>(
+  MODERATION_CHANNEL_PRESETS.map((p) => [p.id, p]),
 );
 
 const AUTOCOMPLETE_MAX = 25;
 
-export function isKnownReasonPresetId(id: string): boolean {
+export function isKnownChannelPresetId(id: string): boolean {
   return PRESET_BY_ID.has(id);
 }
 
-export function getReasonPresetById(id: string): ModerationReasonPreset | undefined {
+export function getChannelPresetById(id: string): ModerationChannelPreset | undefined {
   return PRESET_BY_ID.get(id);
 }
 
 /** Channel snowflake for preset link: env map, else fallback scope channel. */
-export function channelIdForReasonPreset(presetId: string, fallbackChannelId?: string): string | undefined {
-  const mapped = DISCORD_MODERATION_REASON_CHANNEL_IDS[presetId];
+export function channelIdForChannelPreset(presetId: string, fallbackChannelId?: string): string | undefined {
+  const mapped = DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS[presetId];
   if (mapped) return mapped;
   return fallbackChannelId;
 }
@@ -143,59 +144,28 @@ export function buildChannelPurposeReason(presetId: string, channelId: string): 
   return preset.body.split(CHANNEL_PLACEHOLDER).join(mention);
 }
 
-export function reasonPresetIdForChannel(channelId: string): string | undefined {
+export function channelPresetIdForChannel(channelId: string): string | undefined {
   const policy = DISCORD_CHANNEL_POLICIES[channelId];
-  const id = policy?.reasonPresetId?.trim();
+  const id = policy?.channelPresetId?.trim();
   if (!id || !PRESET_BY_ID.has(id)) return undefined;
   return id;
 }
 
-export function filterReasonPresetAutocomplete(query: string): ApplicationCommandOptionChoiceData[] {
+/** Channel-purpose presets (`#видосы`, …) for `channel_preset` autocomplete. */
+export function filterChannelPresetAutocomplete(query: string): ApplicationCommandOptionChoiceData[] {
   const q = query.trim().toLowerCase();
   const matched = q
-    ? MODERATION_REASON_PRESETS.filter(
+    ? MODERATION_CHANNEL_PRESETS.filter(
         (p) =>
           p.choiceLabel.toLowerCase().includes(q) ||
           p.id.toLowerCase().includes(q) ||
           p.channelSlug.toLowerCase().includes(q),
       )
-    : [...MODERATION_REASON_PRESETS];
+    : [...MODERATION_CHANNEL_PRESETS];
   return matched.slice(0, AUTOCOMPLETE_MAX).map((p) => ({
     name: p.choiceLabel.slice(0, 100),
     value: p.id,
   }));
-}
-
-export type ResolveModerationReasonOpts = {
-  custom?: string | null;
-  presetId?: string | null;
-  scopeChannelId?: string;
-  defaultReason: string;
-};
-
-export function resolveModerationReason(opts: ResolveModerationReasonOpts): string {
-  const custom = opts.custom?.trim();
-  if (custom) return custom;
-
-  const presetRaw = opts.presetId?.trim();
-  if (presetRaw && PRESET_BY_ID.has(presetRaw)) {
-    const channelId = channelIdForReasonPreset(presetRaw, opts.scopeChannelId);
-    if (channelId) {
-      const built = buildChannelPurposeReason(presetRaw, channelId);
-      if (built) return built;
-    }
-  }
-
-  if (opts.scopeChannelId) {
-    const policyPreset = reasonPresetIdForChannel(opts.scopeChannelId);
-    if (policyPreset) {
-      const channelId = channelIdForReasonPreset(policyPreset, opts.scopeChannelId) ?? opts.scopeChannelId;
-      const built = buildChannelPurposeReason(policyPreset, channelId);
-      if (built) return built;
-    }
-  }
-
-  return opts.defaultReason;
 }
 
 /** Embed-safe reason: escape prose but keep channel mentions intact. */
