@@ -79,6 +79,19 @@ function moderationScopeChannelIdFromInteraction(interaction: ChatInputCommandIn
   return warningScopeChannelIdFromInteraction(interaction) ?? interaction.channelId;
 }
 
+/** Scope channel for preset auto-fill and DM «Канал» line (evidence message channel wins over slash channel). */
+function channelScopeIdForStaffNotice(
+  interaction: ChatInputCommandInteraction,
+  evidenceMessage?: Message,
+): string {
+  if (evidenceMessage) {
+    const ch = evidenceMessage.channel;
+    if (ch && "isThread" in ch && ch.isThread() && ch.parentId) return ch.parentId;
+    return evidenceMessage.channelId;
+  }
+  return moderationScopeChannelIdFromInteraction(interaction);
+}
+
 function resolveStaffModerationNotice(
   interaction: ChatInputCommandInteraction,
   scopeChannelId: string,
@@ -355,8 +368,6 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const target = interaction.options.getUser("user", true);
     const durationRaw = interaction.options.getString("duration", true);
     const minutes = parseInt(durationRaw, 10);
-    const scopeChannelId = moderationScopeChannelIdFromInteraction(interaction);
-    const notice = resolveStaffModerationNotice(interaction, scopeChannelId, modTxt.defaultMuteReason);
     const screenshot = interaction.options.getAttachment("screenshot");
     const messageIdRaw = interaction.options.getString("message_id")?.trim();
     if (messageIdRaw && !isDiscordSnowflake(messageIdRaw)) {
@@ -385,6 +396,16 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     if (!(await assertModeratorQuota(interaction))) return;
     const ms = Math.min(minutes * 60_000, 2_419_200_000);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const evidence = await resolveEvidenceFromMessageId({
+      guild,
+      fetchChannelId: interaction.channelId,
+      targetUserId: target.id,
+      messageIdRaw,
+    });
+    const scopeChannelId = channelScopeIdForStaffNotice(interaction, evidence.evidenceMessage);
+    const notice = resolveStaffModerationNotice(interaction, scopeChannelId, modTxt.defaultMuteReason);
+
     const now = Date.now();
     applyModerationDecayIfNeeded(guild.id, target.id, now, DISCORD_MODERATION_DECAY_MS);
     const sanction = await applyManualMuteSanction({
@@ -417,13 +438,6 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     });
     void notifyStaffModerationUser(interaction, member, muteDm).catch((err) => {
       console.error("staff /mute DM notify failed:", err);
-    });
-
-    const evidence = await resolveEvidenceFromMessageId({
-      guild,
-      fetchChannelId: interaction.channelId,
-      targetUserId: target.id,
-      messageIdRaw,
     });
 
     await saveState(LAST_SEEN_STATE_FILE);
@@ -545,9 +559,6 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       await interaction.reply({ content: modTxt.evidenceInvalidSnowflakeReply, flags: MessageFlags.Ephemeral });
       return;
     }
-    const scopeChannelId = moderationScopeChannelIdFromInteraction(interaction);
-    const notice = resolveStaffModerationNotice(interaction, scopeChannelId, modTxt.strikeDefaultReason);
-    const before = getGlobalWarnCount(guild.id, target.id);
 
     let member: GuildMember | null = null;
     try {
@@ -557,6 +568,18 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       return;
     }
     if (!(await assertModeratorQuota(interaction))) return;
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const evidence = await resolveEvidenceFromMessageId({
+      guild,
+      fetchChannelId: interaction.channelId,
+      targetUserId: target.id,
+      messageIdRaw,
+    });
+    const scopeChannelId = channelScopeIdForStaffNotice(interaction, evidence.evidenceMessage);
+    const notice = resolveStaffModerationNotice(interaction, scopeChannelId, modTxt.strikeDefaultReason);
+    const before = getGlobalWarnCount(guild.id, target.id);
 
     const now = Date.now();
     applyModerationDecayIfNeeded(guild.id, target.id, now, DISCORD_MODERATION_DECAY_MS);
@@ -579,13 +602,6 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       recordModeratorQuotaUse(guild.id, interaction.user.id);
     }
     await saveState(LAST_SEEN_STATE_FILE);
-
-    const evidence = await resolveEvidenceFromMessageId({
-      guild,
-      fetchChannelId: interaction.channelId,
-      targetUserId: target.id,
-      messageIdRaw,
-    });
 
     const logFiles =
       screenshot?.url && screenshot.name
@@ -642,14 +658,13 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     const timeoutNote =
       timeoutMs !== undefined ? modTxt.strikeTimeoutNote(discordFormatDurationRu(timeoutMs)) : "";
 
-    await interaction.reply({
+    await interaction.editReply({
       content: modTxt.strikeDoneLine(
         modTxt.strikeCounts(target.id, before, after, DISCORD_WARNINGS_BEFORE_TIMEOUT),
         timeoutNote,
         shotNote,
         evidence.note + evidenceDeleteNote,
       ),
-      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -685,6 +700,8 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       });
       return;
     }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const reasonParts: string[] = [];
     const replyLines: string[] = [];
@@ -737,17 +754,14 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       action: "unstrike",
       logMessage: logMsgUnstrike,
     });
-    await interaction.reply({
+    await interaction.editReply({
       content: replyLines.join("\n"),
-      flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
   if (name === "ban") {
     const target = interaction.options.getUser("user", true);
-    const banScopeChannelId = moderationScopeChannelIdFromInteraction(interaction);
-    const notice = resolveStaffModerationNotice(interaction, banScopeChannelId, modTxt.defaultBanReason);
     const screenshot = interaction.options.getAttachment("screenshot");
     const messageIdRaw = interaction.options.getString("message_id")?.trim();
     if (messageIdRaw && !isDiscordSnowflake(messageIdRaw)) {
@@ -777,6 +791,16 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const evidence = await resolveEvidenceFromMessageId({
+      guild,
+      fetchChannelId: interaction.channelId,
+      targetUserId: target.id,
+      messageIdRaw,
+    });
+    const banScopeChannelId = channelScopeIdForStaffNotice(interaction, evidence.evidenceMessage);
+    const notice = resolveStaffModerationNotice(interaction, banScopeChannelId, modTxt.defaultBanReason);
+
     const banDmEmbed = buildStaffManualBanEmbed({
       guild,
       targetUser: target,
@@ -800,13 +824,6 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       recordModeratorQuotaUse(guild.id, interaction.user.id);
     }
     await saveState(LAST_SEEN_STATE_FILE);
-
-    const evidence = await resolveEvidenceFromMessageId({
-      guild,
-      fetchChannelId: interaction.channelId,
-      targetUserId: target.id,
-      messageIdRaw,
-    });
 
     const logFiles =
       screenshot?.url && screenshot.name

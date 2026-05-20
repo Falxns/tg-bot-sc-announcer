@@ -144,11 +144,16 @@ export function buildChannelPurposeReason(presetId: string, channelId: string): 
   return preset.body.split(CHANNEL_PLACEHOLDER).join(mention);
 }
 
+/** Resolve channel-purpose preset for a channel (policy field, else preset→channel env map). */
 export function channelPresetIdForChannel(channelId: string): string | undefined {
   const policy = DISCORD_CHANNEL_POLICIES[channelId];
-  const id = policy?.channelPresetId?.trim();
-  if (!id || !PRESET_BY_ID.has(id)) return undefined;
-  return id;
+  const fromPolicy = policy?.channelPresetId?.trim();
+  if (fromPolicy && PRESET_BY_ID.has(fromPolicy)) return fromPolicy;
+
+  for (const [presetId, mappedChannelId] of Object.entries(DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS)) {
+    if (mappedChannelId === channelId && PRESET_BY_ID.has(presetId)) return presetId;
+  }
+  return undefined;
 }
 
 /** Channel-purpose presets (`#видосы`, …) for `channel_preset` autocomplete. */
