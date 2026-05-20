@@ -54,6 +54,12 @@ export const MODERATION_REASON_PRESETS: readonly ModerationReasonPreset[] = [
     body: "Ваше сообщение было удалено: канал {channel} предназначен для общения между участниками сервера.",
   },
   {
+    id: "otsenka_sborok",
+    choiceLabel: "#оценка-сборок",
+    channelSlug: "оценка-сборок",
+    body: "Ваше сообщение было удалено: канал {channel} предназначен для публикации и оценки сборок, связанных со STALCRAFT: X.",
+  },
+  {
     id: "chat_liderov",
     choiceLabel: "#чат-лидеров",
     channelSlug: "чат-лидеров",
@@ -106,12 +112,6 @@ export const MODERATION_REASON_PRESETS: readonly ModerationReasonPreset[] = [
     choiceLabel: "#услуги",
     channelSlug: "услуги",
     body: "Ваше сообщение было удалено: канал {channel} предназначен для публикации объявлений об оказании услуг, связанных с STALCRAFT: X.",
-  },
-  {
-    id: "otsenka_sborok",
-    choiceLabel: "#оценка-сборок",
-    channelSlug: "оценка-сборок",
-    body: "Ваше сообщение было удалено: канал {channel} предназначен для публикации и оценки сборок, связанных со STALCRAFT: X.",
   },
 ] as const;
 
