@@ -5,12 +5,14 @@ import {
   formatReasonForEmbed,
   reasonPlainTextForAudit,
 } from "./moderationReasonPresets";
+import type { ModerationLogPayload } from "./moderationLog";
 import { buildRuleUserReason, getRulePresetById } from "./moderationRulePresets";
 
 export type ResolvedModerationNotice = {
   channelReason?: string;
   ruleReason?: string;
   rulePoint?: string;
+  ruleShortTitle?: string;
   /** When custom `reason` overrides presets — single legacy block. */
   customOnly?: string;
   combinedReason: string;
@@ -62,12 +64,14 @@ export function resolveModerationNotice(opts: ResolveModerationNoticeOpts): Reso
 
   let ruleReason: string | undefined;
   let rulePoint: string | undefined;
+  let ruleShortTitle: string | undefined;
   const ruleRaw = opts.rulePresetId?.trim();
   if (ruleRaw) {
     const preset = getRulePresetById(ruleRaw);
     if (preset) {
       ruleReason = buildRuleUserReason(ruleRaw);
       rulePoint = preset.point;
+      ruleShortTitle = preset.shortTitle;
     }
   }
 
@@ -92,8 +96,27 @@ export function resolveModerationNotice(opts: ResolveModerationNoticeOpts): Reso
     channelReason,
     ruleReason,
     rulePoint,
+    ruleShortTitle,
     combinedReason,
     auditReason,
+  };
+}
+
+/** Structured notice fields for moderation log embeds. */
+export function moderationLogNoticePayload(
+  notice: ResolvedModerationNotice,
+  opts?: { automodReason?: string },
+): Pick<
+  ModerationLogPayload,
+  "reason" | "channelReason" | "rulePoint" | "ruleTitle" | "ruleReason" | "automodReason"
+> {
+  return {
+    reason: notice.combinedReason,
+    channelReason: notice.channelReason,
+    rulePoint: notice.rulePoint,
+    ruleTitle: notice.ruleShortTitle,
+    ruleReason: notice.ruleReason,
+    automodReason: opts?.automodReason,
   };
 }
 

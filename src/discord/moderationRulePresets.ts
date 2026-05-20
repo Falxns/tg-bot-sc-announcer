@@ -15,7 +15,7 @@ export const MODERATION_RULE_PRESETS: readonly ModerationRulePreset[] = [
   { id: "rule_offtopic", point: "2.3", choiceLabel: "п. 2.3 — Оффтоп", shortTitle: "Оффтоп", body: "Сообщения не по назначению канала." },
   { id: "rule_ping_abuse", point: "2.4", choiceLabel: "п. 2.4 — Чрезмерные упоминания", shortTitle: "Чрезмерные упоминания", body: "Чрезмерные упоминания без веской причины." },
   { id: "rule_unsafe_links", point: "2.5", choiceLabel: "п. 2.5 — Подозрительные ссылки", shortTitle: "Подозрительные ссылки", body: "Подозрительные ссылки без описания." },
-  { id: "rule_recruit_spam", point: "2.6", choiceLabel: "п. 2.6 — Набор 1 раз/6 ч", shortTitle: "Набор 1 раз/6 ч", body: "Набор в клан чаще раза в 6 часов." },
+  { id: "rule_recruit_spam", point: "2.6", choiceLabel: "п. 2.6 — Набор 1 раз/6 ч", shortTitle: "Набор 1 раз/6 ч", body: "Набор в клан проводится не чаще, чем раз в 6 часов." },
   { id: "rule_hate_speech", point: "3.1", choiceLabel: "п. 3.1 — Хейтспич / Травля", shortTitle: "Хейтспич / Травля", body: "Хейтспич и травля участников." },
   { id: "rule_personal_attacks", point: "3.2", choiceLabel: "п. 3.2 — Переход на личности", shortTitle: "Переход на личности", body: "Переход на личности в споре." },
   { id: "rule_religion", point: "3.3", choiceLabel: "п. 3.3 — Религия", shortTitle: "Религия", body: "Провокационное обсуждение религии." },

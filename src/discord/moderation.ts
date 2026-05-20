@@ -24,6 +24,7 @@ import type { DiscordChannelPolicy, ViolationSeverity } from "./types";
 import { logModerationEvent } from "./moderationLog";
 import {
   appendResolvedNoticeLines,
+  moderationLogNoticePayload,
   resolveModerationNotice,
   type ModerationNoticeEmbedLabels,
   type ResolvedModerationNotice,
@@ -688,10 +689,10 @@ export async function handleModerationMessage(message: Message): Promise<void> {
       targetUserId: userId,
       channelId: ctx.sourceChannelId,
       parentChannelId: ctx.parentChannelId,
-      reason: violation.logReason,
       minorWarningsInChannel: major.warnCount,
       timeoutMs: major.timeout.timeoutMs,
       messageExcerpt: excerpt,
+      ...moderationLogNoticePayload(userNotice, { automodReason: violation.logReason }),
     });
 
     const majorOutcome = major.timeout.outcome;
@@ -738,10 +739,10 @@ export async function handleModerationMessage(message: Message): Promise<void> {
     targetUserId: userId,
     channelId: ctx.sourceChannelId,
     parentChannelId: ctx.parentChannelId,
-    reason: violation.logReason,
     minorWarningsInChannel: light.warnCount,
     timeoutMs,
     messageExcerpt: excerpt,
+    ...moderationLogNoticePayload(userNotice, { automodReason: violation.logReason }),
   });
 
   if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {

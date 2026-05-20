@@ -16,7 +16,14 @@ export type ModerationLogPayload = {
   targetUserId: string;
   channelId?: string;
   parentChannelId?: string;
+  /** Fallback / combined reason when structured parts are absent. */
   reason: string;
+  channelReason?: string;
+  rulePoint?: string;
+  ruleTitle?: string;
+  ruleReason?: string;
+  /** Short automod detector line (shown under structured parts when set). */
+  automodReason?: string;
   minorWarningsInChannel?: number;
   timeoutMs?: number;
   messageExcerpt?: string;
@@ -25,6 +32,36 @@ export type ModerationLogPayload = {
   logFiles?: { url: string; name: string }[];
 };
 
+function formatModerationLogDescription(payload: ModerationLogPayload): string {
+  const lines: string[] = [];
+  const hasStructured = Boolean(payload.channelReason) || Boolean(payload.rulePoint);
+
+  if (payload.channelReason) {
+    lines.push(`**${discordModerationLogFields.logChannelViolation}**`);
+    lines.push(payload.channelReason);
+  }
+  if (payload.rulePoint) {
+    if (lines.length > 0) lines.push("");
+    const head = payload.ruleTitle
+      ? `**${discordModerationLogFields.logRuleServer(payload.rulePoint)}** — ${payload.ruleTitle}`
+      : `**${discordModerationLogFields.logRuleServer(payload.rulePoint)}**`;
+    lines.push(head);
+    if (payload.ruleReason) lines.push(payload.ruleReason);
+  }
+
+  if (!hasStructured) {
+    return payload.reason.slice(0, 4096);
+  }
+
+  const automod = payload.automodReason?.trim();
+  if (automod && automod.length > 0) {
+    lines.push("");
+    lines.push(`**${discordModerationLogFields.logAutomodDetector}:** ${automod}`);
+  }
+
+  return lines.join("\n").slice(0, 4096);
+}
+
 export async function logModerationEvent(guild: Guild, payload: ModerationLogPayload): Promise<Message | undefined> {
   if (!DISCORD_MODERATION_LOG_CHANNEL_ID) return undefined;
   const ch = await guild.channels.fetch(DISCORD_MODERATION_LOG_CHANNEL_ID).catch(() => null);
@@ -32,7 +69,7 @@ export async function logModerationEvent(guild: Guild, payload: ModerationLogPay
 
   const embed = new EmbedBuilder()
     .setTitle(payload.title.slice(0, 256))
-    .setDescription("**Причина:** " + payload.reason.slice(0, 4096))
+    .setDescription(formatModerationLogDescription(payload))
     .addFields({
       name: discordModerationLogFields.user,
       value: `<@${payload.targetUserId}>`,

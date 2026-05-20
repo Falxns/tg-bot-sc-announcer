@@ -48,7 +48,7 @@ import {
   setMuteTier,
   touchModerationViolation,
 } from "../state";
-import { resolveModerationNotice, type ResolvedModerationNotice } from "./moderationNotice";
+import { moderationLogNoticePayload, resolveModerationNotice, type ResolvedModerationNotice } from "./moderationNotice";
 import { filterChannelPresetAutocomplete, isKnownChannelPresetId } from "./moderationReasonPresets";
 import { filterRulePresetAutocomplete, isKnownRulePresetId } from "./moderationRulePresets";
 import {
@@ -453,11 +453,11 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       title: discordModerationLogTitles.staffMute,
       color: 0x9966cc,
       targetUserId: target.id,
-      channelId: interaction.channelId,
+      channelId: scopeChannelId,
       parentChannelId: interaction.channel?.isThread() ? interaction.channel.parentId ?? undefined : undefined,
-      reason: notice.combinedReason,
       staffUserId: interaction.user.id,
       timeoutMs: ms,
+      ...moderationLogNoticePayload(notice),
       ...(logFiles ? { logFiles } : {}),
       ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
     });
@@ -615,9 +615,9 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       color: 0x3388cc,
       targetUserId: target.id,
       channelId: scopeChannelId,
-      reason: notice.combinedReason,
       minorWarningsInChannel: after,
       staffUserId: interaction.user.id,
+      ...moderationLogNoticePayload(notice),
       ...(timeoutMs !== undefined ? { timeoutMs } : {}),
       ...(logFiles ? { logFiles } : {}),
       ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
@@ -845,10 +845,11 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       title: discordModerationLogTitles.staffBan,
       color: 0x992222,
       targetUserId: target.id,
-      channelId: interaction.channelId,
+      channelId: banScopeChannelId,
       parentChannelId: interaction.channel?.isThread() ? interaction.channel.parentId ?? undefined : undefined,
-      reason: logReason,
       staffUserId: interaction.user.id,
+      ...moderationLogNoticePayload(notice),
+      reason: logReason,
       ...(logFiles ? { logFiles } : {}),
       ...(evidence.excerpt !== undefined ? { messageExcerpt: evidence.excerpt } : {}),
     });

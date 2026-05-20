@@ -162,6 +162,9 @@ export const discordModerationLogFields = {
   timeoutMinutes: (m: number) => `${m} мин`,
   excerpt: "Текст сообщения",
   moderator: "Модератор",
+  logChannelViolation: "Нарушение в канале",
+  logRuleServer: (point: string) => `Правило сервера (п. ${point})`,
+  logAutomodDetector: "Автомод (детектор)",
 } as const;
 
 export const discordModerationLogTitles = {
