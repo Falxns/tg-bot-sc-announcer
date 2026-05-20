@@ -237,6 +237,9 @@ function appendSharedPanelEmbedOptions(cmd: unknown): SlashCommandBuilder {
       )
       .addStringOption((opt) =>
         opt.setName("embed_author_icon_url").setDescription(emb.embedAuthorIconUrl).setMaxLength(2000),
+      )
+      .addAttachmentOption((opt) =>
+        opt.setName("image").setDescription(postTxt.image).setRequired(false),
       ) as unknown as SlashCommandBuilder
   );
 }
@@ -375,6 +378,39 @@ async function buildDiscordAttachmentBuilders(refs: PendingAttachmentRef[]): Pro
     builders.push(new AttachmentBuilder(buf).setName(ref.name));
   }
   return builders;
+}
+
+type PanelFirstMessageExtras = {
+  embeds?: EmbedBuilder[];
+  files?: AttachmentBuilder[];
+  components?: ActionRowBuilder<ButtonBuilder>[];
+};
+
+async function sendPanelChannelMessages(
+  channel: { send: (opts: object) => Promise<{ id: string }> },
+  chunks: string[],
+  first: PanelFirstMessageExtras,
+): Promise<string | undefined> {
+  let firstMessageId: string | undefined;
+  if (chunks.length === 0) {
+    const sent = await channel.send({
+      ...(first.embeds?.length ? { embeds: first.embeds } : {}),
+      ...(first.files?.length ? { files: first.files } : {}),
+      ...(first.components?.length ? { components: first.components } : {}),
+    });
+    return sent.id;
+  }
+  for (let i = 0; i < chunks.length; i++) {
+    const isFirst = i === 0;
+    const sent = await channel.send({
+      content: chunks[i],
+      ...(isFirst && first.embeds?.length ? { embeds: first.embeds } : {}),
+      ...(isFirst && first.files?.length ? { files: first.files } : {}),
+      ...(isFirst && first.components?.length ? { components: first.components } : {}),
+    });
+    if (isFirst) firstMessageId = sent.id;
+  }
+  return firstMessageId;
 }
 
 function buttonsToRows(buttons: DiscordRolePanelButton[]): ActionRowBuilder<ButtonBuilder>[] {
@@ -959,6 +995,7 @@ async function handleRolePanel(interaction: ChatInputCommandInteraction): Promis
     await interaction.reply({ content: roleErr.needOneRole, flags: MessageFlags.Ephemeral });
     return;
   }
+  const attachments = collectPostAttachmentRefs(interaction);
   const embedOpts = collectSlashEmbedOptions(interaction);
   const nonce = createPendingRolePanel({
     guildId: interaction.guildId!,
@@ -966,6 +1003,7 @@ async function handleRolePanel(interaction: ChatInputCommandInteraction): Promis
     userId: interaction.user.id,
     buttons,
     singleRole,
+    attachments: attachments.length > 0 ? attachments : undefined,
     ...slashEmbedOptionsToPendingFields(embedOpts),
   });
   const modal = new ModalBuilder().setCustomId(`rolepanel:${nonce}`).setTitle(rp.modalTitle);
@@ -1010,9 +1048,11 @@ async function handleRolePanelModalSubmit(interaction: ModalSubmitInteraction): 
   }
   const raw = interaction.fields.getTextInputValue("content").replace(/\r\n/g, "\n");
   const contentTrimmed = raw.trim();
+  const attachmentRefs = pending.attachments ?? [];
+  const hasAttachments = attachmentRefs.length > 0;
   const embedsFirst = buildEmbedsFromPanelPayload(pending);
   const hasEmbed = !!embedsFirst?.length;
-  if (!contentTrimmed && !hasEmbed) {
+  if (!contentTrimmed && !hasAttachments && !hasEmbed) {
     await interaction.reply({
       content: com.panelModalNeedsContent,
       flags: MessageFlags.Ephemeral,
@@ -1028,41 +1068,35 @@ async function handleRolePanelModalSubmit(interaction: ModalSubmitInteraction): 
     return;
   }
 
+  let fileBuilders: AttachmentBuilder[] = [];
+  try {
+    if (hasAttachments) {
+      fileBuilders = await buildDiscordAttachmentBuilders(attachmentRefs);
+    }
+  } catch (err) {
+    console.error("/rolepanel attachment download failed:", err);
+    await interaction.editReply({
+      content: discordFmtAttachmentPrepFail(err),
+    });
+    return;
+  }
+
   const chunks = contentTrimmed ? splitDiscordMessageContent(contentTrimmed, DISCORD_MESSAGE_CONTENT_MAX) : [];
 
   try {
-    if (chunks.length === 0) {
-      const sent = await channel.send({
-        ...(embedsFirst?.length ? { embeds: embedsFirst } : {}),
-        components: buttonsToRows(pending.buttons),
-      });
+    const firstMessageId = await sendPanelChannelMessages(channel, chunks, {
+      embeds: embedsFirst,
+      files: fileBuilders,
+      components: buttonsToRows(pending.buttons),
+    });
+    if (firstMessageId) {
       setDiscordRolePanel({
         guildId: interaction.guildId!,
         channelId: pending.channelId,
-        messageId: sent.id,
+        messageId: firstMessageId,
         buttons: pending.buttons,
         singleRole: pending.singleRole ?? false,
       });
-    } else {
-      let firstMessageId: string | undefined;
-      for (let i = 0; i < chunks.length; i++) {
-        const isFirst = i === 0;
-        const sent = await channel.send({
-          content: chunks[i],
-          ...(isFirst && embedsFirst?.length ? { embeds: embedsFirst } : {}),
-          ...(isFirst ? { components: buttonsToRows(pending.buttons) } : {}),
-        });
-        if (isFirst) firstMessageId = sent.id;
-      }
-      if (firstMessageId) {
-        setDiscordRolePanel({
-          guildId: interaction.guildId!,
-          channelId: pending.channelId,
-          messageId: firstMessageId,
-          buttons: pending.buttons,
-          singleRole: pending.singleRole ?? false,
-        });
-      }
     }
     await saveState(LAST_SEEN_STATE_FILE);
   } catch (err) {
@@ -1075,7 +1109,7 @@ async function handleRolePanelModalSubmit(interaction: ModalSubmitInteraction): 
 
   if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
     console.log(
-      `[Discord /rolepanel modal] by user=${interaction.user.id} channel=${pending.channelId} buttons=${pending.buttons.length} embed=${hasEmbed} textChunks=${Math.max(1, chunks.length)}`,
+      `[Discord /rolepanel modal] by user=${interaction.user.id} channel=${pending.channelId} buttons=${pending.buttons.length} embed=${hasEmbed} attachments=${attachmentRefs.length} textChunks=${Math.max(1, chunks.length)}`,
     );
   }
   await interaction.editReply({
@@ -1142,12 +1176,14 @@ async function handleLinkPanel(interaction: ChatInputCommandInteraction): Promis
     await interaction.reply({ content: linkErr.needOneLink, flags: MessageFlags.Ephemeral });
     return;
   }
+  const attachments = collectPostAttachmentRefs(interaction);
   const embedOpts = collectSlashEmbedOptions(interaction);
   const nonce = createPendingLinkPanel({
     guildId: interaction.guildId!,
     channelId: channel.id,
     userId: interaction.user.id,
     links,
+    attachments: attachments.length > 0 ? attachments : undefined,
     ...slashEmbedOptionsToPendingFields(embedOpts),
   });
   const modal = new ModalBuilder().setCustomId(`linkpanel:${nonce}`).setTitle(lp.modalTitle);
@@ -1192,9 +1228,11 @@ async function handleLinkPanelModalSubmit(interaction: ModalSubmitInteraction): 
   }
   const raw = interaction.fields.getTextInputValue("content").replace(/\r\n/g, "\n");
   const contentTrimmed = raw.trim();
+  const attachmentRefs = pending.attachments ?? [];
+  const hasAttachments = attachmentRefs.length > 0;
   const embedsFirst = buildEmbedsFromPanelPayload(pending);
   const hasEmbed = !!embedsFirst?.length;
-  if (!contentTrimmed && !hasEmbed) {
+  if (!contentTrimmed && !hasAttachments && !hasEmbed) {
     await interaction.reply({
       content: com.panelModalNeedsContent,
       flags: MessageFlags.Ephemeral,
@@ -1210,25 +1248,28 @@ async function handleLinkPanelModalSubmit(interaction: ModalSubmitInteraction): 
     return;
   }
 
+  let fileBuilders: AttachmentBuilder[] = [];
+  try {
+    if (hasAttachments) {
+      fileBuilders = await buildDiscordAttachmentBuilders(attachmentRefs);
+    }
+  } catch (err) {
+    console.error("/linkpanel attachment download failed:", err);
+    await interaction.editReply({
+      content: discordFmtAttachmentPrepFail(err),
+    });
+    return;
+  }
+
   const chunks = contentTrimmed ? splitDiscordMessageContent(contentTrimmed, DISCORD_MESSAGE_CONTENT_MAX) : [];
   const linkRows = linkPanelSpecsToRows(pending.links);
 
   try {
-    if (chunks.length === 0) {
-      await channel.send({
-        ...(embedsFirst?.length ? { embeds: embedsFirst } : {}),
-        components: linkRows,
-      });
-    } else {
-      for (let i = 0; i < chunks.length; i++) {
-        const isFirst = i === 0;
-        await channel.send({
-          content: chunks[i],
-          ...(isFirst && embedsFirst?.length ? { embeds: embedsFirst } : {}),
-          ...(isFirst ? { components: linkRows } : {}),
-        });
-      }
-    }
+    await sendPanelChannelMessages(channel, chunks, {
+      embeds: embedsFirst,
+      files: fileBuilders,
+      components: linkRows,
+    });
   } catch (err) {
     console.error("/linkpanel modal channel.send failed:", err);
     await interaction.editReply({
@@ -1239,7 +1280,7 @@ async function handleLinkPanelModalSubmit(interaction: ModalSubmitInteraction): 
 
   if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
     console.log(
-      `[Discord /linkpanel modal] by user=${interaction.user.id} channel=${pending.channelId} links=${pending.links.length} embed=${hasEmbed} textChunks=${Math.max(1, chunks.length)}`,
+      `[Discord /linkpanel modal] by user=${interaction.user.id} channel=${pending.channelId} links=${pending.links.length} embed=${hasEmbed} attachments=${attachmentRefs.length} textChunks=${Math.max(1, chunks.length)}`,
     );
   }
   await interaction.editReply({

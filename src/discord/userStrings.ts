@@ -189,7 +189,8 @@ export const discordCommonReplies = {
   modalWrongInvokerLinkPanel: "Отправить форму может только тот, кто вызвал `/linkpanel`.",
   postModalNeedsContent:
     "Добавьте текст сообщения, прикрепите картинку и/или задайте embed (например `embed_title`, `embed_description`).",
-  panelModalNeedsContent: "Добавьте текст сообщения и/или задайте embed (например `embed_title`, `embed_description`).",
+  panelModalNeedsContent:
+    "Добавьте текст сообщения, прикрепите картинку и/или задайте embed (например `embed_title`, `embed_description`).",
   channelUnavailable: "Канал больше недоступен.",
   internalError: "Произошла внутренняя ошибка.",
 } as const;

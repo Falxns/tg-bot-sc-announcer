@@ -59,6 +59,7 @@ type PanelEmbedFields = Pick<
   | "embedFooterIconUrl"
   | "embedAuthorName"
   | "embedAuthorIconUrl"
+  | "attachments"
 >;
 
 export type PendingRolePanelPayload = PanelEmbedFields & {
