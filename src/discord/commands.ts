@@ -33,20 +33,32 @@ import {
 import { peelFirstCustomDiscordEmojiFromLabel, type ParsedButtonEmoji } from "./buttonEmoji";
 import {
   createPendingEdit,
+  createPendingEditLinkPanel,
+  createPendingEditRolePanel,
   createPendingLinkPanel,
   createPendingPost,
   createPendingRolePanel,
   takePendingEdit,
+  takePendingEditLinkPanel,
+  takePendingEditRolePanel,
   takePendingLinkPanel,
   takePendingPost,
   takePendingRolePanel,
   type PendingAttachmentRef,
   type PendingEditBaselineEmbed,
   type PendingEditPayload,
+  type PendingEditLinkPanelPayload,
+  type PendingEditRolePanelPayload,
   type PendingLinkPanelPayload,
+  type PendingLinkPanelLink,
   type PendingPostPayload,
   type PendingRolePanelPayload,
 } from "./postPending";
+import {
+  parseLinkPanelLinksFromMessage,
+  parseRolePanelStateFromMessage,
+  reapplyRolePanelButtonPrefixes,
+} from "./rolePanelHydrate";
 import type { DiscordRolePanelButton } from "./types";
 import {
   discordCommonReplies as com,
@@ -61,6 +73,8 @@ import {
   discordRolePanelErrors as roleErr,
   discordSlashEmbedOptions as emb,
   discordSlashEdit as editTxt,
+  discordSlashEditLinkPanel as elp,
+  discordSlashEditRolePanel as erp,
   discordSlashLinkPanel as lp,
   discordSlashPost as postTxt,
   discordSlashRolePanel as rp,
@@ -310,6 +324,83 @@ const linkPanelCommand = appendSharedPanelEmbedOptions(
     .addStringOption((opt) => opt.setName("label5").setDescription(lp.buttonLabel(5)).setMaxLength(80)),
 ).setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
+const editRolePanelCommand = appendSharedPanelEmbedOptions(
+  new SlashCommandBuilder()
+    .setName("editrolepanel")
+    .setDescription(erp.commandDescription)
+    .addChannelOption((opt) =>
+      opt
+        .setName("channel")
+        .setDescription(erp.channel)
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+        .setRequired(true),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("message_id")
+        .setDescription(erp.messageId)
+        .setRequired(true)
+        .setMinLength(17)
+        .setMaxLength(22),
+    )
+    .addRoleOption((opt) => opt.setName("role1").setDescription(erp.role(1)))
+    .addStringOption((opt) => opt.setName("label1").setDescription(erp.roleButtonLabel(1)).setMaxLength(80))
+    .addRoleOption((opt) => opt.setName("role2").setDescription(erp.role(2)))
+    .addStringOption((opt) => opt.setName("label2").setDescription(erp.roleButtonLabel(2)).setMaxLength(80))
+    .addRoleOption((opt) => opt.setName("role3").setDescription(erp.role(3)))
+    .addStringOption((opt) => opt.setName("label3").setDescription(erp.roleButtonLabel(3)).setMaxLength(80))
+    .addRoleOption((opt) => opt.setName("role4").setDescription(erp.role(4)))
+    .addStringOption((opt) => opt.setName("label4").setDescription(erp.roleButtonLabel(4)).setMaxLength(80))
+    .addRoleOption((opt) => opt.setName("role5").setDescription(erp.role(5)))
+    .addStringOption((opt) => opt.setName("label5").setDescription(erp.roleButtonLabel(5)).setMaxLength(80))
+    .addRoleOption((opt) => opt.setName("role6").setDescription(erp.role(6)))
+    .addStringOption((opt) => opt.setName("label6").setDescription(erp.roleButtonLabel(6)).setMaxLength(80))
+    .addBooleanOption((opt) =>
+      opt.setName("single_role").setDescription(erp.singleRole).setRequired(false),
+    ),
+).setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles);
+
+const editLinkPanelCommand = appendSharedPanelEmbedOptions(
+  new SlashCommandBuilder()
+    .setName("editlinkpanel")
+    .setDescription(elp.commandDescription)
+    .addChannelOption((opt) =>
+      opt
+        .setName("channel")
+        .setDescription(elp.channel)
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+        .setRequired(true),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("message_id")
+        .setDescription(elp.messageId)
+        .setRequired(true)
+        .setMinLength(17)
+        .setMaxLength(22),
+    )
+    .addStringOption((opt) =>
+      opt.setName("url1").setDescription(elp.url(1)).setMaxLength(LINK_BUTTON_URL_MAX),
+    )
+    .addStringOption((opt) => opt.setName("label1").setDescription(elp.buttonLabel(1)).setMaxLength(80))
+    .addStringOption((opt) =>
+      opt.setName("url2").setDescription(elp.url(2)).setMaxLength(LINK_BUTTON_URL_MAX),
+    )
+    .addStringOption((opt) => opt.setName("label2").setDescription(elp.buttonLabel(2)).setMaxLength(80))
+    .addStringOption((opt) =>
+      opt.setName("url3").setDescription(elp.url(3)).setMaxLength(LINK_BUTTON_URL_MAX),
+    )
+    .addStringOption((opt) => opt.setName("label3").setDescription(elp.buttonLabel(3)).setMaxLength(80))
+    .addStringOption((opt) =>
+      opt.setName("url4").setDescription(elp.url(4)).setMaxLength(LINK_BUTTON_URL_MAX),
+    )
+    .addStringOption((opt) => opt.setName("label4").setDescription(elp.buttonLabel(4)).setMaxLength(80))
+    .addStringOption((opt) =>
+      opt.setName("url5").setDescription(elp.url(5)).setMaxLength(LINK_BUTTON_URL_MAX),
+    )
+    .addStringOption((opt) => opt.setName("label5").setDescription(elp.buttonLabel(5)).setMaxLength(80)),
+).setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
+
 export async function unregisterGuildCommands(guild: Guild): Promise<void> {
   await guild.commands.set([]);
 }
@@ -319,7 +410,9 @@ export async function registerGuildCommands(guild: Guild): Promise<void> {
     postCommand.toJSON(),
     editCommand.toJSON(),
     rolePanelCommand.toJSON(),
+    editRolePanelCommand.toJSON(),
     linkPanelCommand.toJSON(),
+    editLinkPanelCommand.toJSON(),
     muteSlashCommand.toJSON(),
     unmuteSlashCommand.toJSON(),
     strikeSlashCommand.toJSON(),
@@ -466,6 +559,41 @@ function buildLinkButtonsFromInteraction(interaction: ChatInputCommandInteractio
     specs.push({ url, label, ...(emoji ? { emoji } : {}) });
   }
   return specs;
+}
+
+function resolveEditRolePanelConfig(
+  interaction: ChatInputCommandInteraction,
+  existing: Message,
+  botUserId: string,
+): { buttons: DiscordRolePanelButton[]; singleRole: boolean } | null {
+  const role1 = interaction.options.getRole("role1");
+  const singleRoleFromSlash = interaction.options.getBoolean("single_role");
+  if (role1) {
+    const singleRole = singleRoleFromSlash ?? false;
+    const buttons = buildButtonsFromInteraction(interaction, { singleRole });
+    if (buttons.length === 0) return null;
+    return { buttons, singleRole };
+  }
+  const parsed = parseRolePanelStateFromMessage(existing, botUserId);
+  if (!parsed) return null;
+  const singleRole = singleRoleFromSlash ?? parsed.singleRole ?? false;
+  let buttons = parsed.buttons;
+  if (singleRoleFromSlash !== null) {
+    buttons = reapplyRolePanelButtonPrefixes(buttons, singleRole);
+  }
+  return { buttons, singleRole };
+}
+
+function resolveEditLinkPanelLinks(
+  interaction: ChatInputCommandInteraction,
+  existing: Message,
+  botUserId: string,
+): PendingLinkPanelLink[] | null {
+  const url1Raw = interaction.options.getString("url1")?.trim();
+  if (url1Raw) {
+    return buildLinkButtonsFromInteraction(interaction);
+  }
+  return parseLinkPanelLinksFromMessage(existing, botUserId);
 }
 
 function linkPanelSpecsToRows(links: readonly LinkPanelButtonSpec[] | PendingLinkPanelPayload["links"]): ActionRowBuilder<ButtonBuilder>[] {
@@ -956,6 +1084,341 @@ async function handleEditModalSubmit(interaction: ModalSubmitInteraction): Promi
   });
 }
 
+async function fetchBotPanelMessage(
+  interaction: ChatInputCommandInteraction,
+  channel: { messages: { fetch: (id: string) => Promise<Message> } },
+  messageId: string,
+): Promise<Message | null> {
+  try {
+    const msg = await channel.messages.fetch(messageId);
+    if (msg.author.id !== interaction.client.user!.id) return null;
+    return msg;
+  } catch {
+    return null;
+  }
+}
+
+async function handleEditRolePanel(interaction: ChatInputCommandInteraction): Promise<void> {
+  const rawId = interaction.options.getString("message_id", true).trim();
+  if (!isDiscordSnowflake(rawId)) {
+    await interaction.reply({ content: editTxt.invalidMessageId, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const channelRef = interaction.options.getChannel("channel", true);
+  const channel = await interaction.guild!.channels.fetch(channelRef.id);
+  if (!channel || !channel.isTextBased() || !("messages" in channel)) {
+    await interaction.reply({ content: com.channelNotText, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (DISCORD_ROLE_PANEL_CHANNEL_ID && channel.id !== DISCORD_ROLE_PANEL_CHANNEL_ID) {
+    await interaction.reply({
+      content: discordFmtRolePanelWrongChannel(DISCORD_ROLE_PANEL_CHANNEL_ID),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  const botId = interaction.client.user!.id;
+  const existing = await fetchBotPanelMessage(interaction, channel, rawId);
+  if (!existing) {
+    await interaction.reply({ content: editTxt.messageNotFound, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const resolved = resolveEditRolePanelConfig(interaction, existing, botId);
+  if (!resolved) {
+    await interaction.reply({ content: erp.notRolePanel, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const baselineEmbed = extractBaselineEmbedFromMessage(existing);
+  const attachments = collectPostAttachmentRefs(interaction);
+  const embedOpts = collectSlashEmbedOptions(interaction);
+  const nonce = createPendingEditRolePanel({
+    guildId: interaction.guildId!,
+    channelId: channel.id,
+    messageId: rawId,
+    userId: interaction.user.id,
+    buttons: resolved.buttons,
+    singleRole: resolved.singleRole,
+    attachments: attachments.length > 0 ? attachments : undefined,
+    baselineEmbed,
+    ...slashEmbedOptionsToPendingFields(embedOpts),
+  });
+  const bodyInput = new TextInputBuilder()
+    .setCustomId("content")
+    .setLabel(erp.modalBodyLabel.slice(0, DISCORD_TEXT_INPUT_LABEL_MAX))
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(false)
+    .setMinLength(0)
+    .setMaxLength(4000);
+  const initialBody = existing.content ?? "";
+  if (initialBody.length > 0) {
+    bodyInput.setValue(initialBody.slice(0, 4000));
+  }
+  const modal = new ModalBuilder().setCustomId(`editrolepanel:${nonce}`).setTitle(erp.modalTitle);
+  modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(bodyInput));
+  await interaction.showModal(modal);
+}
+
+async function handleEditRolePanelModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+  const nonce = interaction.customId.slice("editrolepanel:".length);
+  const pending = takePendingEditRolePanel(nonce);
+  if (!pending) {
+    await interaction.reply({
+      content: com.modalStaleEditRolePanel,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  if (!interaction.inGuild() || interaction.guildId !== pending.guildId) {
+    await interaction.reply({ content: com.wrongGuild, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (interaction.user.id !== pending.userId) {
+    await interaction.reply({
+      content: com.modalWrongInvokerEditRolePanel,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  if (!isElevated(interaction.member)) {
+    await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const raw = interaction.fields.getTextInputValue("content").replace(/\r\n/g, "\n");
+  const contentTrimmed = raw.trim();
+  const attachmentRefs = pending.attachments ?? [];
+  const hasAttachments = attachmentRefs.length > 0;
+  const mergedEmbedOpts = mergeEditEmbedFields(pending.baselineEmbed, pending);
+  const embedsFirst = buildEmbedsFromOptions(mergedEmbedOpts);
+  const hasEmbed = !!embedsFirst?.length;
+  if (!contentTrimmed && !hasAttachments && !hasEmbed) {
+    await interaction.reply({
+      content: com.panelModalNeedsContent,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  if (contentTrimmed.length > DISCORD_MESSAGE_CONTENT_MAX) {
+    await interaction.reply({ content: editTxt.bodyTooLong, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const channel = await interaction.guild!.channels.fetch(pending.channelId);
+  if (!channel || !channel.isTextBased() || !("messages" in channel)) {
+    await interaction.editReply({ content: com.channelUnavailable });
+    return;
+  }
+
+  let msg: Message;
+  try {
+    msg = await channel.messages.fetch(pending.messageId);
+  } catch {
+    await interaction.editReply({ content: editTxt.messageNotFound });
+    return;
+  }
+  if (msg.author.id !== interaction.client.user!.id) {
+    await interaction.editReply({ content: editTxt.notBotsMessage });
+    return;
+  }
+
+  let fileBuilders: AttachmentBuilder[] = [];
+  try {
+    if (hasAttachments) {
+      fileBuilders = await buildDiscordAttachmentBuilders(attachmentRefs);
+    }
+  } catch (err) {
+    console.error("/editrolepanel attachment download failed:", err);
+    await interaction.editReply({
+      content: discordFmtAttachmentPrepFail(err),
+    });
+    return;
+  }
+
+  try {
+    await msg.edit({
+      content: contentTrimmed.length > 0 ? contentTrimmed : null,
+      embeds: hasEmbed ? embedsFirst! : [],
+      components: buttonsToRows(pending.buttons),
+      ...(hasAttachments && fileBuilders.length > 0 ? { files: fileBuilders } : {}),
+    });
+    setDiscordRolePanel({
+      guildId: interaction.guildId!,
+      channelId: pending.channelId,
+      messageId: pending.messageId,
+      buttons: pending.buttons,
+      singleRole: pending.singleRole ?? false,
+    });
+    await saveState(LAST_SEEN_STATE_FILE);
+  } catch (err) {
+    console.error("/editrolepanel message.edit failed:", err);
+    await interaction.editReply({
+      content: discordFmtChannelSendFail(err),
+    });
+    return;
+  }
+
+  await interaction.editReply({
+    content: discordFmtEditDone(interaction.guild!.id, pending.channelId, pending.messageId),
+  });
+}
+
+async function handleEditLinkPanel(interaction: ChatInputCommandInteraction): Promise<void> {
+  const rawId = interaction.options.getString("message_id", true).trim();
+  if (!isDiscordSnowflake(rawId)) {
+    await interaction.reply({ content: editTxt.invalidMessageId, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const channelRef = interaction.options.getChannel("channel", true);
+  const channel = await interaction.guild!.channels.fetch(channelRef.id);
+  if (!channel || !channel.isTextBased() || !("messages" in channel)) {
+    await interaction.reply({ content: com.channelNotText, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const botId = interaction.client.user!.id;
+  const existing = await fetchBotPanelMessage(interaction, channel, rawId);
+  if (!existing) {
+    await interaction.reply({ content: editTxt.messageNotFound, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const links = resolveEditLinkPanelLinks(interaction, existing, botId);
+  if (links === null) {
+    await interaction.reply({
+      content: linkErr.url1Invalid,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  if (!links || links.length === 0) {
+    await interaction.reply({ content: elp.notLinkPanel, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const baselineEmbed = extractBaselineEmbedFromMessage(existing);
+  const attachments = collectPostAttachmentRefs(interaction);
+  const embedOpts = collectSlashEmbedOptions(interaction);
+  const nonce = createPendingEditLinkPanel({
+    guildId: interaction.guildId!,
+    channelId: channel.id,
+    messageId: rawId,
+    userId: interaction.user.id,
+    links,
+    attachments: attachments.length > 0 ? attachments : undefined,
+    baselineEmbed,
+    ...slashEmbedOptionsToPendingFields(embedOpts),
+  });
+  const bodyInput = new TextInputBuilder()
+    .setCustomId("content")
+    .setLabel(elp.modalBodyLabel.slice(0, DISCORD_TEXT_INPUT_LABEL_MAX))
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(false)
+    .setMinLength(0)
+    .setMaxLength(4000);
+  const initialBody = existing.content ?? "";
+  if (initialBody.length > 0) {
+    bodyInput.setValue(initialBody.slice(0, 4000));
+  }
+  const modal = new ModalBuilder().setCustomId(`editlinkpanel:${nonce}`).setTitle(elp.modalTitle);
+  modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(bodyInput));
+  await interaction.showModal(modal);
+}
+
+async function handleEditLinkPanelModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+  const nonce = interaction.customId.slice("editlinkpanel:".length);
+  const pending = takePendingEditLinkPanel(nonce);
+  if (!pending) {
+    await interaction.reply({
+      content: com.modalStaleEditLinkPanel,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  if (!interaction.inGuild() || interaction.guildId !== pending.guildId) {
+    await interaction.reply({ content: com.wrongGuild, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (interaction.user.id !== pending.userId) {
+    await interaction.reply({
+      content: com.modalWrongInvokerEditLinkPanel,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  if (!isElevated(interaction.member)) {
+    await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const raw = interaction.fields.getTextInputValue("content").replace(/\r\n/g, "\n");
+  const contentTrimmed = raw.trim();
+  const attachmentRefs = pending.attachments ?? [];
+  const hasAttachments = attachmentRefs.length > 0;
+  const mergedEmbedOpts = mergeEditEmbedFields(pending.baselineEmbed, pending);
+  const embedsFirst = buildEmbedsFromOptions(mergedEmbedOpts);
+  const hasEmbed = !!embedsFirst?.length;
+  if (!contentTrimmed && !hasAttachments && !hasEmbed) {
+    await interaction.reply({
+      content: com.panelModalNeedsContent,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  if (contentTrimmed.length > DISCORD_MESSAGE_CONTENT_MAX) {
+    await interaction.reply({ content: editTxt.bodyTooLong, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const channel = await interaction.guild!.channels.fetch(pending.channelId);
+  if (!channel || !channel.isTextBased() || !("messages" in channel)) {
+    await interaction.editReply({ content: com.channelUnavailable });
+    return;
+  }
+
+  let msg: Message;
+  try {
+    msg = await channel.messages.fetch(pending.messageId);
+  } catch {
+    await interaction.editReply({ content: editTxt.messageNotFound });
+    return;
+  }
+  if (msg.author.id !== interaction.client.user!.id) {
+    await interaction.editReply({ content: editTxt.notBotsMessage });
+    return;
+  }
+
+  let fileBuilders: AttachmentBuilder[] = [];
+  try {
+    if (hasAttachments) {
+      fileBuilders = await buildDiscordAttachmentBuilders(attachmentRefs);
+    }
+  } catch (err) {
+    console.error("/editlinkpanel attachment download failed:", err);
+    await interaction.editReply({
+      content: discordFmtAttachmentPrepFail(err),
+    });
+    return;
+  }
+
+  try {
+    await msg.edit({
+      content: contentTrimmed.length > 0 ? contentTrimmed : null,
+      embeds: hasEmbed ? embedsFirst! : [],
+      components: linkPanelSpecsToRows(pending.links),
+      ...(hasAttachments && fileBuilders.length > 0 ? { files: fileBuilders } : {}),
+    });
+  } catch (err) {
+    console.error("/editlinkpanel message.edit failed:", err);
+    await interaction.editReply({
+      content: discordFmtChannelSendFail(err),
+    });
+    return;
+  }
+
+  await interaction.editReply({
+    content: discordFmtEditDone(interaction.guild!.id, pending.channelId, pending.messageId),
+  });
+}
+
 export async function handleDiscordModal(interaction: ModalSubmitInteraction): Promise<void> {
   const id = interaction.customId;
   if (id.startsWith("post:")) {
@@ -972,6 +1435,14 @@ export async function handleDiscordModal(interaction: ModalSubmitInteraction): P
   }
   if (id.startsWith("linkpanel:")) {
     await handleLinkPanelModalSubmit(interaction);
+    return;
+  }
+  if (id.startsWith("editrolepanel:")) {
+    await handleEditRolePanelModalSubmit(interaction);
+    return;
+  }
+  if (id.startsWith("editlinkpanel:")) {
+    await handleEditLinkPanelModalSubmit(interaction);
   }
 }
 
@@ -1154,6 +1625,14 @@ export async function handleDiscordCommand(interaction: ChatInputCommandInteract
   }
   if (interaction.commandName === "linkpanel") {
     await handleLinkPanel(interaction);
+    return;
+  }
+  if (interaction.commandName === "editrolepanel") {
+    await handleEditRolePanel(interaction);
+    return;
+  }
+  if (interaction.commandName === "editlinkpanel") {
+    await handleEditLinkPanel(interaction);
   }
 }
 

@@ -59,6 +59,29 @@ export const discordSlashLinkPanel = {
   linkFallbackLabel: "Ссылка",
 } as const;
 
+export const discordSlashEditRolePanel = {
+  commandDescription: "Изменить существующую панель ролей (сообщение с кнопками ролей).",
+  channel: "Канал с панелью",
+  messageId: discordSlashEdit.messageId,
+  role: discordSlashRolePanel.role,
+  roleButtonLabel: discordSlashRolePanel.roleButtonLabel,
+  singleRole: discordSlashRolePanel.singleRole,
+  modalTitle: "Панель ролей — редактирование текста",
+  modalBodyLabel: discordSlashRolePanel.modalBodyLabel,
+  notRolePanel: "В этом сообщении нет кнопок ролей бота — укажите ID сообщения с панелью ролей.",
+} as const;
+
+export const discordSlashEditLinkPanel = {
+  commandDescription: "Изменить существующее сообщение с кнопками-ссылками.",
+  channel: "Канал с сообщением",
+  messageId: discordSlashEdit.messageId,
+  url: discordSlashLinkPanel.url,
+  buttonLabel: discordSlashLinkPanel.buttonLabel,
+  modalTitle: "Кнопки-ссылки — редактирование текста",
+  modalBodyLabel: discordSlashLinkPanel.modalBodyLabel,
+  notLinkPanel: "В этом сообщении нет кнопок-ссылок бота — укажите ID нужного сообщения.",
+} as const;
+
 export const discordSlashModeration = {
   userOption: "Пользователь",
   mute: {
@@ -189,10 +212,14 @@ export const discordCommonReplies = {
   modalStaleEdit: "Форма устарела или уже использована. Запустите `/edit` снова.",
   modalStaleRolePanel: "Форма устарела или уже использована. Запустите `/rolepanel` снова.",
   modalStaleLinkPanel: "Форма устарела или уже использована. Запустите `/linkpanel` снова.",
+  modalStaleEditRolePanel: "Форма устарела или уже использована. Запустите `/editrolepanel` снова.",
+  modalStaleEditLinkPanel: "Форма устарела или уже использована. Запустите `/editlinkpanel` снова.",
   modalWrongInvokerPost: "Отправить форму может только тот, кто вызвал `/post`.",
   modalWrongInvokerEdit: "Отправить форму может только тот, кто вызвал `/edit`.",
   modalWrongInvokerRolePanel: "Отправить форму может только тот, кто вызвал `/rolepanel`.",
   modalWrongInvokerLinkPanel: "Отправить форму может только тот, кто вызвал `/linkpanel`.",
+  modalWrongInvokerEditRolePanel: "Отправить форму может только тот, кто вызвал `/editrolepanel`.",
+  modalWrongInvokerEditLinkPanel: "Отправить форму может только тот, кто вызвал `/editlinkpanel`.",
   postModalNeedsContent:
     "Добавьте текст сообщения, прикрепите картинку и/или задайте embed (например `embed_title`, `embed_description`).",
   panelModalNeedsContent:

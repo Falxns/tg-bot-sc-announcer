@@ -47,7 +47,7 @@ export const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS ?? "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
-/** Role IDs that may use `/post`, `/edit`, `/rolepanel`, `/linkpanel` (when non-empty; moderation slash uses Discord perms only). */
+/** Role IDs that may use `/post`, `/edit`, `/rolepanel`, `/editrolepanel`, `/linkpanel`, `/editlinkpanel` (when non-empty; moderation slash uses Discord perms only). */
 export const DISCORD_ADMIN_ROLE_IDS = (process.env.DISCORD_ADMIN_ROLE_IDS ?? "")
   .split(",")
   .map((s) => s.trim())

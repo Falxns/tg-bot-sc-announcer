@@ -1,6 +1,8 @@
-import { ButtonInteraction, ComponentType, Message } from "discord.js";
+import { ButtonInteraction, ButtonStyle, ComponentType, Message } from "discord.js";
 import { LAST_SEEN_STATE_FILE, LOG_LEVEL } from "../config";
+import { peelFirstCustomDiscordEmojiFromLabel } from "./buttonEmoji";
 import { getDiscordRolePanel, saveState, setDiscordRolePanel } from "../state";
+import type { PendingLinkPanelLink } from "./postPending";
 import type { DiscordRolePanelButton, DiscordRolePanelState } from "./types";
 
 const ROLE_BUTTON_PREFIX = "role:";
@@ -78,4 +80,43 @@ export async function getOrRehydrateRolePanel(interaction: ButtonInteraction): P
     );
   }
   return rebuilt;
+}
+
+/** Rebuild link-panel button specs from a bot message (link-style buttons only). */
+export function parseLinkPanelLinksFromMessage(message: Message, botUserId: string): PendingLinkPanelLink[] | null {
+  if (!message.guildId || !message.channelId) return null;
+  if (message.author?.id !== botUserId) return null;
+  const rows = message.components;
+  if (!rows?.length) return null;
+  const links: PendingLinkPanelLink[] = [];
+  for (const row of rows) {
+    if (row.type !== ComponentType.ActionRow) continue;
+    for (const comp of row.components) {
+      if (comp.type !== ComponentType.Button) continue;
+      if (comp.style !== ButtonStyle.Link || !comp.url) continue;
+      const url = comp.url;
+      const labelRaw = comp.label?.trim() ?? "";
+      const { remainder, emoji } = peelFirstCustomDiscordEmojiFromLabel(labelRaw);
+      const label = remainder.trim();
+      links.push({
+        url,
+        label: label.length > 0 ? label : url,
+        ...(emoji ? { emoji } : {}),
+      });
+    }
+  }
+  return links.length > 0 ? links : null;
+}
+
+/** Apply single-role vs multi-role customId prefix without changing labels. */
+export function reapplyRolePanelButtonPrefixes(
+  buttons: readonly DiscordRolePanelButton[],
+  singleRole: boolean,
+): DiscordRolePanelButton[] {
+  const prefix = singleRole ? ROLE_BUTTON_SINGLE_PREFIX : ROLE_BUTTON_PREFIX;
+  return buttons.map((b) => ({
+    customId: `${prefix}${b.roleId}`,
+    roleId: b.roleId,
+    label: b.label,
+  }));
 }
