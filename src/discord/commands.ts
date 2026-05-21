@@ -262,6 +262,48 @@ function appendSharedPanelEmbedOptions(cmd: unknown): SlashCommandBuilder {
   );
 }
 
+/**
+ * Embed + file options for `/editrolepanel` (Discord max 25 slash options).
+ * Omits `embed_footer_icon_url` and `embed_author_icon_url` so six role slots + `single_role` + `image` fit.
+ */
+function appendEditRolePanelEmbedOptions(cmd: unknown): SlashCommandBuilder {
+  const base = cmd as SlashCommandBuilder;
+  return (
+    base
+      .addStringOption((opt) =>
+        opt.setName("embed_title").setDescription(emb.embedTitle).setMaxLength(256).setRequired(false),
+      )
+      .addStringOption((opt) =>
+        opt.setName("embed_description").setDescription(emb.embedDescription).setMaxLength(4000).setRequired(false),
+      )
+      .addStringOption((opt) =>
+        opt.setName("embed_url").setDescription(emb.embedUrl).setMaxLength(2000).setRequired(false),
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName("embed_color")
+          .setDescription(emb.embedColor)
+          .setMaxLength(32)
+          .setRequired(false),
+      )
+      .addStringOption((opt) =>
+        opt.setName("embed_thumbnail_url").setDescription(emb.embedThumbnailUrl).setMaxLength(2000),
+      )
+      .addStringOption((opt) =>
+        opt.setName("embed_image_url").setDescription(emb.embedImageUrl).setMaxLength(2000),
+      )
+      .addStringOption((opt) =>
+        opt.setName("embed_footer").setDescription(emb.embedFooter).setMaxLength(2048),
+      )
+      .addStringOption((opt) =>
+        opt.setName("embed_author_name").setDescription(emb.embedAuthorName).setMaxLength(256),
+      )
+      .addAttachmentOption((opt) =>
+        opt.setName("image").setDescription(postTxt.image).setRequired(false),
+      ) as unknown as SlashCommandBuilder
+  );
+}
+
 const rolePanelCommand = appendSharedPanelEmbedOptions(
   new SlashCommandBuilder()
     .setName("rolepanel")
@@ -328,7 +370,7 @@ const linkPanelCommand = appendSharedPanelEmbedOptions(
     .addStringOption((opt) => opt.setName("label5").setDescription(lp.buttonLabel(5)).setMaxLength(80)),
 ).setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
-const editRolePanelCommand = appendSharedPanelEmbedOptions(
+const editRolePanelCommand = appendEditRolePanelEmbedOptions(
   new SlashCommandBuilder()
     .setName("editrolepanel")
     .setDescription(erp.commandDescription)
@@ -405,26 +447,41 @@ const editLinkPanelCommand = appendSharedPanelEmbedOptions(
     .addStringOption((opt) => opt.setName("label5").setDescription(elp.buttonLabel(5)).setMaxLength(80)),
 ).setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
+const DISCORD_SLASH_MAX_OPTIONS = 25;
+
+function assertSlashOptionCount(cmd: { name: string; toJSON(): { options?: unknown[] } }, commandName: string): void {
+  const count = cmd.toJSON().options?.length ?? 0;
+  if (count > DISCORD_SLASH_MAX_OPTIONS) {
+    throw new Error(
+      `Slash command /${commandName} has ${count} options (Discord maximum is ${DISCORD_SLASH_MAX_OPTIONS})`,
+    );
+  }
+}
+
 export async function unregisterGuildCommands(guild: Guild): Promise<void> {
   await guild.commands.set([]);
 }
 
 export async function registerGuildCommands(guild: Guild): Promise<void> {
-  await guild.commands.set([
-    postCommand.toJSON(),
-    editCommand.toJSON(),
-    rolePanelCommand.toJSON(),
-    editRolePanelCommand.toJSON(),
-    linkPanelCommand.toJSON(),
-    editLinkPanelCommand.toJSON(),
-    muteSlashCommand.toJSON(),
-    unmuteSlashCommand.toJSON(),
-    strikeSlashCommand.toJSON(),
-    unstrikeSlashCommand.toJSON(),
-    banSlashCommand.toJSON(),
-    unbanSlashCommand.toJSON(),
-    modstatusSlashCommand.toJSON(),
-  ]);
+  const commandPayloads = [
+    postCommand,
+    editCommand,
+    rolePanelCommand,
+    editRolePanelCommand,
+    linkPanelCommand,
+    editLinkPanelCommand,
+    muteSlashCommand,
+    unmuteSlashCommand,
+    strikeSlashCommand,
+    unstrikeSlashCommand,
+    banSlashCommand,
+    unbanSlashCommand,
+    modstatusSlashCommand,
+  ];
+  for (const cmd of commandPayloads) {
+    assertSlashOptionCount(cmd, cmd.name);
+  }
+  await guild.commands.set(commandPayloads.map((c) => c.toJSON()));
 }
 
 function buildButtonsFromInteraction(
