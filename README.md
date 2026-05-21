@@ -80,7 +80,7 @@ Edit `.env`:
 | `DISCORD_MESSAGE_REVIEW_BYPASS_ROLE_IDS` | No | Skip caching for these roles |
 | `DISCORD_MESSAGE_REVIEW_INCLUDE_URLS` | No | Cache text-only messages with `http(s)` URLs (default on) |
 | `DISCORD_MESSAGE_REVIEW_MAX_ATTACHMENT_MB` | No | Re-upload limit on delete (default **8** MB) |
-| `DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS` | No | Audit log delay before self-delete check (default **500** ms) |
+| `DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS` | No | Audit log delay before self-delete check (default **2000** ms) |
 | `DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST` | No | Comma-separated or JSON array of hosts; non-invite `http(s)` URLs matching these trigger a **major** hit (empty = disabled) |
 | `DISCORD_SPAM_FILTER_CHANNEL_IDS` | No | Comma-separated channel/thread IDs where **consecutive near-duplicate text** from the **same user** (vs previous message in channel via API) counts as **minor** spam: strict normalized equality, or same **letter/digit skeleton** with similar length, or (for long text only) high **Levenshtein similarity**; empty disables. Bot needs **Read Message History** there. |
 | `DISCORD_SPAM_FILTER_CHANNEL_OPTIONS_JSON` | No | Per-channel overrides, e.g. `{"channelId":{"crossAuthor":true,"cooldownMs":21600000}}` — **any author**, same duplicate matcher, one similar post per scope within the cooldown (threads share parent scope). Fingerprints are stored in memory and **saved only when `saveState` already runs** (shutdown, mod actions, Exbo updates, etc.), not on every message. |

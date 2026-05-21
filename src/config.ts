@@ -205,7 +205,7 @@ export const DISCORD_MESSAGE_REVIEW_MAX_ATTACHMENT_MB = clampParseInt(
 );
 
 export const DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS = clampParseInt(
-  process.env.DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS ?? "500",
+  process.env.DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS ?? "2000",
   200,
   5_000,
 );
