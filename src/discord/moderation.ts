@@ -659,14 +659,14 @@ export async function handleModerationMessage(message: Message): Promise<void> {
 
   const excerpt = `${message.content}`.slice(0, 400);
 
+  evictMessageReviewCache(message.id);
+
   try {
     await message.delete();
   } catch (err) {
     console.error("Discord moderation failed to delete message:", err);
     return;
   }
-
-  evictMessageReviewCache(message.id);
 
   touchModerationViolation(guildId, userId, now);
 

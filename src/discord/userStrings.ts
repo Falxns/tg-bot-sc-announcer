@@ -59,6 +59,39 @@ export const discordSlashLinkPanel = {
   linkFallbackLabel: "Ссылка",
 } as const;
 
+export const discordSlashEditRolePanel = {
+  commandDescription:
+    "Изменить панель ролей: укажите только нужные roleN/labelN — остальные кнопки сохранятся.",
+  channel: "Канал с панелью",
+  messageId: discordSlashEdit.messageId,
+  role: (n: number) =>
+    n === 1
+      ? `${discordSlashRolePanel.role(1)} (необязательно; только эта кнопка)`
+      : `${discordSlashRolePanel.role(n)} (необязательно; только слот №${n})`,
+  roleButtonLabel: (n: number) =>
+    `${discordSlashRolePanel.roleButtonLabel(n)} (необязательно; только слот №${n})`,
+  singleRole: discordSlashRolePanel.singleRole,
+  modalTitle: "Панель ролей — редактирование текста",
+  modalBodyLabel: discordSlashRolePanel.modalBodyLabel,
+  notRolePanel: "В этом сообщении нет кнопок ролей бота — укажите ID сообщения с панелью ролей.",
+} as const;
+
+export const discordSlashEditLinkPanel = {
+  commandDescription:
+    "Изменить кнопки-ссылки: укажите только нужные urlN/labelN — остальные кнопки сохранятся.",
+  channel: "Канал с сообщением",
+  messageId: discordSlashEdit.messageId,
+  url: (n: number) =>
+    n === 1
+      ? `${discordSlashLinkPanel.url(1).replace(" (https://…)", "")} (необязательно; только слот №1)`
+      : `${discordSlashLinkPanel.url(n)} (необязательно; только слот №${n})`,
+  buttonLabel: (n: number) =>
+    `${discordSlashLinkPanel.buttonLabel(n)} (необязательно; только слот №${n})`,
+  modalTitle: "Кнопки-ссылки — редактирование текста",
+  modalBodyLabel: discordSlashLinkPanel.modalBodyLabel,
+  notLinkPanel: "В этом сообщении нет кнопок-ссылок бота — укажите ID нужного сообщения.",
+} as const;
+
 export const discordSlashModeration = {
   userOption: "Пользователь",
   mute: {
@@ -189,10 +222,14 @@ export const discordCommonReplies = {
   modalStaleEdit: "Форма устарела или уже использована. Запустите `/edit` снова.",
   modalStaleRolePanel: "Форма устарела или уже использована. Запустите `/rolepanel` снова.",
   modalStaleLinkPanel: "Форма устарела или уже использована. Запустите `/linkpanel` снова.",
+  modalStaleEditRolePanel: "Форма устарела или уже использована. Запустите `/editrolepanel` снова.",
+  modalStaleEditLinkPanel: "Форма устарела или уже использована. Запустите `/editlinkpanel` снова.",
   modalWrongInvokerPost: "Отправить форму может только тот, кто вызвал `/post`.",
   modalWrongInvokerEdit: "Отправить форму может только тот, кто вызвал `/edit`.",
   modalWrongInvokerRolePanel: "Отправить форму может только тот, кто вызвал `/rolepanel`.",
   modalWrongInvokerLinkPanel: "Отправить форму может только тот, кто вызвал `/linkpanel`.",
+  modalWrongInvokerEditRolePanel: "Отправить форму может только тот, кто вызвал `/editrolepanel`.",
+  modalWrongInvokerEditLinkPanel: "Отправить форму может только тот, кто вызвал `/editlinkpanel`.",
   postModalNeedsContent:
     "Добавьте текст сообщения, прикрепите картинку и/или задайте embed (например `embed_title`, `embed_description`).",
   panelModalNeedsContent:
@@ -236,6 +273,7 @@ export function discordFmtLinkPanelDone(channelId: string, linkCount: number): s
 
 export const discordLinkPanelErrors = {
   url1Invalid: "Некорректная ссылка в `url1`: нужен http(s) URL длиной не больше 512 символов.",
+  urlInvalid: "Некорректная ссылка: нужен http(s) URL длиной не больше 512 символов.",
   needOneLink: "Укажите хотя бы одну корректную ссылку.",
 } as const;
 

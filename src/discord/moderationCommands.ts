@@ -35,6 +35,7 @@ import {
   notifyStaffModerationUser,
   notifyStaffUserDmFallback,
 } from "./moderation";
+import { evictMessageReviewCache } from "./messageReview";
 import {
   adjustGlobalWarnCount,
   adjustMuteTier,
@@ -178,6 +179,12 @@ async function resolveEvidenceFromMessageId(opts: {
   } catch {
     return { note: modTxt.evidenceNoteFetchFail };
   }
+}
+
+/** Remove review-cache entry before bot delete so message review does not treat it as self-delete. */
+async function deleteStaffEvidenceMessage(message: Message): Promise<void> {
+  evictMessageReviewCache(message.id);
+  await message.delete();
 }
 
 export const muteSlashCommand = new SlashCommandBuilder()
@@ -471,7 +478,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     let evidenceDeleteNote = "";
     if (evidence.evidenceMessage) {
       try {
-        await evidence.evidenceMessage.delete();
+        await deleteStaffEvidenceMessage(evidence.evidenceMessage);
         evidenceDeleteNote = modTxt.evidenceSourceDeletedNote;
       } catch (err) {
         console.error("moderation evidence message delete failed:", err);
@@ -632,7 +639,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     let evidenceDeleteNote = "";
     if (evidence.evidenceMessage) {
       try {
-        await evidence.evidenceMessage.delete();
+        await deleteStaffEvidenceMessage(evidence.evidenceMessage);
         evidenceDeleteNote = modTxt.evidenceSourceDeletedNote;
       } catch (err) {
         console.error("moderation evidence message delete failed:", err);
@@ -863,7 +870,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
     let evidenceDeleteNote = "";
     if (evidence.evidenceMessage) {
       try {
-        await evidence.evidenceMessage.delete();
+        await deleteStaffEvidenceMessage(evidence.evidenceMessage);
         evidenceDeleteNote = modTxt.evidenceSourceDeletedNote;
       } catch (err) {
         console.error("moderation evidence message delete failed:", err);

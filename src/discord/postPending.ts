@@ -85,11 +85,23 @@ export type PendingLinkPanelPayload = PanelEmbedFields & {
   expiresAt: number;
 };
 
+export type PendingEditRolePanelPayload = PendingRolePanelPayload & {
+  messageId: string;
+  baselineEmbed?: PendingEditBaselineEmbed;
+};
+
+export type PendingEditLinkPanelPayload = PendingLinkPanelPayload & {
+  messageId: string;
+  baselineEmbed?: PendingEditBaselineEmbed;
+};
+
 const TTL_MS = 15 * 60 * 1000;
 const pendingByNonce = new Map<string, PendingPostPayload>();
 const pendingEditByNonce = new Map<string, PendingEditPayload>();
 const pendingRolePanelByNonce = new Map<string, PendingRolePanelPayload>();
 const pendingLinkPanelByNonce = new Map<string, PendingLinkPanelPayload>();
+const pendingEditRolePanelByNonce = new Map<string, PendingEditRolePanelPayload>();
+const pendingEditLinkPanelByNonce = new Map<string, PendingEditLinkPanelPayload>();
 
 function pruneExpired(): void {
   const now = Date.now();
@@ -104,6 +116,12 @@ function pruneExpired(): void {
   }
   for (const [k, v] of pendingLinkPanelByNonce) {
     if (v.expiresAt <= now) pendingLinkPanelByNonce.delete(k);
+  }
+  for (const [k, v] of pendingEditRolePanelByNonce) {
+    if (v.expiresAt <= now) pendingEditRolePanelByNonce.delete(k);
+  }
+  for (const [k, v] of pendingEditLinkPanelByNonce) {
+    if (v.expiresAt <= now) pendingEditLinkPanelByNonce.delete(k);
   }
 }
 
@@ -167,6 +185,38 @@ export function takePendingLinkPanel(nonce: string): PendingLinkPanelPayload | u
   const v = pendingLinkPanelByNonce.get(nonce);
   if (!v) return undefined;
   pendingLinkPanelByNonce.delete(nonce);
+  if (v.expiresAt <= Date.now()) return undefined;
+  return v;
+}
+
+export function createPendingEditRolePanel(payload: Omit<PendingEditRolePanelPayload, "expiresAt">): string {
+  pruneExpired();
+  const nonce = randomUUID();
+  pendingEditRolePanelByNonce.set(nonce, { ...payload, expiresAt: Date.now() + TTL_MS });
+  return nonce;
+}
+
+export function takePendingEditRolePanel(nonce: string): PendingEditRolePanelPayload | undefined {
+  pruneExpired();
+  const v = pendingEditRolePanelByNonce.get(nonce);
+  if (!v) return undefined;
+  pendingEditRolePanelByNonce.delete(nonce);
+  if (v.expiresAt <= Date.now()) return undefined;
+  return v;
+}
+
+export function createPendingEditLinkPanel(payload: Omit<PendingEditLinkPanelPayload, "expiresAt">): string {
+  pruneExpired();
+  const nonce = randomUUID();
+  pendingEditLinkPanelByNonce.set(nonce, { ...payload, expiresAt: Date.now() + TTL_MS });
+  return nonce;
+}
+
+export function takePendingEditLinkPanel(nonce: string): PendingEditLinkPanelPayload | undefined {
+  pruneExpired();
+  const v = pendingEditLinkPanelByNonce.get(nonce);
+  if (!v) return undefined;
+  pendingEditLinkPanelByNonce.delete(nonce);
   if (v.expiresAt <= Date.now()) return undefined;
   return v;
 }
