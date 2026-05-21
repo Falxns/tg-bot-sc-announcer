@@ -55,6 +55,10 @@ import {
   type PendingRolePanelPayload,
 } from "./postPending";
 import {
+  hasLinkPanelSlotUpdates,
+  hasRolePanelSlotUpdates,
+  mergeLinkPanelLinksFromInteraction,
+  mergeRolePanelButtonsFromInteraction,
   parseLinkPanelLinksFromMessage,
   parseRolePanelStateFromMessage,
   reapplyRolePanelButtonPrefixes,
@@ -566,19 +570,15 @@ function resolveEditRolePanelConfig(
   existing: Message,
   botUserId: string,
 ): { buttons: DiscordRolePanelButton[]; singleRole: boolean } | null {
-  const role1 = interaction.options.getRole("role1");
-  const singleRoleFromSlash = interaction.options.getBoolean("single_role");
-  if (role1) {
-    const singleRole = singleRoleFromSlash ?? false;
-    const buttons = buildButtonsFromInteraction(interaction, { singleRole });
-    if (buttons.length === 0) return null;
-    return { buttons, singleRole };
-  }
   const parsed = parseRolePanelStateFromMessage(existing, botUserId);
   if (!parsed) return null;
+  const singleRoleFromSlash = interaction.options.getBoolean("single_role");
   const singleRole = singleRoleFromSlash ?? parsed.singleRole ?? false;
   let buttons = parsed.buttons;
-  if (singleRoleFromSlash !== null) {
+  if (hasRolePanelSlotUpdates(interaction)) {
+    buttons = mergeRolePanelButtonsFromInteraction(interaction, buttons, singleRole);
+    if (buttons.length === 0) return null;
+  } else if (singleRoleFromSlash !== null) {
     buttons = reapplyRolePanelButtonPrefixes(buttons, singleRole);
   }
   return { buttons, singleRole };
@@ -589,11 +589,10 @@ function resolveEditLinkPanelLinks(
   existing: Message,
   botUserId: string,
 ): PendingLinkPanelLink[] | null {
-  const url1Raw = interaction.options.getString("url1")?.trim();
-  if (url1Raw) {
-    return buildLinkButtonsFromInteraction(interaction);
-  }
-  return parseLinkPanelLinksFromMessage(existing, botUserId);
+  const existingLinks = parseLinkPanelLinksFromMessage(existing, botUserId);
+  if (!existingLinks || existingLinks.length === 0) return existingLinks;
+  if (!hasLinkPanelSlotUpdates(interaction)) return existingLinks;
+  return mergeLinkPanelLinksFromInteraction(interaction, existingLinks);
 }
 
 function linkPanelSpecsToRows(links: readonly LinkPanelButtonSpec[] | PendingLinkPanelPayload["links"]): ActionRowBuilder<ButtonBuilder>[] {
@@ -1284,7 +1283,7 @@ async function handleEditLinkPanel(interaction: ChatInputCommandInteraction): Pr
   const links = resolveEditLinkPanelLinks(interaction, existing, botId);
   if (links === null) {
     await interaction.reply({
-      content: linkErr.url1Invalid,
+      content: linkErr.urlInvalid,
       flags: MessageFlags.Ephemeral,
     });
     return;

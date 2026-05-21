@@ -1,9 +1,10 @@
-import { ButtonInteraction, ButtonStyle, ComponentType, Message } from "discord.js";
+import { ButtonInteraction, ButtonStyle, ChatInputCommandInteraction, ComponentType, Message } from "discord.js";
 import { LAST_SEEN_STATE_FILE, LOG_LEVEL } from "../config";
 import { peelFirstCustomDiscordEmojiFromLabel } from "./buttonEmoji";
 import { getDiscordRolePanel, saveState, setDiscordRolePanel } from "../state";
 import type { PendingLinkPanelLink } from "./postPending";
 import type { DiscordRolePanelButton, DiscordRolePanelState } from "./types";
+import { discordSlashLinkPanel as lp } from "./userStrings";
 
 const ROLE_BUTTON_PREFIX = "role:";
 const ROLE_BUTTON_SINGLE_PREFIX = "roleone:";
@@ -119,4 +120,138 @@ export function reapplyRolePanelButtonPrefixes(
     roleId: b.roleId,
     label: b.label,
   }));
+}
+
+const ROLE_PANEL_MAX_SLOTS = 6;
+const LINK_PANEL_MAX_SLOTS = 5;
+const LINK_BUTTON_URL_MAX = 512;
+const DISCORD_BUTTON_LABEL_MAX = 80;
+
+export function hasRolePanelSlotUpdates(interaction: ChatInputCommandInteraction): boolean {
+  for (let i = 1; i <= ROLE_PANEL_MAX_SLOTS; i++) {
+    if (interaction.options.getRole(`role${i}`)) return true;
+    const label = interaction.options.getString(`label${i}`)?.trim();
+    if (label && label.length > 0) return true;
+  }
+  return false;
+}
+
+/** Merge slash `roleN` / `labelN` into existing buttons by slot index (1-based). */
+export function mergeRolePanelButtonsFromInteraction(
+  interaction: ChatInputCommandInteraction,
+  existing: readonly DiscordRolePanelButton[],
+  singleRole: boolean,
+): DiscordRolePanelButton[] {
+  const prefix = singleRole ? ROLE_BUTTON_SINGLE_PREFIX : ROLE_BUTTON_PREFIX;
+  const slots: (DiscordRolePanelButton | undefined)[] = [];
+  for (let i = 0; i < ROLE_PANEL_MAX_SLOTS; i++) {
+    slots[i] = existing[i];
+  }
+
+  for (let i = 1; i <= ROLE_PANEL_MAX_SLOTS; i++) {
+    const role = interaction.options.getRole(`role${i}`);
+    const labelRaw = interaction.options.getString(`label${i}`)?.trim();
+    if (role) {
+      const label = labelRaw && labelRaw.length > 0 ? labelRaw : role.name;
+      slots[i - 1] = {
+        customId: `${prefix}${role.id}`,
+        roleId: role.id,
+        label,
+      };
+    } else if (labelRaw && labelRaw.length > 0 && slots[i - 1]) {
+      slots[i - 1] = { ...slots[i - 1]!, label: labelRaw };
+    }
+  }
+
+  let lastIdx = -1;
+  for (let i = ROLE_PANEL_MAX_SLOTS - 1; i >= 0; i--) {
+    if (slots[i]) {
+      lastIdx = i;
+      break;
+    }
+  }
+  const trimmed = slots.slice(0, lastIdx + 1).filter((b): b is DiscordRolePanelButton => !!b);
+
+  const usedRoles = new Set<string>();
+  return trimmed.filter((b) => {
+    if (usedRoles.has(b.roleId)) return false;
+    usedRoles.add(b.roleId);
+    return true;
+  });
+}
+
+function parseLinkButtonUrl(raw: string | null | undefined): string | undefined {
+  const s = raw?.trim();
+  if (!s) return undefined;
+  try {
+    const u = new URL(s);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
+    if (u.href.length > LINK_BUTTON_URL_MAX) return undefined;
+    return u.href;
+  } catch {
+    return undefined;
+  }
+}
+
+function defaultLinkButtonLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, "").slice(0, DISCORD_BUTTON_LABEL_MAX);
+  } catch {
+    return lp.linkFallbackLabel;
+  }
+}
+
+function linkSlotFromUrlAndLabel(url: string, labelFromUser?: string): PendingLinkPanelLink {
+  const baseForPeel =
+    labelFromUser && labelFromUser.length > 0 ? labelFromUser : defaultLinkButtonLabel(url);
+  const { remainder, emoji } = peelFirstCustomDiscordEmojiFromLabel(baseForPeel);
+  let label = remainder.trim().slice(0, DISCORD_BUTTON_LABEL_MAX);
+  if (label.length === 0 && !emoji) label = defaultLinkButtonLabel(url);
+  return { url, label, ...(emoji ? { emoji } : {}) };
+}
+
+export function hasLinkPanelSlotUpdates(interaction: ChatInputCommandInteraction): boolean {
+  for (let i = 1; i <= LINK_PANEL_MAX_SLOTS; i++) {
+    if (interaction.options.getString(`url${i}`)?.trim()) return true;
+    const label = interaction.options.getString(`label${i}`)?.trim();
+    if (label && label.length > 0) return true;
+  }
+  return false;
+}
+
+/** Merge slash `urlN` / `labelN` into existing links by slot index (1-based). Returns null if a provided URL is invalid. */
+export function mergeLinkPanelLinksFromInteraction(
+  interaction: ChatInputCommandInteraction,
+  existing: readonly PendingLinkPanelLink[],
+): PendingLinkPanelLink[] | null {
+  const slots: (PendingLinkPanelLink | undefined)[] = [];
+  for (let i = 0; i < LINK_PANEL_MAX_SLOTS; i++) {
+    slots[i] = existing[i];
+  }
+
+  for (let i = 1; i <= LINK_PANEL_MAX_SLOTS; i++) {
+    const urlRaw = interaction.options.getString(`url${i}`);
+    const labelFromUser = interaction.options.getString(`label${i}`)?.trim();
+    if (urlRaw !== null && urlRaw !== undefined) {
+      const trimmed = urlRaw.trim();
+      if (trimmed.length > 0) {
+        const url = parseLinkButtonUrl(trimmed);
+        if (!url) return null;
+        slots[i - 1] = linkSlotFromUrlAndLabel(url, labelFromUser);
+        continue;
+      }
+    }
+    if (labelFromUser && labelFromUser.length > 0 && slots[i - 1]) {
+      slots[i - 1] = linkSlotFromUrlAndLabel(slots[i - 1]!.url, labelFromUser);
+    }
+  }
+
+  let lastIdx = -1;
+  for (let i = LINK_PANEL_MAX_SLOTS - 1; i >= 0; i--) {
+    if (slots[i]) {
+      lastIdx = i;
+      break;
+    }
+  }
+  return slots.slice(0, lastIdx + 1).filter((b): b is PendingLinkPanelLink => !!b);
 }

@@ -60,11 +60,16 @@ export const discordSlashLinkPanel = {
 } as const;
 
 export const discordSlashEditRolePanel = {
-  commandDescription: "Изменить существующую панель ролей (сообщение с кнопками ролей).",
+  commandDescription:
+    "Изменить панель ролей: укажите только нужные roleN/labelN — остальные кнопки сохранятся.",
   channel: "Канал с панелью",
   messageId: discordSlashEdit.messageId,
-  role: discordSlashRolePanel.role,
-  roleButtonLabel: discordSlashRolePanel.roleButtonLabel,
+  role: (n: number) =>
+    n === 1
+      ? `${discordSlashRolePanel.role(1)} (необязательно; только эта кнопка)`
+      : `${discordSlashRolePanel.role(n)} (необязательно; только слот №${n})`,
+  roleButtonLabel: (n: number) =>
+    `${discordSlashRolePanel.roleButtonLabel(n)} (необязательно; только слот №${n})`,
   singleRole: discordSlashRolePanel.singleRole,
   modalTitle: "Панель ролей — редактирование текста",
   modalBodyLabel: discordSlashRolePanel.modalBodyLabel,
@@ -72,11 +77,16 @@ export const discordSlashEditRolePanel = {
 } as const;
 
 export const discordSlashEditLinkPanel = {
-  commandDescription: "Изменить существующее сообщение с кнопками-ссылками.",
+  commandDescription:
+    "Изменить кнопки-ссылки: укажите только нужные urlN/labelN — остальные кнопки сохранятся.",
   channel: "Канал с сообщением",
   messageId: discordSlashEdit.messageId,
-  url: discordSlashLinkPanel.url,
-  buttonLabel: discordSlashLinkPanel.buttonLabel,
+  url: (n: number) =>
+    n === 1
+      ? `${discordSlashLinkPanel.url(1).replace(" (https://…)", "")} (необязательно; только слот №1)`
+      : `${discordSlashLinkPanel.url(n)} (необязательно; только слот №${n})`,
+  buttonLabel: (n: number) =>
+    `${discordSlashLinkPanel.buttonLabel(n)} (необязательно; только слот №${n})`,
   modalTitle: "Кнопки-ссылки — редактирование текста",
   modalBodyLabel: discordSlashLinkPanel.modalBodyLabel,
   notLinkPanel: "В этом сообщении нет кнопок-ссылок бота — укажите ID нужного сообщения.",
@@ -263,6 +273,7 @@ export function discordFmtLinkPanelDone(channelId: string, linkCount: number): s
 
 export const discordLinkPanelErrors = {
   url1Invalid: "Некорректная ссылка в `url1`: нужен http(s) URL длиной не больше 512 символов.",
+  urlInvalid: "Некорректная ссылка: нужен http(s) URL длиной не больше 512 символов.",
   needOneLink: "Укажите хотя бы одну корректную ссылку.",
 } as const;
 
