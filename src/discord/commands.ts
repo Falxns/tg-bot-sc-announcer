@@ -18,7 +18,8 @@ import {
   TextInputStyle,
 } from "discord.js";
 import type { Message } from "discord.js";
-import { DISCORD_ADMIN_ROLE_IDS, DISCORD_ROLE_PANEL_CHANNEL_ID, LAST_SEEN_STATE_FILE, LOG_LEVEL } from "../config";
+import { DISCORD_ROLE_PANEL_CHANNEL_ID, LAST_SEEN_STATE_FILE, LOG_LEVEL } from "../config";
+import { isDiscordAdmin } from "./guildPermissions";
 import { saveState, setDiscordRolePanel } from "../state";
 import {
   banSlashCommand,
@@ -92,19 +93,6 @@ const DISCORD_TEXT_INPUT_LABEL_MAX = 45;
 const DISCORD_BUTTON_LABEL_MAX = 80;
 const ROLE_BUTTON_PREFIX = "role:";
 const ROLE_BUTTON_SINGLE_PREFIX = "roleone:";
-function memberRoleIds(member: GuildMember | APIInteractionGuildMember | null): string[] {
-  if (!member) return [];
-  if (member instanceof GuildMember) return [...member.roles.cache.keys()];
-  if (Array.isArray(member.roles)) return member.roles;
-  return [];
-}
-
-function isElevated(member: GuildMember | APIInteractionGuildMember | null): boolean {
-  const allowed = DISCORD_ADMIN_ROLE_IDS;
-  if (allowed.length === 0) return true;
-  const roleIds = memberRoleIds(member);
-  return roleIds.some((id) => allowed.includes(id));
-}
 
 function isDiscordSnowflake(id: string): boolean {
   return /^\d{17,20}$/.test(id.trim());
@@ -900,7 +888,7 @@ async function handlePostModalSubmit(interaction: ModalSubmitInteraction): Promi
     await interaction.reply({ content: com.modalWrongInvokerPost, flags: MessageFlags.Ephemeral });
     return;
   }
-  if (!isElevated(interaction.member)) {
+  if (!isDiscordAdmin(interaction.member)) {
     await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }
@@ -1064,7 +1052,7 @@ async function handleEditModalSubmit(interaction: ModalSubmitInteraction): Promi
     await interaction.reply({ content: com.modalWrongInvokerEdit, flags: MessageFlags.Ephemeral });
     return;
   }
-  if (!isElevated(interaction.member)) {
+  if (!isDiscordAdmin(interaction.member)) {
     await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }
@@ -1235,7 +1223,7 @@ async function handleEditRolePanelModalSubmit(interaction: ModalSubmitInteractio
     });
     return;
   }
-  if (!isElevated(interaction.member)) {
+  if (!isDiscordAdmin(interaction.member)) {
     await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }
@@ -1399,7 +1387,7 @@ async function handleEditLinkPanelModalSubmit(interaction: ModalSubmitInteractio
     });
     return;
   }
-  if (!isElevated(interaction.member)) {
+  if (!isDiscordAdmin(interaction.member)) {
     await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }
@@ -1569,7 +1557,7 @@ async function handleRolePanelModalSubmit(interaction: ModalSubmitInteraction): 
     });
     return;
   }
-  if (!isElevated(interaction.member)) {
+  if (!isDiscordAdmin(interaction.member)) {
     await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }
@@ -1663,7 +1651,7 @@ export async function handleDiscordCommand(interaction: ChatInputCommandInteract
     return;
   }
 
-  if (!isElevated(interaction.member)) {
+  if (!isDiscordAdmin(interaction.member)) {
     await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }
@@ -1757,7 +1745,7 @@ async function handleLinkPanelModalSubmit(interaction: ModalSubmitInteraction): 
     });
     return;
   }
-  if (!isElevated(interaction.member)) {
+  if (!isDiscordAdmin(interaction.member)) {
     await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }

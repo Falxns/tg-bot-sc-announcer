@@ -47,8 +47,13 @@ export const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS ?? "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
-/** Role IDs that may use `/post`, `/edit`, `/rolepanel`, `/editrolepanel`, `/linkpanel`, `/editlinkpanel` (when non-empty; moderation slash uses Discord perms only). */
+/** Role IDs that may use `/post`, `/edit`, `/rolepanel`, `/editrolepanel`, `/linkpanel`, `/editlinkpanel` (when non-empty). */
 export const DISCORD_ADMIN_ROLE_IDS = (process.env.DISCORD_ADMIN_ROLE_IDS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+/** Role IDs that may use moderation slash (`/mute`, `/strike`, `/ban`, …); also allowed if member has an admin role. Bot role needs Discord timeout/ban perms. */
+export const DISCORD_MODERATOR_ROLE_IDS = (process.env.DISCORD_MODERATOR_ROLE_IDS ?? "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);

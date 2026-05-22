@@ -26,7 +26,14 @@ import {
 } from "./messageReviewCache";
 import { discordMessageReview as reviewTxt } from "./userStrings";
 
-const MEMBER_DELETE_AUDIT_MAX_AGE_MS = 15_000;
+/** Slack for audit log write + fetch latency (see deleteObservedAt anchor in handleMessageReviewDelete). */
+const MESSAGE_DELETE_AUDIT_MARGIN_MS = 2_000;
+/** Extra window beyond configured post-delete sleep so entries are not rejected after delay + fetch. */
+const MESSAGE_DELETE_AUDIT_EXTRA_MS = 3_000;
+
+function messageDeleteAuditMaxAgeMs(): number {
+  return DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS + MESSAGE_DELETE_AUDIT_MARGIN_MS + MESSAGE_DELETE_AUDIT_EXTRA_MS;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -120,13 +127,31 @@ function buildCacheEntry(message: Message): CachedMessageReview {
   };
 }
 
-async function resolveSelfDeleteExecutor(guild: Guild, messageId: string): Promise<string | undefined> {
+function messageDeleteAuditChannelId(entry: { extra: unknown }): string | undefined {
+  const extra = entry.extra as { channel?: { id?: string } } | null;
+  const ch = extra?.channel;
+  if (ch && typeof ch.id === "string") return ch.id;
+  return undefined;
+}
+
+/**
+ * Returns executor id when a mod/admin (or bot) deleted the message via Discord UI.
+ * Self-deletes are usually not audited; no matching entry ⇒ undefined.
+ */
+async function resolveStaffMessageDeleteExecutor(
+  guild: Guild,
+  cached: CachedMessageReview,
+  deleteObservedAt: number,
+): Promise<string | undefined> {
+  const oldestAllowed = deleteObservedAt - MESSAGE_DELETE_AUDIT_MARGIN_MS;
+  const newestAllowed = deleteObservedAt + messageDeleteAuditMaxAgeMs();
   try {
-    const logs = await guild.fetchAuditLogs({ type: AuditLogEvent.MessageDelete, limit: 8 });
-    const now = Date.now();
+    const logs = await guild.fetchAuditLogs({ type: AuditLogEvent.MessageDelete, limit: 12 });
     for (const entry of logs.entries.values()) {
-      if (entry.targetId !== messageId) continue;
-      if (now - entry.createdTimestamp > MEMBER_DELETE_AUDIT_MAX_AGE_MS) continue;
+      if (entry.targetId !== cached.authorId) continue;
+      const auditChannelId = messageDeleteAuditChannelId(entry);
+      if (auditChannelId && auditChannelId !== cached.channelId) continue;
+      if (entry.createdTimestamp < oldestAllowed || entry.createdTimestamp > newestAllowed) continue;
       if (!entry.executor) continue;
       return entry.executor.id;
     }
@@ -234,17 +259,19 @@ export async function handleMessageReviewDelete(message: Message | PartialMessag
   const cached = takeCachedMessageReview(message.id);
   if (!cached) return;
 
+  const deleteObservedAt = Date.now();
+
   const guild = message.guild ?? (await message.client.guilds.fetch(cached.guildId).catch(() => null));
   if (!guild) return;
 
   await sleep(DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS);
 
-  const executorId = await resolveSelfDeleteExecutor(guild, message.id);
+  const executorId = await resolveStaffMessageDeleteExecutor(guild, cached, deleteObservedAt);
   const botId = guild.client.user?.id;
 
-  if (executorId === botId || (executorId && executorId !== cached.authorId)) {
+  if (executorId && (executorId === botId || executorId !== cached.authorId)) {
     if (LOG_LEVEL === "debug") {
-      console.log(`[Message review] skip ${message.id}: deleted by ${executorId ?? "unknown"}, not self-delete`);
+      console.log(`[Message review] skip ${message.id}: staff/bot delete by ${executorId}`);
     }
     return;
   }
