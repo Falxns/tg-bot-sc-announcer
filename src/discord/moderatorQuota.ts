@@ -5,21 +5,14 @@ import {
   MessageFlags,
 } from "discord.js";
 import { DISCORD_ADMIN_ROLE_IDS, DISCORD_MODERATION_DAILY_QUOTA } from "../config";
+import { isDiscordAdmin } from "./guildPermissions";
 import { getModeratorDailyQuotaUsed, recordModeratorDailyQuotaUse as incrementModeratorDailyQuota } from "../state";
 import { discordModerationCommands as modTxt } from "./userStrings";
 
-function memberRoleIds(member: GuildMember | APIInteractionGuildMember | null): string[] {
-  if (!member) return [];
-  if (member instanceof GuildMember) return [...member.roles.cache.keys()];
-  if (Array.isArray(member.roles)) return member.roles;
-  return [];
-}
-
-/** Same role list as elevated /post access — bypasses daily punitive quota. */
+/** Admin roles bypass daily punitive quota; line moderators do not. */
 export function isModeratorQuotaExempt(member: GuildMember | APIInteractionGuildMember | null): boolean {
-  const allowed = DISCORD_ADMIN_ROLE_IDS;
-  if (allowed.length === 0) return false;
-  return memberRoleIds(member).some((id) => allowed.includes(id));
+  if (DISCORD_ADMIN_ROLE_IDS.length === 0) return false;
+  return isDiscordAdmin(member);
 }
 
 export function getModeratorQuotaStatus(

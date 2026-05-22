@@ -3,10 +3,10 @@ import {
   ChatInputCommandInteraction,
   GuildMember,
   MessageFlags,
-  PermissionFlagsBits,
   SlashCommandBuilder,
 } from "discord.js";
 import type { Guild, Message, User } from "discord.js";
+import { isDiscordModerator } from "./guildPermissions";
 import {
   DISCORD_MODERATION_DECAY_MS,
   DISCORD_MODERATION_LOG_CHANNEL_ID,
@@ -53,6 +53,7 @@ import { moderationLogNoticePayload, resolveModerationNotice, type ResolvedModer
 import { filterChannelPresetAutocomplete, isKnownChannelPresetId } from "./moderationReasonPresets";
 import { filterRulePresetAutocomplete, isKnownRulePresetId } from "./moderationRulePresets";
 import {
+  discordCommonReplies as com,
   discordFormatDurationRu,
   discordModerationCommands as modTxt,
   discordModerationLogTitles,
@@ -113,6 +114,10 @@ function resolveStaffModerationNotice(
 }
 
 export async function handleModerationAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
+  if (!isDiscordModerator(interaction.member)) {
+    await interaction.respond([]);
+    return;
+  }
   const cmd = interaction.commandName;
   if (cmd !== "mute" && cmd !== "strike" && cmd !== "ban") {
     await interaction.respond([]);
@@ -226,13 +231,11 @@ export const muteSlashCommand = new SlashCommandBuilder()
       .setMinLength(17)
       .setMaxLength(22),
   )
-  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
 export const unmuteSlashCommand = new SlashCommandBuilder()
   .setName("unmute")
   .setDescription(slashModTxt.unmute.commandDescription)
-  .addUserOption((o) => o.setName("user").setDescription(slashModTxt.userOption).setRequired(true))
-  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
+  .addUserOption((o) => o.setName("user").setDescription(slashModTxt.userOption).setRequired(true));
 
 export const strikeSlashCommand = new SlashCommandBuilder()
   .setName("strike")
@@ -269,7 +272,6 @@ export const strikeSlashCommand = new SlashCommandBuilder()
       .setMinLength(17)
       .setMaxLength(22),
   )
-  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
 export const unstrikeSlashCommand = new SlashCommandBuilder()
   .setName("unstrike")
@@ -300,7 +302,6 @@ export const unstrikeSlashCommand = new SlashCommandBuilder()
       .setMaxValue(20)
       .setRequired(false),
   )
-  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 
 export const banSlashCommand = new SlashCommandBuilder()
   .setName("ban")
@@ -341,7 +342,6 @@ export const banSlashCommand = new SlashCommandBuilder()
       .addChoices(...discordBanDeleteMessageChoices)
       .setRequired(false),
   )
-  .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers);
 
 export const unbanSlashCommand = new SlashCommandBuilder()
   .setName("unban")
@@ -355,18 +355,21 @@ export const unbanSlashCommand = new SlashCommandBuilder()
       .setMinLength(17)
       .setMaxLength(22),
   )
-  .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers);
 
 export const modstatusSlashCommand = new SlashCommandBuilder()
   .setName("modstatus")
   .setDescription(slashModTxt.modstatus.commandDescription)
-  .addUserOption((o) => o.setName("user").setDescription(slashModTxt.modstatus.user).setRequired(true))
-  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
+  .addUserOption((o) => o.setName("user").setDescription(slashModTxt.modstatus.user).setRequired(true));
 
 export async function handleModerationSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   const guild = interaction.guild;
   if (!guild || !interaction.guildId) {
     await interaction.reply({ content: modTxt.guildOnly, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (!isDiscordModerator(interaction.member)) {
+    await interaction.reply({ content: com.noPermission, flags: MessageFlags.Ephemeral });
     return;
   }
 
