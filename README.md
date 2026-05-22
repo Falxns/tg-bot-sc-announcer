@@ -58,7 +58,7 @@ Edit `.env`:
 | `UPSTASH_STATE_KEY` | No | Redis key for serialized state JSON (default: `tg-bot-sc-announcer:state`) |
 | `ADMIN_USER_IDS` | No | Comma-separated Telegram user IDs; if empty, all users can use admin commands |
 | `DISCORD_ADMIN_ROLE_IDS` | No | Comma-separated Discord role IDs for `/post`, `/edit`, `/rolepanel`, `/editrolepanel`, `/linkpanel`, `/editlinkpanel` (when empty, any member may use those commands). Also allowed to run moderation slash; bypasses **`DISCORD_MODERATION_DAILY_QUOTA`**. |
-| `DISCORD_MODERATOR_ROLE_IDS` | No | Comma-separated Discord role IDs for moderation slash (`/mute`, `/strike`, `/ban`, …). Members with these roles should **not** have Discord **Moderate Members** / **Ban Members** (bot applies timeouts/bans). When both this and **`DISCORD_ADMIN_ROLE_IDS`** are empty, moderation slash is open to any member (dev only). |
+| `DISCORD_MODERATOR_ROLE_IDS` | No | Comma-separated Discord role IDs for moderation slash (`/mute`, `/strike`, `/ban`, …). Members with these roles should **not** have Discord **Moderate Members** / **Ban Members** (bot applies timeouts/bans). When both this and **`DISCORD_ADMIN_ROLE_IDS`** are empty, moderation slash is denied unless **`DISCORD_DEV_MODE=1`**. |
 | `DISCORD_ROLE_PANEL_CHANNEL_ID` | No | Restrict `/rolepanel` and `/editrolepanel` usage to one channel |
 | `DISCORD_BLOCK_INVITE_LINKS_GLOBAL` | No | `1`/`0` toggle for global Discord invite-link filtering |
 | `DISCORD_INVITE_ALLOWED_ROLE_IDS` | No | Roles allowed to bypass invite-link filter |
