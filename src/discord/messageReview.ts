@@ -26,13 +26,26 @@ import {
 } from "./messageReviewCache";
 import { discordMessageReview as reviewTxt } from "./userStrings";
 
-/** Slack for audit log write + fetch latency (see deleteObservedAt anchor in handleMessageReviewDelete). */
+/** Slack for audit log write + fetch latency. */
 const MESSAGE_DELETE_AUDIT_MARGIN_MS = 2_000;
-/** Extra window beyond configured post-delete sleep so entries are not rejected after delay + fetch. */
+/** Extra window beyond configured post-delete sleep. */
 const MESSAGE_DELETE_AUDIT_EXTRA_MS = 3_000;
+/** Audit entry snowflakes use Discord time; host clock may differ (e.g. remote PaaS). */
+const MESSAGE_DELETE_AUDIT_CLOCK_SKEW_MS = 60_000;
 
 function messageDeleteAuditMaxAgeMs(): number {
   return DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS + MESSAGE_DELETE_AUDIT_MARGIN_MS + MESSAGE_DELETE_AUDIT_EXTRA_MS;
+}
+
+function messageDeleteAuditMatchWindowMs(): number {
+  return messageDeleteAuditMaxAgeMs() + MESSAGE_DELETE_AUDIT_CLOCK_SKEW_MS;
+}
+
+/** Age check at fetch time — avoids anchoring to host `Date.now()` at messageDelete. */
+function isAuditEntryWithinMatchWindow(entryCreatedTimestamp: number, checkedAt: number): boolean {
+  const ageMs = checkedAt - entryCreatedTimestamp;
+  if (ageMs < -MESSAGE_DELETE_AUDIT_CLOCK_SKEW_MS) return false;
+  return ageMs <= messageDeleteAuditMatchWindowMs();
 }
 
 function sleep(ms: number): Promise<void> {
@@ -141,19 +154,18 @@ function messageDeleteAuditChannelId(entry: { extra: unknown }): string | undefi
 async function resolveStaffMessageDeleteExecutor(
   guild: Guild,
   cached: CachedMessageReview,
-  deleteObservedAt: number,
 ): Promise<string | undefined> {
-  const oldestAllowed = deleteObservedAt - MESSAGE_DELETE_AUDIT_MARGIN_MS;
-  const newestAllowed = deleteObservedAt + messageDeleteAuditMaxAgeMs();
   try {
     const logs = await guild.fetchAuditLogs({ type: AuditLogEvent.MessageDelete, limit: 12 });
+    const checkedAt = Date.now();
     for (const entry of logs.entries.values()) {
       if (entry.targetId !== cached.authorId) continue;
       const auditChannelId = messageDeleteAuditChannelId(entry);
       if (auditChannelId && auditChannelId !== cached.channelId) continue;
-      if (entry.createdTimestamp < oldestAllowed || entry.createdTimestamp > newestAllowed) continue;
-      if (!entry.executor) continue;
-      return entry.executor.id;
+      if (!isAuditEntryWithinMatchWindow(entry.createdTimestamp, checkedAt)) continue;
+      const executorId = entry.executorId ?? entry.executor?.id ?? null;
+      if (!executorId) continue;
+      return executorId;
     }
   } catch (err) {
     console.error("Message review audit log fetch failed:", err);
@@ -259,14 +271,12 @@ export async function handleMessageReviewDelete(message: Message | PartialMessag
   const cached = takeCachedMessageReview(message.id);
   if (!cached) return;
 
-  const deleteObservedAt = Date.now();
-
   const guild = message.guild ?? (await message.client.guilds.fetch(cached.guildId).catch(() => null));
   if (!guild) return;
 
   await sleep(DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS);
 
-  const executorId = await resolveStaffMessageDeleteExecutor(guild, cached, deleteObservedAt);
+  const executorId = await resolveStaffMessageDeleteExecutor(guild, cached);
   const botId = guild.client.user?.id;
 
   if (executorId && (executorId === botId || executorId !== cached.authorId)) {
