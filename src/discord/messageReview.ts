@@ -143,17 +143,15 @@ async function resolveStaffMessageDeleteExecutor(
   cached: CachedMessageReview,
   deleteObservedAt: number,
 ): Promise<string | undefined> {
-  const maxAgeMs = messageDeleteAuditMaxAgeMs();
   const oldestAllowed = deleteObservedAt - MESSAGE_DELETE_AUDIT_MARGIN_MS;
+  const newestAllowed = deleteObservedAt + messageDeleteAuditMaxAgeMs();
   try {
     const logs = await guild.fetchAuditLogs({ type: AuditLogEvent.MessageDelete, limit: 12 });
-    const now = Date.now();
     for (const entry of logs.entries.values()) {
       if (entry.targetId !== cached.authorId) continue;
       const auditChannelId = messageDeleteAuditChannelId(entry);
       if (auditChannelId && auditChannelId !== cached.channelId) continue;
-      if (entry.createdTimestamp < oldestAllowed) continue;
-      if (now - entry.createdTimestamp > maxAgeMs) continue;
+      if (entry.createdTimestamp < oldestAllowed || entry.createdTimestamp > newestAllowed) continue;
       if (!entry.executor) continue;
       return entry.executor.id;
     }
@@ -261,10 +259,11 @@ export async function handleMessageReviewDelete(message: Message | PartialMessag
   const cached = takeCachedMessageReview(message.id);
   if (!cached) return;
 
+  const deleteObservedAt = Date.now();
+
   const guild = message.guild ?? (await message.client.guilds.fetch(cached.guildId).catch(() => null));
   if (!guild) return;
 
-  const deleteObservedAt = Date.now();
   await sleep(DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS);
 
   const executorId = await resolveStaffMessageDeleteExecutor(guild, cached, deleteObservedAt);
