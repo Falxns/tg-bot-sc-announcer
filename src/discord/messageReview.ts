@@ -26,8 +26,14 @@ import {
 } from "./messageReviewCache";
 import { discordMessageReview as reviewTxt } from "./userStrings";
 
-/** Discord MESSAGE_DELETE audit entries use the message author as target_id, not the message snowflake. */
-const MESSAGE_DELETE_AUDIT_MAX_AGE_MS = 5_000;
+/** Slack for audit log write + fetch latency (see deleteObservedAt anchor in handleMessageReviewDelete). */
+const MESSAGE_DELETE_AUDIT_MARGIN_MS = 2_000;
+/** Extra window beyond configured post-delete sleep so entries are not rejected after delay + fetch. */
+const MESSAGE_DELETE_AUDIT_EXTRA_MS = 3_000;
+
+function messageDeleteAuditMaxAgeMs(): number {
+  return DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS + MESSAGE_DELETE_AUDIT_MARGIN_MS + MESSAGE_DELETE_AUDIT_EXTRA_MS;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -135,7 +141,10 @@ function messageDeleteAuditChannelId(entry: { extra: unknown }): string | undefi
 async function resolveStaffMessageDeleteExecutor(
   guild: Guild,
   cached: CachedMessageReview,
+  deleteObservedAt: number,
 ): Promise<string | undefined> {
+  const maxAgeMs = messageDeleteAuditMaxAgeMs();
+  const oldestAllowed = deleteObservedAt - MESSAGE_DELETE_AUDIT_MARGIN_MS;
   try {
     const logs = await guild.fetchAuditLogs({ type: AuditLogEvent.MessageDelete, limit: 12 });
     const now = Date.now();
@@ -143,7 +152,8 @@ async function resolveStaffMessageDeleteExecutor(
       if (entry.targetId !== cached.authorId) continue;
       const auditChannelId = messageDeleteAuditChannelId(entry);
       if (auditChannelId && auditChannelId !== cached.channelId) continue;
-      if (now - entry.createdTimestamp > MESSAGE_DELETE_AUDIT_MAX_AGE_MS) continue;
+      if (entry.createdTimestamp < oldestAllowed) continue;
+      if (now - entry.createdTimestamp > maxAgeMs) continue;
       if (!entry.executor) continue;
       return entry.executor.id;
     }
@@ -254,9 +264,10 @@ export async function handleMessageReviewDelete(message: Message | PartialMessag
   const guild = message.guild ?? (await message.client.guilds.fetch(cached.guildId).catch(() => null));
   if (!guild) return;
 
+  const deleteObservedAt = Date.now();
   await sleep(DISCORD_MESSAGE_REVIEW_AUDIT_DELAY_MS);
 
-  const executorId = await resolveStaffMessageDeleteExecutor(guild, cached);
+  const executorId = await resolveStaffMessageDeleteExecutor(guild, cached, deleteObservedAt);
   const botId = guild.client.user?.id;
 
   if (executorId && (executorId === botId || executorId !== cached.authorId)) {
