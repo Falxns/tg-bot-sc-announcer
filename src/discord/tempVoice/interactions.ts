@@ -351,12 +351,12 @@ export function buildTempVoicePanelComponents(): ActionRowBuilder<ButtonBuilder>
     voicePanelButton("name", VOICE_BUTTON_EMOJIS.name),
     voicePanelButton("limit", VOICE_BUTTON_EMOJIS.limit),
     voicePanelButton("access", VOICE_BUTTON_EMOJIS.access),
-    voicePanelButton("transfer", VOICE_BUTTON_EMOJIS.transfer),
+    voicePanelButton("region", VOICE_BUTTON_EMOJIS.region),
   );
   const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     voicePanelButton("invite", VOICE_BUTTON_EMOJIS.invite),
     voicePanelButton("kick", VOICE_BUTTON_EMOJIS.kick),
-    voicePanelButton("region", VOICE_BUTTON_EMOJIS.region),
+    voicePanelButton("transfer", VOICE_BUTTON_EMOJIS.transfer),
     voicePanelButton("delete", VOICE_BUTTON_EMOJIS.delete),
   );
   return [row1, row2];
