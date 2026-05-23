@@ -22,6 +22,7 @@ import {
   setTempVoiceRoom,
 } from "../../state";
 import type { TempVoiceRoomState } from "../types";
+import { ensureBotChannelAccess, setEveryoneVoiceConnect } from "./channelAccess";
 import { cancelEmptyDeleteTimer, isManagedTempVoiceChannel, scheduleEmptyDeleteIfNeeded } from "./lifecycle";
 
 function sanitizeChannelName(raw: string): string {
@@ -34,6 +35,7 @@ function asGuildVoiceChannel(ch: { type: ChannelType } | null): VoiceChannel | n
 }
 
 async function applyOwnerOverwrites(channel: VoiceChannel, ownerId: string): Promise<void> {
+  await ensureBotChannelAccess(channel);
   await channel.permissionOverwrites.edit(channel.guild.roles.everyone, { Connect: null });
   await channel.permissionOverwrites.create(ownerId, {
     Connect: true,
@@ -179,12 +181,7 @@ export async function transferTempVoiceOwnership(
 }
 
 export async function setRoomLocked(channel: VoiceChannel, room: TempVoiceRoomState, locked: boolean): Promise<void> {
-  const everyone = channel.guild.roles.everyone;
-  if (locked) {
-    await channel.permissionOverwrites.edit(everyone, { Connect: false });
-  } else {
-    await channel.permissionOverwrites.edit(everyone, { Connect: true });
-  }
+  await setEveryoneVoiceConnect(channel, locked ? "closed" : "open");
   room.locked = locked;
   setTempVoiceRoom(room);
   await saveState(LAST_SEEN_STATE_FILE);

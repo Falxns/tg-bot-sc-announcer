@@ -70,8 +70,12 @@ export async function handleTempVoiceButton(interaction: ButtonInteraction): Pro
     const resolved = await requireOwnerRoom(interaction);
     if (!resolved) return true;
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    await deleteTempVoiceRoomFull(interaction.guild!, resolved.room.voiceChannelId);
-    await interaction.editReply({ content: tv.deleteDone });
+    try {
+      await deleteTempVoiceRoomFull(interaction.guild!, resolved.room.voiceChannelId);
+      await interaction.editReply({ content: tv.deleteDone });
+    } catch (err) {
+      await interaction.editReply({ content: formatTempVoiceActionError(err, "delete") });
+    }
     return true;
   }
 

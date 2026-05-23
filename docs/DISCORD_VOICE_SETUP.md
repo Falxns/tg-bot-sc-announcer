@@ -20,11 +20,11 @@ Place the hub under or near the panel category so users discover the flow easily
 
 ## Bot role permissions
 
-Bot role should sit **above** temporary channels, **below** admins.
+Bot role should sit **above** temporary channels, **below** admins. On each new temp channel the bot adds an explicit overwrite for itself (View/Connect/Manage Channels) so lock/unlock still work after `@everyone` Connect is denied.
 
 | Permission | Why |
 |------------|-----|
-| **Manage Channels** | Create, rename, delete voice channels |
+| **Manage Channels** | Create, rename, delete voice channels; edit permission overwrites (lock/unlock) |
 | **Move Members** | Move user from hub → new room; kick (disconnect) |
 | **Connect** + **View Channel** | Operate in the voice category |
 | **Create Instant Invite** | Invite links from the panel |

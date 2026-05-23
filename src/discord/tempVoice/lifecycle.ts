@@ -14,6 +14,7 @@ import {
   saveState,
   tempVoiceRooms,
 } from "../../state";
+import { ensureBotChannelAccess } from "./channelAccess";
 
 const emptyDeleteTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -31,15 +32,20 @@ export function cancelEmptyDeleteTimer(voiceChannelId: string): void {
 }
 
 export async function deleteTempVoiceRoomFull(guild: Guild, voiceChannelId: string): Promise<void> {
-  if (isProtectedVoiceChannel(voiceChannelId)) return;
+  if (isProtectedVoiceChannel(voiceChannelId)) {
+    throw new Error(`Cannot delete protected hub channel (${voiceChannelId})`);
+  }
   cancelEmptyDeleteTimer(voiceChannelId);
   const room = getTempVoiceRoom(voiceChannelId);
   if (room?.textChannelId) {
     const textCh = await guild.channels.fetch(room.textChannelId).catch(() => null);
-    if (textCh) await textCh.delete().catch(() => undefined);
+    if (textCh) await textCh.delete();
   }
   const voiceCh = await guild.channels.fetch(voiceChannelId).catch(() => null);
-  if (voiceCh) await voiceCh.delete().catch(() => undefined);
+  if (voiceCh?.type === ChannelType.GuildVoice) {
+    await ensureBotChannelAccess(voiceCh);
+    await voiceCh.delete();
+  }
   deleteTempVoiceRoom(voiceChannelId);
   await saveState(LAST_SEEN_STATE_FILE);
 }
