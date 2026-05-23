@@ -413,6 +413,8 @@ export const DISCORD_VOICE_ENABLED = !/^0|false$/i.test(
 export const DISCORD_VOICE_HUB_CHANNEL_ID = (process.env.DISCORD_VOICE_HUB_CHANNEL_ID ?? "").trim();
 export const DISCORD_VOICE_TEMP_CATEGORY_ID = (process.env.DISCORD_VOICE_TEMP_CATEGORY_ID ?? "").trim();
 export const DISCORD_VOICE_PANEL_CHANNEL_ID = (process.env.DISCORD_VOICE_PANEL_CHANNEL_ID ?? "").trim();
+/** Optional HTTPS URL for the panel embed legend image; default uses bundled assets/discord/voice-panel-legend.png */
+export const DISCORD_VOICE_PANEL_IMAGE_URL = (process.env.DISCORD_VOICE_PANEL_IMAGE_URL ?? "").trim();
 export const DISCORD_VOICE_DEFAULT_NAME =
   (process.env.DISCORD_VOICE_DEFAULT_NAME ?? "Комната {user}").trim() || "Комната {user}";
 export const DISCORD_VOICE_EMPTY_DELETE_MS = clampParseInt(

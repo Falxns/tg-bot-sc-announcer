@@ -93,6 +93,7 @@ Edit `.env`:
 | `DISCORD_VOICE_HUB_CHANNEL_ID` | No* | Hub voice channel snowflake (join-to-create) |
 | `DISCORD_VOICE_TEMP_CATEGORY_ID` | No* | Category for spawned voice/text channels |
 | `DISCORD_VOICE_PANEL_CHANNEL_ID` | No | Default channel for `/voicepanel` |
+| `DISCORD_VOICE_PANEL_IMAGE_URL` | No | HTTPS legend image in embed; default bundled `assets/discord/voice-panel-legend.png` |
 | `DISCORD_VOICE_DEFAULT_NAME` | No | Name template; `{user}` = display name (default `Комната {user}`) |
 | `DISCORD_VOICE_EMPTY_DELETE_MS` | No | Delay before deleting empty rooms (default **60000**) |
 | `DISCORD_VOICE_MAX_CHANNELS_PER_USER` | No | Max owned rooms per user (default **1**) |

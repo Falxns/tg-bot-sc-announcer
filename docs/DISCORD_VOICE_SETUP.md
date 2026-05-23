@@ -46,7 +46,7 @@ DISCORD_VOICE_PANEL_CHANNEL_ID=<panel text channel snowflake>
 
 ## Post the panel
 
-An admin runs `/voicepanel` in the guild (optionally with a `channel` argument). Members create a room by joining the hub, then use the panel buttons in `#настройка-канала`.
+An admin runs `/voicepanel` in the guild (optionally with a `channel` argument). The embed includes a **legend image** (bundled PNG or `DISCORD_VOICE_PANEL_IMAGE_URL`) showing what each button does; members use the emoji buttons below the embed to control their room.
 
 Admins and moderators (`DISCORD_ADMIN_ROLE_IDS` / `DISCORD_MODERATOR_ROLE_IDS`) can use any room’s controls as a bypass.
 

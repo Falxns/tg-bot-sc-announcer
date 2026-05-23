@@ -21,6 +21,7 @@ import { findTempVoiceRoomByOwner, saveState, setTempVoicePanel, setTempVoiceRoo
 import { canControlTempVoiceRoom } from "./permissions";
 import { deleteTempVoiceRoomFull } from "./lifecycle";
 import { formatTempVoiceActionError } from "./errors";
+import { buildVoicePanelLegendAttachment } from "./panelLegend";
 import { resolveOwnerVoiceChannel, setRoomLocked, transferTempVoiceOwnership } from "./hub";
 import { TEMP_VOICE_REGIONS, tempVoiceStrings as tv, VOICE_BUTTON_EMOJIS, VOICE_BUTTON_PREFIX } from "./strings";
 
@@ -371,7 +372,13 @@ export async function postTempVoicePanel(guild: Guild, channelId: string): Promi
     .setTitle(tv.panelTitle)
     .setDescription(tv.panelDescription)
     .setFooter({ text: tv.panelFooter });
-  const sent = await ch.send({ embeds: [embed], components: buildTempVoicePanelComponents() });
+  const legend = buildVoicePanelLegendAttachment();
+  if (legend) embed.setImage(legend.imageUrl);
+  const sent = await ch.send({
+    embeds: [embed],
+    components: buildTempVoicePanelComponents(),
+    files: legend?.files ?? [],
+  });
   setTempVoicePanel({ guildId: guild.id, channelId, messageId: sent.id });
   await saveState(LAST_SEEN_STATE_FILE);
   return sent.id;
