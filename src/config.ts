@@ -405,3 +405,36 @@ export const DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS = parseModerationChan
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/** When false, temp voice handlers no-op (hub, panel, lifecycle). */
+export const DISCORD_VOICE_ENABLED = !/^0|false$/i.test(
+  (process.env.DISCORD_VOICE_ENABLED ?? "0").trim(),
+);
+export const DISCORD_VOICE_HUB_CHANNEL_ID = (process.env.DISCORD_VOICE_HUB_CHANNEL_ID ?? "").trim();
+export const DISCORD_VOICE_TEMP_CATEGORY_ID = (process.env.DISCORD_VOICE_TEMP_CATEGORY_ID ?? "").trim();
+export const DISCORD_VOICE_PANEL_CHANNEL_ID = (process.env.DISCORD_VOICE_PANEL_CHANNEL_ID ?? "").trim();
+export const DISCORD_VOICE_DEFAULT_NAME =
+  (process.env.DISCORD_VOICE_DEFAULT_NAME ?? "Комната {user}").trim() || "Комната {user}";
+export const DISCORD_VOICE_EMPTY_DELETE_MS = clampParseInt(
+  process.env.DISCORD_VOICE_EMPTY_DELETE_MS ?? "60000",
+  5_000,
+  600_000,
+);
+export const DISCORD_VOICE_MAX_CHANNELS_PER_USER = clampParseInt(
+  process.env.DISCORD_VOICE_MAX_CHANNELS_PER_USER ?? "1",
+  1,
+  5,
+);
+export const DISCORD_VOICE_INVITE_MAX_AGE_SEC = clampParseInt(
+  process.env.DISCORD_VOICE_INVITE_MAX_AGE_SEC ?? "86400",
+  0,
+  604_800,
+);
+
+export function tempVoiceConfigured(): boolean {
+  return (
+    DISCORD_VOICE_ENABLED &&
+    DISCORD_VOICE_HUB_CHANNEL_ID.length > 0 &&
+    DISCORD_VOICE_TEMP_CATEGORY_ID.length > 0
+  );
+}
