@@ -12,7 +12,7 @@ Join-to-create temporary voice rooms with an owner control panel. Feature is off
 
 | Item | Purpose |
 |------|---------|
-| Category (e.g. `Временные каналы`) | Parent for spawned voice (and optional text) channels |
+| Category (e.g. `Временные каналы`) | Parent for spawned voice channels |
 | Hub voice channel (e.g. `➕ Создать канал`) | Join-to-create trigger; users are moved out immediately |
 | Panel text channel (e.g. `#настройка-канала`) | Persistent embed + control buttons (read-only for members) |
 
@@ -24,7 +24,7 @@ Bot role should sit **above** temporary channels, **below** admins.
 
 | Permission | Why |
 |------------|-----|
-| **Manage Channels** | Create, rename, delete voice/text channels |
+| **Manage Channels** | Create, rename, delete voice channels |
 | **Move Members** | Move user from hub → new room; kick (disconnect) |
 | **Connect** + **View Channel** | Operate in the voice category |
 | **Create Instant Invite** | Invite links from the panel |
@@ -53,6 +53,6 @@ Admins and moderators (`DISCORD_ADMIN_ROLE_IDS` / `DISCORD_MODERATOR_ROLE_IDS`) 
 ## Behaviour summary
 
 - One active room per user (re-joining the hub moves them back to their existing room).
-- **Чат** creates or deletes a paired text channel on demand (not created by default).
+- **🤝 Передача** transfers channel ownership to another member in the room.
 - Empty rooms are deleted after `DISCORD_VOICE_EMPTY_DELETE_MS` (default 60 s).
 - On bot restart, empty orphaned channels in the temp category are cleaned up; in-memory delete timers are rescheduled for tracked empty rooms.

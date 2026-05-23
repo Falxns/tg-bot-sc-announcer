@@ -146,6 +146,38 @@ export async function resolveOwnerVoiceChannel(
   return { room, channel: ch };
 }
 
+export async function transferTempVoiceOwnership(
+  channel: VoiceChannel,
+  room: TempVoiceRoomState,
+  newOwnerId: string,
+): Promise<void> {
+  const oldOwnerId = room.ownerId;
+  if (oldOwnerId === newOwnerId) return;
+
+  await channel.permissionOverwrites.delete(oldOwnerId).catch(() => undefined);
+
+  const existing = channel.permissionOverwrites.cache.get(newOwnerId);
+  if (existing) {
+    await channel.permissionOverwrites.edit(newOwnerId, {
+      Connect: true,
+      ViewChannel: true,
+      ManageChannels: true,
+      MoveMembers: true,
+    });
+  } else {
+    await channel.permissionOverwrites.create(newOwnerId, {
+      Connect: true,
+      ViewChannel: true,
+      ManageChannels: true,
+      MoveMembers: true,
+    });
+  }
+
+  room.ownerId = newOwnerId;
+  setTempVoiceRoom(room);
+  await saveState(LAST_SEEN_STATE_FILE);
+}
+
 export async function setRoomLocked(channel: VoiceChannel, room: TempVoiceRoomState, locked: boolean): Promise<void> {
   await channel.permissionOverwrites.edit(channel.guild.roles.everyone, {
     Connect: locked ? false : null,

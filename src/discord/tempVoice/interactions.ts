@@ -2,12 +2,10 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ChannelType,
   EmbedBuilder,
   Guild,
   MessageFlags,
   ModalBuilder,
-  PermissionFlagsBits,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   TextInputBuilder,
@@ -18,16 +16,12 @@ import {
   type StringSelectMenuInteraction,
   type UserSelectMenuInteraction,
 } from "discord.js";
-import {
-  DISCORD_VOICE_INVITE_MAX_AGE_SEC,
-  DISCORD_VOICE_TEMP_CATEGORY_ID,
-  LAST_SEEN_STATE_FILE,
-} from "../../config";
-import { deleteTempVoiceRoom, saveState, setTempVoicePanel, setTempVoiceRoom } from "../../state";
+import { DISCORD_VOICE_INVITE_MAX_AGE_SEC, LAST_SEEN_STATE_FILE } from "../../config";
+import { findTempVoiceRoomByOwner, saveState, setTempVoicePanel, setTempVoiceRoom } from "../../state";
 import { canControlTempVoiceRoom } from "./permissions";
 import { deleteTempVoiceRoomFull } from "./lifecycle";
-import { resolveOwnerVoiceChannel, setRoomLocked } from "./hub";
-import { TEMP_VOICE_REGIONS, tempVoiceStrings as tv, VOICE_BUTTON_PREFIX } from "./strings";
+import { resolveOwnerVoiceChannel, setRoomLocked, transferTempVoiceOwnership } from "./hub";
+import { TEMP_VOICE_REGIONS, tempVoiceStrings as tv, VOICE_BUTTON_EMOJIS, VOICE_BUTTON_PREFIX } from "./strings";
 
 function isVoiceControlId(customId: string): boolean {
   return customId.startsWith(VOICE_BUTTON_PREFIX);
@@ -59,6 +53,13 @@ async function requireOwnerRoom(
   return resolved;
 }
 
+function voicePanelButton(id: string, emoji: string): ButtonBuilder {
+  return new ButtonBuilder()
+    .setCustomId(`${VOICE_BUTTON_PREFIX}${id}`)
+    .setStyle(ButtonStyle.Secondary)
+    .setEmoji(emoji);
+}
+
 export async function handleTempVoiceButton(interaction: ButtonInteraction): Promise<boolean> {
   if (!interaction.inGuild() || !isVoiceControlId(interaction.customId)) return false;
 
@@ -77,10 +78,7 @@ export async function handleTempVoiceButton(interaction: ButtonInteraction): Pro
     const resolved = await requireOwnerRoom(interaction);
     if (!resolved) return true;
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`${VOICE_BUTTON_PREFIX}delete_confirm`)
-        .setLabel(tv.btnDeleteConfirm)
-        .setStyle(ButtonStyle.Danger),
+      voicePanelButton("delete_confirm", VOICE_BUTTON_EMOJIS.deleteConfirm),
     );
     await interaction.reply({ content: tv.deletePrompt, components: [row], flags: MessageFlags.Ephemeral });
     return true;
@@ -138,39 +136,17 @@ export async function handleTempVoiceButton(interaction: ButtonInteraction): Pro
     return true;
   }
 
-  if (action === "chat") {
+  if (action === "transfer") {
     const resolved = await requireOwnerRoom(interaction);
     if (!resolved) return true;
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    try {
-      const guild = interaction.guild!;
-      if (resolved.room.textChannelId) {
-        const textCh = await guild.channels.fetch(resolved.room.textChannelId).catch(() => null);
-        if (textCh) await textCh.delete().catch(() => undefined);
-        resolved.room.textChannelId = undefined;
-        setTempVoiceRoom(resolved.room);
-        await saveState(LAST_SEEN_STATE_FILE);
-        await interaction.editReply({ content: tv.chatRemoved });
-      } else {
-        const text = await guild.channels.create({
-          name: `чат-${resolved.channel.name}`.slice(0, 100),
-          type: ChannelType.GuildText,
-          parent: DISCORD_VOICE_TEMP_CATEGORY_ID,
-          permissionOverwrites: resolved.channel.permissionOverwrites.cache.map((o) => ({
-            id: o.id,
-            allow: o.allow,
-            deny: o.deny,
-            type: o.type,
-          })),
-        });
-        resolved.room.textChannelId = text.id;
-        setTempVoiceRoom(resolved.room);
-        await saveState(LAST_SEEN_STATE_FILE);
-        await interaction.editReply({ content: tv.chatCreated(text.id) });
-      }
-    } catch {
-      await interaction.editReply({ content: tv.actionFailed });
-    }
+    const row = new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+      new UserSelectMenuBuilder()
+        .setCustomId(`${VOICE_BUTTON_PREFIX}transfer_select`)
+        .setPlaceholder(tv.transferPrompt)
+        .setMinValues(1)
+        .setMaxValues(1),
+    );
+    await interaction.reply({ content: tv.transferPrompt, components: [row], flags: MessageFlags.Ephemeral });
     return true;
   }
 
@@ -278,24 +254,62 @@ export async function handleTempVoiceModal(interaction: ModalSubmitInteraction):
 }
 
 export async function handleTempVoiceUserSelect(interaction: UserSelectMenuInteraction): Promise<boolean> {
-  if (interaction.customId !== `${VOICE_BUTTON_PREFIX}kick_select`) return false;
-  const resolved = await requireOwnerRoom(interaction);
-  if (!resolved) return true;
-  const targetId = interaction.values[0];
-  if (!targetId) return true;
-  await interaction.deferUpdate();
-  try {
-    const member = await interaction.guild!.members.fetch(targetId);
-    if (!member.voice.channelId || member.voice.channelId !== resolved.channel.id) {
-      await interaction.followUp({ content: tv.kickNotInChannel, flags: MessageFlags.Ephemeral });
+  const customId = interaction.customId;
+
+  if (customId === `${VOICE_BUTTON_PREFIX}kick_select`) {
+    const resolved = await requireOwnerRoom(interaction);
+    if (!resolved) return true;
+    const targetId = interaction.values[0];
+    if (!targetId) return true;
+    await interaction.deferUpdate();
+    try {
+      const member = await interaction.guild!.members.fetch(targetId);
+      if (!member.voice.channelId || member.voice.channelId !== resolved.channel.id) {
+        await interaction.followUp({ content: tv.kickNotInChannel, flags: MessageFlags.Ephemeral });
+        return true;
+      }
+      await member.voice.disconnect();
+      await interaction.followUp({ content: tv.kickDone(targetId), flags: MessageFlags.Ephemeral });
+    } catch {
+      await interaction.followUp({ content: tv.actionFailed, flags: MessageFlags.Ephemeral });
+    }
+    return true;
+  }
+
+  if (customId === `${VOICE_BUTTON_PREFIX}transfer_select`) {
+    const resolved = await requireOwnerRoom(interaction);
+    if (!resolved) return true;
+    const targetId = interaction.values[0];
+    if (!targetId) return true;
+    if (targetId === interaction.user.id) {
+      await interaction.reply({ content: tv.transferSelf, flags: MessageFlags.Ephemeral });
       return true;
     }
-    await member.voice.disconnect();
-    await interaction.followUp({ content: tv.kickDone(targetId), flags: MessageFlags.Ephemeral });
-  } catch {
-    await interaction.followUp({ content: tv.actionFailed, flags: MessageFlags.Ephemeral });
+    await interaction.deferUpdate();
+    try {
+      const member = await interaction.guild!.members.fetch(targetId);
+      if (member.user.bot) {
+        await interaction.followUp({ content: tv.actionFailed, flags: MessageFlags.Ephemeral });
+        return true;
+      }
+      if (!member.voice.channelId || member.voice.channelId !== resolved.channel.id) {
+        await interaction.followUp({ content: tv.transferNotInChannel, flags: MessageFlags.Ephemeral });
+        return true;
+      }
+      const existing = findTempVoiceRoomByOwner(interaction.guild!.id, targetId);
+      if (existing && existing.voiceChannelId !== resolved.channel.id) {
+        await interaction.followUp({ content: tv.transferAlreadyOwns, flags: MessageFlags.Ephemeral });
+        return true;
+      }
+      await transferTempVoiceOwnership(resolved.channel, resolved.room, targetId);
+      await interaction.followUp({ content: tv.transferDone(targetId), flags: MessageFlags.Ephemeral });
+    } catch {
+      await interaction.followUp({ content: tv.actionFailed, flags: MessageFlags.Ephemeral });
+    }
+    return true;
   }
-  return true;
+
+  return false;
 }
 
 export async function handleTempVoiceStringSelect(interaction: StringSelectMenuInteraction): Promise<boolean> {
@@ -319,27 +333,18 @@ export async function handleTempVoiceStringSelect(interaction: StringSelectMenuI
 }
 
 export function buildTempVoicePanelComponents(): ActionRowBuilder<ButtonBuilder>[] {
-  const defs: { id: string; label: string; style: ButtonStyle }[] = [
-    { id: "name", label: tv.btnName, style: ButtonStyle.Primary },
-    { id: "limit", label: tv.btnLimit, style: ButtonStyle.Primary },
-    { id: "access", label: tv.btnAccess, style: ButtonStyle.Primary },
-    { id: "chat", label: tv.btnChat, style: ButtonStyle.Primary },
-    { id: "invite", label: tv.btnInvite, style: ButtonStyle.Secondary },
-    { id: "kick", label: tv.btnKick, style: ButtonStyle.Secondary },
-    { id: "delete", label: tv.btnDelete, style: ButtonStyle.Danger },
-    { id: "region", label: tv.btnRegion, style: ButtonStyle.Secondary },
-  ];
-  const row1 = new ActionRowBuilder<ButtonBuilder>();
-  const row2 = new ActionRowBuilder<ButtonBuilder>();
-  for (let i = 0; i < defs.length; i++) {
-    const d = defs[i]!;
-    const btn = new ButtonBuilder()
-      .setCustomId(`${VOICE_BUTTON_PREFIX}${d.id}`)
-      .setLabel(d.label)
-      .setStyle(d.style);
-    if (i < 4) row1.addComponents(btn);
-    else row2.addComponents(btn);
-  }
+  const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    voicePanelButton("name", VOICE_BUTTON_EMOJIS.name),
+    voicePanelButton("limit", VOICE_BUTTON_EMOJIS.limit),
+    voicePanelButton("access", VOICE_BUTTON_EMOJIS.access),
+    voicePanelButton("transfer", VOICE_BUTTON_EMOJIS.transfer),
+  );
+  const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    voicePanelButton("invite", VOICE_BUTTON_EMOJIS.invite),
+    voicePanelButton("kick", VOICE_BUTTON_EMOJIS.kick),
+    voicePanelButton("region", VOICE_BUTTON_EMOJIS.region),
+    voicePanelButton("delete", VOICE_BUTTON_EMOJIS.delete),
+  );
   return [row1, row2];
 }
 
