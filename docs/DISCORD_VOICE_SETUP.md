@@ -55,4 +55,4 @@ Admins and moderators (`DISCORD_ADMIN_ROLE_IDS` / `DISCORD_MODERATOR_ROLE_IDS`) 
 - One active room per user (re-joining the hub moves them back to their existing room).
 - **🤝 Передача** transfers channel ownership to another member in the room.
 - Empty rooms are deleted after `DISCORD_VOICE_EMPTY_DELETE_MS` (default 60 s).
-- On bot restart, empty orphaned channels in the temp category are cleaned up; in-memory delete timers are rescheduled for tracked empty rooms.
+- On bot restart, empty orphaned **temp** channels in the category are cleaned up (the hub channel `DISCORD_VOICE_HUB_CHANNEL_ID` is never deleted); in-memory delete timers are rescheduled for tracked empty rooms.

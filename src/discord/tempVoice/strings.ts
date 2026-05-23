@@ -32,6 +32,8 @@ export const tempVoiceStrings = {
   voicepanelPosted: (channelId: string) => `Панель опубликована в <#${channelId}>.`,
   voiceNotConfigured: "Temp voice не настроен (env: DISCORD_VOICE_ENABLED и ID каналов).",
   actionFailed: "Не удалось выполнить действие. Проверьте права бота в категории.",
+  actionFailedDetail: (detail: string) =>
+    `Не удалось выполнить действие. Проверьте права бота в категории.\n${detail}`,
 } as const;
 
 /** Emoji-only panel buttons (Discord Secondary / gray). */

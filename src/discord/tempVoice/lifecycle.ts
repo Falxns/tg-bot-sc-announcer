@@ -2,6 +2,7 @@ import type { Guild, VoiceChannel } from "discord.js";
 import { ChannelType } from "discord.js";
 import {
   DISCORD_VOICE_EMPTY_DELETE_MS,
+  DISCORD_VOICE_HUB_CHANNEL_ID,
   DISCORD_VOICE_TEMP_CATEGORY_ID,
   LAST_SEEN_STATE_FILE,
   LOG_LEVEL,
@@ -16,6 +17,11 @@ import {
 
 const emptyDeleteTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+/** Hub and other fixed channels must never be removed by startup/orphan sweeps. */
+export function isProtectedVoiceChannel(channelId: string): boolean {
+  return DISCORD_VOICE_HUB_CHANNEL_ID.length > 0 && channelId === DISCORD_VOICE_HUB_CHANNEL_ID;
+}
+
 export function cancelEmptyDeleteTimer(voiceChannelId: string): void {
   const t = emptyDeleteTimers.get(voiceChannelId);
   if (t) {
@@ -25,6 +31,7 @@ export function cancelEmptyDeleteTimer(voiceChannelId: string): void {
 }
 
 export async function deleteTempVoiceRoomFull(guild: Guild, voiceChannelId: string): Promise<void> {
+  if (isProtectedVoiceChannel(voiceChannelId)) return;
   cancelEmptyDeleteTimer(voiceChannelId);
   const room = getTempVoiceRoom(voiceChannelId);
   if (room?.textChannelId) {
@@ -87,6 +94,7 @@ export async function sweepTempVoiceOnReady(guild: Guild): Promise<void> {
   if (!category || category.type !== 4) return;
   for (const ch of category.children.cache.values()) {
     if (!ch.isVoiceBased()) continue;
+    if (isProtectedVoiceChannel(ch.id)) continue;
     if (getTempVoiceRoom(ch.id)) continue;
     if (ch.members.size === 0) {
       await ch.delete().catch(() => undefined);

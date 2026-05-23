@@ -20,6 +20,7 @@ import { DISCORD_VOICE_INVITE_MAX_AGE_SEC, LAST_SEEN_STATE_FILE } from "../../co
 import { findTempVoiceRoomByOwner, saveState, setTempVoicePanel, setTempVoiceRoom } from "../../state";
 import { canControlTempVoiceRoom } from "./permissions";
 import { deleteTempVoiceRoomFull } from "./lifecycle";
+import { formatTempVoiceActionError } from "./errors";
 import { resolveOwnerVoiceChannel, setRoomLocked, transferTempVoiceOwnership } from "./hub";
 import { TEMP_VOICE_REGIONS, tempVoiceStrings as tv, VOICE_BUTTON_EMOJIS, VOICE_BUTTON_PREFIX } from "./strings";
 
@@ -130,8 +131,8 @@ export async function handleTempVoiceButton(interaction: ButtonInteraction): Pro
       const next = !resolved.room.locked;
       await setRoomLocked(resolved.channel, resolved.room, next);
       await interaction.editReply({ content: next ? tv.accessLocked : tv.accessUnlocked });
-    } catch {
-      await interaction.editReply({ content: tv.actionFailed });
+    } catch (err) {
+      await interaction.editReply({ content: formatTempVoiceActionError(err, "access toggle") });
     }
     return true;
   }
@@ -161,8 +162,8 @@ export async function handleTempVoiceButton(interaction: ButtonInteraction): Pro
         unique: true,
       });
       await interaction.editReply({ content: tv.inviteLink(invite.url) });
-    } catch {
-      await interaction.editReply({ content: tv.actionFailed });
+    } catch (err) {
+      await interaction.editReply({ content: formatTempVoiceActionError(err, "invite") });
     }
     return true;
   }
@@ -222,8 +223,8 @@ export async function handleTempVoiceModal(interaction: ModalSubmitInteraction):
     try {
       await resolved.channel.setName(name.slice(0, 100));
       await interaction.editReply({ content: tv.nameUpdated(name) });
-    } catch {
-      await interaction.editReply({ content: tv.actionFailed });
+    } catch (err) {
+      await interaction.editReply({ content: formatTempVoiceActionError(err, "rename") });
     }
     return true;
   }
@@ -244,8 +245,8 @@ export async function handleTempVoiceModal(interaction: ModalSubmitInteraction):
       setTempVoiceRoom(resolved.room);
       await saveState(LAST_SEEN_STATE_FILE);
       await interaction.editReply({ content: tv.limitUpdated(n) });
-    } catch {
-      await interaction.editReply({ content: tv.actionFailed });
+    } catch (err) {
+      await interaction.editReply({ content: formatTempVoiceActionError(err, "limit") });
     }
     return true;
   }
@@ -270,8 +271,11 @@ export async function handleTempVoiceUserSelect(interaction: UserSelectMenuInter
       }
       await member.voice.disconnect();
       await interaction.followUp({ content: tv.kickDone(targetId), flags: MessageFlags.Ephemeral });
-    } catch {
-      await interaction.followUp({ content: tv.actionFailed, flags: MessageFlags.Ephemeral });
+    } catch (err) {
+      await interaction.followUp({
+        content: formatTempVoiceActionError(err, "kick"),
+        flags: MessageFlags.Ephemeral,
+      });
     }
     return true;
   }
@@ -303,8 +307,11 @@ export async function handleTempVoiceUserSelect(interaction: UserSelectMenuInter
       }
       await transferTempVoiceOwnership(resolved.channel, resolved.room, targetId);
       await interaction.followUp({ content: tv.transferDone(targetId), flags: MessageFlags.Ephemeral });
-    } catch {
-      await interaction.followUp({ content: tv.actionFailed, flags: MessageFlags.Ephemeral });
+    } catch (err) {
+      await interaction.followUp({
+        content: formatTempVoiceActionError(err, "transfer"),
+        flags: MessageFlags.Ephemeral,
+      });
     }
     return true;
   }
@@ -326,8 +333,11 @@ export async function handleTempVoiceStringSelect(interaction: StringSelectMenuI
     setTempVoiceRoom(resolved.room);
     await saveState(LAST_SEEN_STATE_FILE);
     await interaction.followUp({ content: tv.regionUpdated(label), flags: MessageFlags.Ephemeral });
-  } catch {
-    await interaction.followUp({ content: tv.actionFailed, flags: MessageFlags.Ephemeral });
+  } catch (err) {
+    await interaction.followUp({
+      content: formatTempVoiceActionError(err, "region"),
+      flags: MessageFlags.Ephemeral,
+    });
   }
   return true;
 }

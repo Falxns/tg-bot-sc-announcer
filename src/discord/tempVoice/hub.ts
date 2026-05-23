@@ -179,9 +179,12 @@ export async function transferTempVoiceOwnership(
 }
 
 export async function setRoomLocked(channel: VoiceChannel, room: TempVoiceRoomState, locked: boolean): Promise<void> {
-  await channel.permissionOverwrites.edit(channel.guild.roles.everyone, {
-    Connect: locked ? false : null,
-  });
+  const everyone = channel.guild.roles.everyone;
+  if (locked) {
+    await channel.permissionOverwrites.edit(everyone, { Connect: false });
+  } else {
+    await channel.permissionOverwrites.edit(everyone, { Connect: true });
+  }
   room.locked = locked;
   setTempVoiceRoom(room);
   await saveState(LAST_SEEN_STATE_FILE);
