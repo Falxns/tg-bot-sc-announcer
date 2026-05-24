@@ -433,6 +433,34 @@ export const DISCORD_VOICE_INVITE_MAX_AGE_SEC = clampParseInt(
   604_800,
 );
 
+export type DiscordCustomEmojiRef = { id: string; name: string };
+
+function parseDiscordVoiceButtonEmojis(raw: string): Partial<Record<string, DiscordCustomEmojiRef>> {
+  const trimmed = raw.trim();
+  if (!trimmed) return {};
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Partial<Record<string, DiscordCustomEmojiRef>> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const id = (value as { id?: unknown }).id;
+      const name = (value as { name?: unknown }).name;
+      if (typeof id === "string" && id.length > 0 && typeof name === "string" && name.length > 0) {
+        out[key] = { id, name };
+      }
+    }
+    return out;
+  } catch {
+    console.warn("Invalid DISCORD_VOICE_BUTTON_EMOJIS_JSON, using Unicode fallback emojis.");
+    return {};
+  }
+}
+
+export const DISCORD_VOICE_BUTTON_EMOJIS = parseDiscordVoiceButtonEmojis(
+  process.env.DISCORD_VOICE_BUTTON_EMOJIS_JSON ?? "",
+);
+
 export function tempVoiceConfigured(): boolean {
   return (
     DISCORD_VOICE_ENABLED &&

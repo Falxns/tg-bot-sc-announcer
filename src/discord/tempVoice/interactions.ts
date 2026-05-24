@@ -23,7 +23,8 @@ import { deleteTempVoiceRoomFull } from "./lifecycle";
 import { formatTempVoiceActionError } from "./errors";
 import { buildVoicePanelLegendAttachment } from "./panelLegend";
 import { resolveOwnerVoiceChannel, setRoomLocked, transferTempVoiceOwnership } from "./hub";
-import { TEMP_VOICE_REGIONS, tempVoiceStrings as tv, VOICE_BUTTON_EMOJIS, VOICE_BUTTON_PREFIX } from "./strings";
+import { resolveVoiceButtonEmoji, type VoiceButtonEmojiKey } from "./buttonEmojis";
+import { TEMP_VOICE_REGIONS, tempVoiceStrings as tv, VOICE_BUTTON_PREFIX } from "./strings";
 
 function isVoiceControlId(customId: string): boolean {
   return customId.startsWith(VOICE_BUTTON_PREFIX);
@@ -55,11 +56,11 @@ async function requireOwnerRoom(
   return resolved;
 }
 
-function voicePanelButton(id: string, emoji: string): ButtonBuilder {
+function voicePanelButton(id: string, emojiKey: VoiceButtonEmojiKey): ButtonBuilder {
   return new ButtonBuilder()
     .setCustomId(`${VOICE_BUTTON_PREFIX}${id}`)
     .setStyle(ButtonStyle.Secondary)
-    .setEmoji(emoji);
+    .setEmoji(resolveVoiceButtonEmoji(emojiKey));
 }
 
 export async function handleTempVoiceButton(interaction: ButtonInteraction): Promise<boolean> {
@@ -84,7 +85,7 @@ export async function handleTempVoiceButton(interaction: ButtonInteraction): Pro
     const resolved = await requireOwnerRoom(interaction);
     if (!resolved) return true;
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      voicePanelButton("delete_confirm", VOICE_BUTTON_EMOJIS.deleteConfirm),
+      voicePanelButton("delete_confirm", "deleteConfirm"),
     );
     await interaction.reply({ content: tv.deletePrompt, components: [row], flags: MessageFlags.Ephemeral });
     return true;
@@ -349,16 +350,16 @@ export async function handleTempVoiceStringSelect(interaction: StringSelectMenuI
 
 export function buildTempVoicePanelComponents(): ActionRowBuilder<ButtonBuilder>[] {
   const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    voicePanelButton("name", VOICE_BUTTON_EMOJIS.name),
-    voicePanelButton("limit", VOICE_BUTTON_EMOJIS.limit),
-    voicePanelButton("access", VOICE_BUTTON_EMOJIS.access),
-    voicePanelButton("region", VOICE_BUTTON_EMOJIS.region),
+    voicePanelButton("name", "name"),
+    voicePanelButton("limit", "limit"),
+    voicePanelButton("access", "access"),
+    voicePanelButton("region", "region"),
   );
   const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    voicePanelButton("invite", VOICE_BUTTON_EMOJIS.invite),
-    voicePanelButton("kick", VOICE_BUTTON_EMOJIS.kick),
-    voicePanelButton("transfer", VOICE_BUTTON_EMOJIS.transfer),
-    voicePanelButton("delete", VOICE_BUTTON_EMOJIS.delete),
+    voicePanelButton("invite", "invite"),
+    voicePanelButton("kick", "kick"),
+    voicePanelButton("transfer", "transfer"),
+    voicePanelButton("delete", "delete"),
   );
   return [row1, row2];
 }

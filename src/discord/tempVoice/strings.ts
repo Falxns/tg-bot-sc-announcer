@@ -37,19 +37,6 @@ export const tempVoiceStrings = {
     `Не удалось выполнить действие. Проверьте права бота в категории.\n${detail}`,
 } as const;
 
-/** Emoji-only panel buttons (Discord Secondary / gray). */
-export const VOICE_BUTTON_EMOJIS = {
-  name: "✏️",
-  limit: "👥",
-  access: "🔒",
-  transfer: "🤝",
-  invite: "🔗",
-  kick: "👢",
-  region: "🌍",
-  delete: "🗑️",
-  deleteConfirm: "✅",
-} as const;
-
 export const TEMP_VOICE_REGIONS: { label: string; value: string }[] = [
   { label: "Авто", value: "auto" },
   { label: "Rotterdam", value: "rotterdam" },
