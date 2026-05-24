@@ -1,6 +1,8 @@
 # Voice panel custom emojis
 
-Square 128×128 PNG icons for Discord **Server Settings → Emoji** upload.
+Square **128×128** PNG icons for Discord **Server Settings → Emoji** upload (Discord max recommended size; files must be ≤ 256 KB).
+
+When regenerating artwork, crop to a centered square then export at 128×128 so icons fill the frame (avoid letterboxing).
 
 | File | Suggested emoji name | Panel button |
 |------|---------------------|--------------|
@@ -30,3 +32,14 @@ DISCORD_VOICE_BUTTON_EMOJIS_JSON={"name":{"id":"123","name":"voice_name"},"limit
 ```
 
 Restart the bot and run `/voicepanel` again to post buttons with custom emojis.
+
+## Panel legend image
+
+The embed legend (`assets/discord/voice-panel-legend.png`) is built from these emoji PNGs in panel button order. After replacing emoji files, regenerate it:
+
+```bash
+npm install sharp --no-save
+node scripts/build-voice-legend.mjs
+```
+
+Then run `/voicepanel` again.
