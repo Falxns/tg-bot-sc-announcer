@@ -12,6 +12,23 @@ export type DiscordRolePanelState = {
   singleRole?: boolean;
 };
 
+export type TempVoiceRoomState = {
+  guildId: string;
+  voiceChannelId: string;
+  ownerId: string;
+  textChannelId?: string;
+  locked: boolean;
+  userLimit?: number;
+  rtcRegion?: string | null;
+  createdAt: number;
+};
+
+export type TempVoicePanelState = {
+  guildId: string;
+  channelId: string;
+  messageId: string;
+};
+
 export type ViolationSeverity = "minor" | "major";
 
 export type DiscordChannelPolicy = {

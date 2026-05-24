@@ -4,7 +4,7 @@ import {
   pruneSpamFilterFingerprintsForSave,
   serializeSpamFilterFingerprintsForState,
 } from "./discord/spamFilterCache";
-import type { DiscordRolePanelState } from "./discord/types";
+import type { DiscordRolePanelState, TempVoicePanelState, TempVoiceRoomState } from "./discord/types";
 import { createStateStore } from "./stateStore";
 
 export const DEFAULT_EXBO_AUTHORS = [
@@ -62,6 +62,10 @@ export function replaceExboAuthors(next: string[]): void {
 export const lastSeenByAuthor = new Map<string, string[]>();
 /** Persisted role panel definitions keyed by Discord message ID. */
 export const discordRolePanels = new Map<string, DiscordRolePanelState>();
+/** Temp voice rooms keyed by voice channel snowflake. */
+export const tempVoiceRooms = new Map<string, TempVoiceRoomState>();
+/** Temp voice control panel message (optional, for rehydrate). */
+export const tempVoicePanel = new Map<string, TempVoicePanelState>();
 
 /** Server-wide warn count: `${guildId}:${userId}`. */
 export const discordGlobalWarns = new Map<string, number>();
@@ -226,6 +230,33 @@ export function deleteDiscordRolePanel(messageId: string): void {
   discordRolePanels.delete(messageId);
 }
 
+export function setTempVoiceRoom(room: TempVoiceRoomState): void {
+  tempVoiceRooms.set(room.voiceChannelId, room);
+}
+
+export function getTempVoiceRoom(voiceChannelId: string): TempVoiceRoomState | undefined {
+  return tempVoiceRooms.get(voiceChannelId);
+}
+
+export function deleteTempVoiceRoom(voiceChannelId: string): void {
+  tempVoiceRooms.delete(voiceChannelId);
+}
+
+export function findTempVoiceRoomByOwner(guildId: string, ownerId: string): TempVoiceRoomState | undefined {
+  for (const room of tempVoiceRooms.values()) {
+    if (room.guildId === guildId && room.ownerId === ownerId) return room;
+  }
+  return undefined;
+}
+
+export function setTempVoicePanel(panel: TempVoicePanelState): void {
+  tempVoicePanel.set(panel.messageId, panel);
+}
+
+export function getTempVoicePanel(messageId: string): TempVoicePanelState | undefined {
+  return tempVoicePanel.get(messageId);
+}
+
 function parseNumberMap(raw: unknown): Map<string, number> {
   const out = new Map<string, number>();
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
@@ -332,12 +363,46 @@ export async function loadState(path: string): Promise<void> {
         }
       }
       loadSpamFilterFingerprintsFromState(obj.discordSpamFilterFingerprints);
+
+      const voiceRooms = obj.tempVoiceRooms;
+      if (voiceRooms && typeof voiceRooms === "object" && !Array.isArray(voiceRooms)) {
+        for (const [voiceChannelId, value] of Object.entries(voiceRooms as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const ownerId = typeof row.ownerId === "string" ? row.ownerId : "";
+          const createdAt = typeof row.createdAt === "number" ? row.createdAt : 0;
+          if (!guildId || !ownerId || !/^\d{17,20}$/.test(voiceChannelId)) continue;
+          tempVoiceRooms.set(voiceChannelId, {
+            guildId,
+            voiceChannelId,
+            ownerId,
+            textChannelId: typeof row.textChannelId === "string" ? row.textChannelId : undefined,
+            locked: row.locked === true,
+            userLimit: typeof row.userLimit === "number" ? row.userLimit : undefined,
+            rtcRegion: row.rtcRegion === null ? null : typeof row.rtcRegion === "string" ? row.rtcRegion : undefined,
+            createdAt,
+          });
+        }
+      }
+      const voicePanelRaw = obj.tempVoicePanel;
+      if (voicePanelRaw && typeof voicePanelRaw === "object" && !Array.isArray(voicePanelRaw)) {
+        for (const [messageId, value] of Object.entries(voicePanelRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const channelId = typeof row.channelId === "string" ? row.channelId : "";
+          if (!guildId || !channelId) continue;
+          tempVoicePanel.set(messageId, { guildId, channelId, messageId });
+        }
+      }
     }
     if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
       console.log(
         `State loaded (${STATE_BACKEND}): ${exboAuthors.length} authors, ` +
           `${lastSeenByAuthor.size} lastSeen, ${discordRolePanels.size} role panels, ` +
-          `${discordGlobalWarns.size} global warns, ${discordMuteTier.size} mute tiers.`,
+          `${discordGlobalWarns.size} global warns, ${discordMuteTier.size} mute tiers, ` +
+          `${tempVoiceRooms.size} temp voice rooms.`,
       );
     }
   } catch (err) {
@@ -364,6 +429,8 @@ export async function saveState(path: string): Promise<boolean> {
       discordStaffSummaryCreatorLastAt: Object.fromEntries(discordStaffSummaryCreatorLastAt),
       discordModeratorDailyQuota: Object.fromEntries(discordModeratorDailyQuota),
       discordSpamFilterFingerprints: serializeSpamFilterFingerprintsForState(),
+      tempVoiceRooms: Object.fromEntries(tempVoiceRooms),
+      tempVoicePanel: Object.fromEntries(tempVoicePanel),
     };
     await store.writeState(JSON.stringify(state, null, 2));
     return true;

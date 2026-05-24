@@ -20,6 +20,7 @@ import {
 import type { Message } from "discord.js";
 import { DISCORD_ROLE_PANEL_CHANNEL_ID, LAST_SEEN_STATE_FILE, LOG_LEVEL } from "../config";
 import { isDiscordAdmin } from "./guildPermissions";
+import { handleVoicePanelCommand, voicePanelSlashCommand } from "./tempVoice/commands";
 import { saveState, setDiscordRolePanel } from "../state";
 import {
   banSlashCommand,
@@ -465,6 +466,7 @@ export async function registerGuildCommands(guild: Guild): Promise<void> {
     banSlashCommand,
     unbanSlashCommand,
     modstatusSlashCommand,
+    voicePanelSlashCommand,
   ];
   for (const cmd of commandPayloads) {
     assertSlashOptionCount(cmd, cmd.name);
@@ -1677,6 +1679,10 @@ export async function handleDiscordCommand(interaction: ChatInputCommandInteract
   }
   if (interaction.commandName === "editlinkpanel") {
     await handleEditLinkPanel(interaction);
+    return;
+  }
+  if (interaction.commandName === "voicepanel") {
+    await handleVoicePanelCommand(interaction);
   }
 }
 

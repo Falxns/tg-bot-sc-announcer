@@ -12,6 +12,14 @@ import { handleMessageReviewCreate, handleMessageReviewDelete } from "./messageR
 import { handleModerationMessage } from "./moderation";
 import { handleRoleButtonInteraction } from "./roles";
 import {
+  handleTempVoiceButton,
+  handleTempVoiceModal,
+  handleTempVoiceStateUpdate,
+  handleTempVoiceStringSelect,
+  handleTempVoiceUserSelect,
+  sweepTempVoiceOnReady,
+} from "./tempVoice";
+import {
   handleStaffSummaryCreatorMessage,
   handleStaffSummaryMemberAvailable,
   handleStaffSummaryMemberUpdate,
@@ -35,6 +43,7 @@ export async function startDiscordBot(): Promise<void> {
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildVoiceStates,
       GatewayIntentBits.MessageContent,
     ],
   });
@@ -44,6 +53,7 @@ export async function startDiscordBot(): Promise<void> {
       try {
         const guild = await client.guilds.fetch(DISCORD_GUILD_ID);
         await registerGuildCommands(guild);
+        await sweepTempVoiceOnReady(guild);
         if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
           console.log(`Discord bot ready as ${client.user?.tag ?? "unknown"} in guild ${guild.id}.`);
         }
@@ -65,10 +75,20 @@ export async function startDiscordBot(): Promise<void> {
           return;
         }
         if (interaction.isModalSubmit()) {
+          if (await handleTempVoiceModal(interaction)) return;
           await handleDiscordModal(interaction);
           return;
         }
+        if (interaction.isStringSelectMenu()) {
+          if (await handleTempVoiceStringSelect(interaction)) return;
+          return;
+        }
+        if (interaction.isUserSelectMenu()) {
+          if (await handleTempVoiceUserSelect(interaction)) return;
+          return;
+        }
         if (interaction.isButton()) {
+          if (await handleTempVoiceButton(interaction)) return;
           await handleRoleButtonInteraction(interaction);
         }
       } catch (err) {
@@ -119,6 +139,12 @@ export async function startDiscordBot(): Promise<void> {
   client.on("messageDelete", (message) => {
     void handleMessageReviewDelete(message).catch((err) => {
       console.error("Discord message review delete handler failed:", err);
+    });
+  });
+
+  client.on("voiceStateUpdate", (oldState, newState) => {
+    void handleTempVoiceStateUpdate(oldState, newState).catch((err) => {
+      console.error("Discord temp voice stateUpdate handler failed:", err);
     });
   });
 

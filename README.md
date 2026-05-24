@@ -89,7 +89,18 @@ Edit `.env`:
 | `DISCORD_WARNING_MESSAGE_TTL_MS` | No | Auto-delete delay for ephemeral-style channel notices (default: 12000) |
 | `DISCORD_CHANNEL_POLICIES_JSON` | No | Per-channel policies: `blockInviteLinks`, `allowDiscordInvites`, `inviteViolationSeverity`, `blockVideos` / `blockImages` / `blockText`, `mediaViolationSeverity`, `blockedKeywords`, `keywordViolationSeverity`, `allowInviteRoleIds`, `channelPresetId` (channel-purpose text for automod media/text hits), `rulePresetId` (optional server rule line in automod DMs for that channel) |
 | `DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS_JSON` | No | JSON map **channel preset id → channel snowflake** (e.g. `"vidos":"123…"`) for clickable `#channel` links in channel preset text |
+| `DISCORD_VOICE_ENABLED` | No | `1` enables join-to-create temp voice; default off |
+| `DISCORD_VOICE_HUB_CHANNEL_ID` | No* | Hub voice channel snowflake (join-to-create) |
+| `DISCORD_VOICE_TEMP_CATEGORY_ID` | No* | Category for spawned voice/text channels |
+| `DISCORD_VOICE_PANEL_CHANNEL_ID` | No | Default channel for `/voicepanel` |
+| `DISCORD_VOICE_PANEL_IMAGE_URL` | No | HTTPS legend image in embed; default bundled `assets/discord/voice-panel-legend.png` |
+| `DISCORD_VOICE_DEFAULT_NAME` | No | Name template; `{user}` = display name (default `Комната {user}`) |
+| `DISCORD_VOICE_EMPTY_DELETE_MS` | No | Delay before deleting empty rooms (default **60000**) |
+| `DISCORD_VOICE_MAX_CHANNELS_PER_USER` | No | Max owned rooms per user (default **1**) |
+| `DISCORD_VOICE_INVITE_MAX_AGE_SEC` | No | Invite link TTL from panel (default **86400** = 24 h) |
 | `PORT` | No | If set, starts an HTTP server on this port that responds `ok` (for health checks) |
+
+\* Required when `DISCORD_VOICE_ENABLED=1`. Setup: [docs/DISCORD_VOICE_SETUP.md](docs/DISCORD_VOICE_SETUP.md) (category, hub, panel, bot permissions, **Guild Voice States** intent).
 | `LOG_LEVEL` | No | `info` (default), `debug`, or `warn` |
 
 See `.env.example` for more optional variables.
@@ -125,6 +136,7 @@ Author list and “last seen” state are saved to the state file and restored o
 - `/linkpanel channel:<channel> url1:<https://...> [label1…label5] [url2…url5] [embed_*] [image]` — creates message buttons that open URLs (no role toggle), optional **`image`** attachment like `/post`, then opens a modal for optional multiline message text
 - `/editrolepanel channel:<channel> message_id:<snowflake> [role1…role6] [label1…label6] [single_role] [embed_*] [image]` — edit an existing **role panel** message; **per-slot merge**: set only **`roleN`** / **`labelN`** for the button you want to change (others stay); omit all role/label options to keep buttons; modal edits body text (max **2000** chars). Same **`embed_*`** and **`image`** as `/edit` except no **`embed_footer_icon_url`** / **`embed_author_icon_url`** (Discord 25-option cap with six role slots)
 - `/editlinkpanel channel:<channel> message_id:<snowflake> [url1…url5] [label1…label5] [embed_*] [image]` — edit an existing **link button** message; **per-slot merge**: set only **`urlN`** / **`labelN`** for the slot to change; full **`embed_*`** and **`image`** like `/edit`
+- `/voicepanel [channel]` — publish the **temporary voice** control panel (requires `DISCORD_VOICE_ENABLED=1`; see [docs/DISCORD_VOICE_SETUP.md](docs/DISCORD_VOICE_SETUP.md))
 - `/mute user:<user> duration:<choice> [channel_preset] [rule_preset] [reason] [screenshot] [message_id]` — manual timeout at the chosen duration (not `DISCORD_TIMEOUT_LADDER_MS[tier]`); caps server-wide strikes at **`DISCORD_WARNINGS_BEFORE_TIMEOUT`** and advances the unified ladder tier on success; **`duration`**: 1h, 6h, 12h, 1d, 3d, 7d, 14d, 28d; **`channel_preset`** / **`rule_preset`** autocomplete (empty `channel_preset` → auto channel text from policy); **`reason`** overrides both; optional **`screenshot`** and **`message_id`**
 - `/unmute user:<user>` — clears Discord timeout
 - `/strike user:<user> [amount] [channel_preset] [rule_preset] [reason] [screenshot] [message_id]` — same light path as automod: +**global** strike(s); warn-only below **`DISCORD_WARNINGS_BEFORE_TIMEOUT`**, else timeout at **`DISCORD_TIMEOUT_LADDER_MS`** current tier; DM title **«Предупреждение»** or **«Наказание»** when timed out; user DM may show **«Нарушение в канале»** and **«Правило сервера (п. X)»** separately

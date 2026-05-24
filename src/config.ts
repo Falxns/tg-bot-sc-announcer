@@ -405,3 +405,66 @@ export const DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS = parseModerationChan
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/** When false, temp voice handlers no-op (hub, panel, lifecycle). */
+export const DISCORD_VOICE_ENABLED = !/^0|false$/i.test(
+  (process.env.DISCORD_VOICE_ENABLED ?? "0").trim(),
+);
+export const DISCORD_VOICE_HUB_CHANNEL_ID = (process.env.DISCORD_VOICE_HUB_CHANNEL_ID ?? "").trim();
+export const DISCORD_VOICE_TEMP_CATEGORY_ID = (process.env.DISCORD_VOICE_TEMP_CATEGORY_ID ?? "").trim();
+export const DISCORD_VOICE_PANEL_CHANNEL_ID = (process.env.DISCORD_VOICE_PANEL_CHANNEL_ID ?? "").trim();
+/** Optional HTTPS URL for the panel embed legend image; default uses bundled assets/discord/voice-panel-legend.png */
+export const DISCORD_VOICE_PANEL_IMAGE_URL = (process.env.DISCORD_VOICE_PANEL_IMAGE_URL ?? "").trim();
+export const DISCORD_VOICE_DEFAULT_NAME =
+  (process.env.DISCORD_VOICE_DEFAULT_NAME ?? "Комната {user}").trim() || "Комната {user}";
+export const DISCORD_VOICE_EMPTY_DELETE_MS = clampParseInt(
+  process.env.DISCORD_VOICE_EMPTY_DELETE_MS ?? "60000",
+  5_000,
+  600_000,
+);
+export const DISCORD_VOICE_MAX_CHANNELS_PER_USER = clampParseInt(
+  process.env.DISCORD_VOICE_MAX_CHANNELS_PER_USER ?? "1",
+  1,
+  5,
+);
+export const DISCORD_VOICE_INVITE_MAX_AGE_SEC = clampParseInt(
+  process.env.DISCORD_VOICE_INVITE_MAX_AGE_SEC ?? "86400",
+  0,
+  604_800,
+);
+
+export type DiscordCustomEmojiRef = { id: string; name: string };
+
+function parseDiscordVoiceButtonEmojis(raw: string): Partial<Record<string, DiscordCustomEmojiRef>> {
+  const trimmed = raw.trim();
+  if (!trimmed) return {};
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Partial<Record<string, DiscordCustomEmojiRef>> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const id = (value as { id?: unknown }).id;
+      const name = (value as { name?: unknown }).name;
+      if (typeof id === "string" && id.length > 0 && typeof name === "string" && name.length > 0) {
+        out[key] = { id, name };
+      }
+    }
+    return out;
+  } catch {
+    console.warn("Invalid DISCORD_VOICE_BUTTON_EMOJIS_JSON, using Unicode fallback emojis.");
+    return {};
+  }
+}
+
+export const DISCORD_VOICE_BUTTON_EMOJIS = parseDiscordVoiceButtonEmojis(
+  process.env.DISCORD_VOICE_BUTTON_EMOJIS_JSON ?? "",
+);
+
+export function tempVoiceConfigured(): boolean {
+  return (
+    DISCORD_VOICE_ENABLED &&
+    DISCORD_VOICE_HUB_CHANNEL_ID.length > 0 &&
+    DISCORD_VOICE_TEMP_CATEGORY_ID.length > 0
+  );
+}
