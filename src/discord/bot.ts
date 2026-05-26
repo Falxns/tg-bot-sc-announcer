@@ -20,6 +20,18 @@ import {
   sweepTempVoiceOnReady,
 } from "./tempVoice";
 import {
+  handleClanModButton,
+  handleClanModModal,
+  handleClanPanelButton,
+  handleClanStringSelect,
+  handleClanUserSelect,
+  handleClanWizardButton,
+  handleClanWizardMessage,
+  handleClanWizardStringSelect,
+  initClanRolesModule,
+  isClanRolesInteractionCustomId,
+} from "./clanRoles";
+import {
   handleStaffSummaryCreatorMessage,
   handleStaffSummaryMemberAvailable,
   handleStaffSummaryMemberUpdate,
@@ -37,6 +49,8 @@ export async function startDiscordBot(): Promise<void> {
     throw new Error("Missing DISCORD_GUILD_ID in environment. Set it in .env");
   }
   if (discordClient) return;
+
+  initClanRolesModule();
 
   const client = new Client({
     intents: [
@@ -76,19 +90,28 @@ export async function startDiscordBot(): Promise<void> {
         }
         if (interaction.isModalSubmit()) {
           if (await handleTempVoiceModal(interaction)) return;
+          if (await handleClanModModal(interaction)) return;
           await handleDiscordModal(interaction);
           return;
         }
         if (interaction.isStringSelectMenu()) {
           if (await handleTempVoiceStringSelect(interaction)) return;
+          if (await handleClanStringSelect(interaction)) return;
+          if (await handleClanWizardStringSelect(interaction)) return;
           return;
         }
         if (interaction.isUserSelectMenu()) {
           if (await handleTempVoiceUserSelect(interaction)) return;
+          if (await handleClanUserSelect(interaction)) return;
           return;
         }
         if (interaction.isButton()) {
           if (await handleTempVoiceButton(interaction)) return;
+          if (isClanRolesInteractionCustomId(interaction.customId)) {
+            if (await handleClanModButton(interaction)) return;
+            if (await handleClanWizardButton(interaction)) return;
+            if (await handleClanPanelButton(interaction)) return;
+          }
           await handleRoleButtonInteraction(interaction);
         }
       } catch (err) {
@@ -125,6 +148,9 @@ export async function startDiscordBot(): Promise<void> {
   });
 
   client.on("messageCreate", (message) => {
+    void handleClanWizardMessage(message).catch((err) => {
+      console.error("Discord clan wizard message handler failed:", err);
+    });
     void handleStaffSummaryCreatorMessage(message).catch((err) => {
       console.error("Discord staff summary creator message handler failed:", err);
     });

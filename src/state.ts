@@ -4,7 +4,15 @@ import {
   pruneSpamFilterFingerprintsForSave,
   serializeSpamFilterFingerprintsForState,
 } from "./discord/spamFilterCache";
-import type { DiscordRolePanelState, TempVoicePanelState, TempVoiceRoomState } from "./discord/types";
+import type {
+  ClanCreateRequest,
+  ClanCreateWizardState,
+  ClanGrantRequest,
+  ClanRulesPanelState,
+  DiscordRolePanelState,
+  TempVoicePanelState,
+  TempVoiceRoomState,
+} from "./discord/types";
 import { createStateStore } from "./stateStore";
 
 export const DEFAULT_EXBO_AUTHORS = [
@@ -66,6 +74,15 @@ export const discordRolePanels = new Map<string, DiscordRolePanelState>();
 export const tempVoiceRooms = new Map<string, TempVoiceRoomState>();
 /** Temp voice control panel message (optional, for rehydrate). */
 export const tempVoicePanel = new Map<string, TempVoicePanelState>();
+
+/** Clan rules panel keyed by bot message id. */
+export const clanRulesPanels = new Map<string, ClanRulesPanelState>();
+/** Pending grant/remove requests keyed by request id. */
+export const clanGrantRequests = new Map<string, ClanGrantRequest>();
+/** Active create wizards keyed by private thread id. */
+export const clanCreateWizards = new Map<string, ClanCreateWizardState>();
+/** Pending mod-reviewed create requests keyed by request id. */
+export const clanCreateRequests = new Map<string, ClanCreateRequest>();
 
 /** Server-wide warn count: `${guildId}:${userId}`. */
 export const discordGlobalWarns = new Map<string, number>();
@@ -257,6 +274,46 @@ export function getTempVoicePanel(messageId: string): TempVoicePanelState | unde
   return tempVoicePanel.get(messageId);
 }
 
+export function setClanRulesPanel(panel: ClanRulesPanelState): void {
+  clanRulesPanels.set(panel.messageId, panel);
+}
+
+export function getClanRulesPanel(messageId: string): ClanRulesPanelState | undefined {
+  return clanRulesPanels.get(messageId);
+}
+
+export function setClanGrantRequest(req: ClanGrantRequest): void {
+  clanGrantRequests.set(req.id, req);
+}
+
+export function getClanGrantRequest(id: string): ClanGrantRequest | undefined {
+  return clanGrantRequests.get(id);
+}
+
+export function deleteClanGrantRequest(id: string): void {
+  clanGrantRequests.delete(id);
+}
+
+export function setClanCreateWizard(w: ClanCreateWizardState): void {
+  clanCreateWizards.set(w.threadId, w);
+}
+
+export function getClanCreateWizard(threadId: string): ClanCreateWizardState | undefined {
+  return clanCreateWizards.get(threadId);
+}
+
+export function deleteClanCreateWizard(threadId: string): void {
+  clanCreateWizards.delete(threadId);
+}
+
+export function setClanCreateRequest(req: ClanCreateRequest): void {
+  clanCreateRequests.set(req.id, req);
+}
+
+export function getClanCreateRequest(id: string): ClanCreateRequest | undefined {
+  return clanCreateRequests.get(id);
+}
+
 function parseNumberMap(raw: unknown): Map<string, number> {
   const out = new Map<string, number>();
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
@@ -396,13 +453,139 @@ export async function loadState(path: string): Promise<void> {
           tempVoicePanel.set(messageId, { guildId, channelId, messageId });
         }
       }
+
+      const clanPanelsRaw = obj.clanRulesPanels;
+      if (clanPanelsRaw && typeof clanPanelsRaw === "object" && !Array.isArray(clanPanelsRaw)) {
+        for (const [messageId, value] of Object.entries(clanPanelsRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const channelId = typeof row.channelId === "string" ? row.channelId : "";
+          if (!guildId || !channelId) continue;
+          clanRulesPanels.set(messageId, {
+            messageId,
+            guildId,
+            channelId,
+            rulesParentMessageId:
+              typeof row.rulesParentMessageId === "string" ? row.rulesParentMessageId : undefined,
+          });
+        }
+      }
+
+      const grantReqRaw = obj.clanGrantRequests;
+      if (grantReqRaw && typeof grantReqRaw === "object" && !Array.isArray(grantReqRaw)) {
+        for (const [id, value] of Object.entries(grantReqRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          if (row.status !== "pending" && row.status !== "approved" && row.status !== "denied") continue;
+          const type = row.type === "grant" || row.type === "remove" ? row.type : null;
+          if (!type) continue;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const channelId = typeof row.channelId === "string" ? row.channelId : "";
+          const clanRoleId = typeof row.clanRoleId === "string" ? row.clanRoleId : "";
+          const clanRoleName = typeof row.clanRoleName === "string" ? row.clanRoleName : "";
+          const targetUserId = typeof row.targetUserId === "string" ? row.targetUserId : "";
+          const requesterUserId = typeof row.requesterUserId === "string" ? row.requesterUserId : "";
+          if (!guildId || !clanRoleId || !targetUserId) continue;
+          clanGrantRequests.set(id, {
+            id,
+            guildId,
+            channelId,
+            threadId: typeof row.threadId === "string" ? row.threadId : undefined,
+            clanRoleId,
+            clanRoleName,
+            targetUserId,
+            requesterUserId,
+            type,
+            grantLeaderMeta: row.grantLeaderMeta === true,
+            status: row.status,
+            pendingMessageId: typeof row.pendingMessageId === "string" ? row.pendingMessageId : undefined,
+            createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
+          });
+        }
+      }
+
+      const wizRaw = obj.clanCreateWizards;
+      if (wizRaw && typeof wizRaw === "object" && !Array.isArray(wizRaw)) {
+        for (const [threadId, value] of Object.entries(wizRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          const step =
+            row.step === "name" || row.step === "color" || row.step === "roster" || row.step === "review"
+              ? row.step
+              : null;
+          if (!step) continue;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const channelId = typeof row.channelId === "string" ? row.channelId : "";
+          const applicantId = typeof row.applicantId === "string" ? row.applicantId : "";
+          if (!guildId || !applicantId) continue;
+          clanCreateWizards.set(threadId, {
+            threadId,
+            guildId,
+            channelId,
+            applicantId,
+            step,
+            clanName: typeof row.clanName === "string" ? row.clanName : undefined,
+            colorPresetId: typeof row.colorPresetId === "string" ? row.colorPresetId : undefined,
+            colorHex: typeof row.colorHex === "number" ? row.colorHex : undefined,
+            colorLabel: typeof row.colorLabel === "string" ? row.colorLabel : undefined,
+            memberIds: Array.isArray(row.memberIds)
+              ? row.memberIds.filter((x): x is string => typeof x === "string")
+              : undefined,
+            leaderIds: Array.isArray(row.leaderIds)
+              ? row.leaderIds.filter((x): x is string => typeof x === "string")
+              : undefined,
+            createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
+            updatedAt: typeof row.updatedAt === "number" ? row.updatedAt : Date.now(),
+          });
+        }
+      }
+
+      const createReqRaw = obj.clanCreateRequests;
+      if (createReqRaw && typeof createReqRaw === "object" && !Array.isArray(createReqRaw)) {
+        for (const [id, value] of Object.entries(createReqRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          if (row.status !== "pending" && row.status !== "approved" && row.status !== "denied") continue;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const applicantId = typeof row.applicantId === "string" ? row.applicantId : "";
+          const threadId = typeof row.threadId === "string" ? row.threadId : "";
+          const clanName = typeof row.clanName === "string" ? row.clanName : "";
+          const colorLabel = typeof row.colorLabel === "string" ? row.colorLabel : "";
+          if (!guildId || !clanName) continue;
+          clanCreateRequests.set(id, {
+            id,
+            guildId,
+            applicantId,
+            threadId,
+            clanName,
+            colorHex: typeof row.colorHex === "number" ? row.colorHex : 0,
+            colorLabel,
+            memberIds: Array.isArray(row.memberIds)
+              ? row.memberIds.filter((x): x is string => typeof x === "string")
+              : [],
+            leaderIds: Array.isArray(row.leaderIds)
+              ? row.leaderIds.filter((x): x is string => typeof x === "string")
+              : [],
+            status: row.status,
+            reviewMessageId: typeof row.reviewMessageId === "string" ? row.reviewMessageId : undefined,
+            reviewChannelId: typeof row.reviewChannelId === "string" ? row.reviewChannelId : undefined,
+            createdRoleId: typeof row.createdRoleId === "string" ? row.createdRoleId : undefined,
+            createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
+            resolvedAt: typeof row.resolvedAt === "number" ? row.resolvedAt : undefined,
+            resolvedBy: typeof row.resolvedBy === "string" ? row.resolvedBy : undefined,
+            denyReason: typeof row.denyReason === "string" ? row.denyReason : undefined,
+          });
+        }
+      }
     }
     if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
       console.log(
         `State loaded (${STATE_BACKEND}): ${exboAuthors.length} authors, ` +
           `${lastSeenByAuthor.size} lastSeen, ${discordRolePanels.size} role panels, ` +
           `${discordGlobalWarns.size} global warns, ${discordMuteTier.size} mute tiers, ` +
-          `${tempVoiceRooms.size} temp voice rooms.`,
+          `${tempVoiceRooms.size} temp voice rooms, ${clanRulesPanels.size} clan panels, ` +
+          `${clanGrantRequests.size} clan grant requests.`,
       );
     }
   } catch (err) {
@@ -431,6 +614,10 @@ export async function saveState(path: string): Promise<boolean> {
       discordSpamFilterFingerprints: serializeSpamFilterFingerprintsForState(),
       tempVoiceRooms: Object.fromEntries(tempVoiceRooms),
       tempVoicePanel: Object.fromEntries(tempVoicePanel),
+      clanRulesPanels: Object.fromEntries(clanRulesPanels),
+      clanGrantRequests: Object.fromEntries(clanGrantRequests),
+      clanCreateWizards: Object.fromEntries(clanCreateWizards),
+      clanCreateRequests: Object.fromEntries(clanCreateRequests),
     };
     await store.writeState(JSON.stringify(state, null, 2));
     return true;

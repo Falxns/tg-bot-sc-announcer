@@ -53,3 +53,66 @@ export type DiscordChannelPolicy = {
 };
 
 export type DiscordChannelPolicyMap = Record<string, DiscordChannelPolicy>;
+
+export type ClanRulesPanelState = {
+  messageId: string;
+  guildId: string;
+  channelId: string;
+  rulesParentMessageId?: string;
+};
+
+export type ClanGrantRequestType = "grant" | "remove";
+
+export type ClanGrantRequest = {
+  id: string;
+  guildId: string;
+  channelId: string;
+  threadId?: string;
+  clanRoleId: string;
+  clanRoleName: string;
+  targetUserId: string;
+  requesterUserId: string;
+  type: ClanGrantRequestType;
+  grantLeaderMeta: boolean;
+  status: "pending" | "approved" | "denied";
+  pendingMessageId?: string;
+  createdAt: number;
+};
+
+export type ClanCreateWizardStep = "name" | "color" | "roster" | "review";
+
+export type ClanCreateWizardState = {
+  threadId: string;
+  guildId: string;
+  channelId: string;
+  applicantId: string;
+  step: ClanCreateWizardStep;
+  clanName?: string;
+  colorPresetId?: string;
+  colorHex?: number;
+  colorLabel?: string;
+  memberIds?: string[];
+  leaderIds?: string[];
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ClanCreateRequest = {
+  id: string;
+  guildId: string;
+  applicantId: string;
+  threadId: string;
+  clanName: string;
+  colorHex: number;
+  colorLabel: string;
+  memberIds: string[];
+  leaderIds: string[];
+  status: "pending" | "approved" | "denied";
+  reviewMessageId?: string;
+  reviewChannelId?: string;
+  createdRoleId?: string;
+  createdAt: number;
+  resolvedAt?: number;
+  resolvedBy?: string;
+  denyReason?: string;
+};

@@ -468,3 +468,80 @@ export function tempVoiceConfigured(): boolean {
     DISCORD_VOICE_TEMP_CATEGORY_ID.length > 0
   );
 }
+
+/** When false, clan role panel / wizard handlers no-op. */
+export const DISCORD_CLAN_ENABLED = !/^0|false$/i.test((process.env.DISCORD_CLAN_ENABLED ?? "0").trim());
+
+/** Parent rules post — public thread under it receives grant/remove pending requests. */
+export const DISCORD_CLAN_RULES_MESSAGE_ID = (process.env.DISCORD_CLAN_RULES_MESSAGE_ID ?? "").trim();
+
+/** Shared «Лидер клана» meta-role snowflake. */
+export const DISCORD_CLAN_LEADER_ROLE_ID = (process.env.DISCORD_CLAN_LEADER_ROLE_ID ?? "").trim();
+
+/** Role IDs excluded from clan picker (mods, ranks, leader meta-role, etc.). */
+export const DISCORD_CLAN_ROLE_EXCLUDE_IDS = parseCommaSeparatedIds(
+  process.env.DISCORD_CLAN_ROLE_EXCLUDE_IDS,
+);
+
+/** Optional regex (case-insensitive) — extra filter on role display names. */
+export const DISCORD_CLAN_ROLE_NAME_PATTERN = (() => {
+  const raw = (process.env.DISCORD_CLAN_ROLE_NAME_PATTERN ?? "").trim();
+  if (!raw) return null;
+  try {
+    return new RegExp(raw, "i");
+  } catch {
+    console.warn("Invalid DISCORD_CLAN_ROLE_NAME_PATTERN, ignoring.");
+    return null;
+  }
+})();
+
+export const DISCORD_CLAN_ROSTER_MIN = clampParseInt(process.env.DISCORD_CLAN_ROSTER_MIN ?? "15", 1, 100);
+export const DISCORD_CLAN_ROSTER_MAX = clampParseInt(process.env.DISCORD_CLAN_ROSTER_MAX ?? "35", 1, 100);
+
+/** Mod queue channel for new clan create requests. */
+export const DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID = (
+  process.env.DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID ?? ""
+).trim();
+
+/** Optional audit channel for clan actions (falls back to staff summary channel). */
+export const DISCORD_CLAN_STAFF_LOG_CHANNEL_ID = (process.env.DISCORD_CLAN_STAFF_LOG_CHANNEL_ID ?? "").trim();
+
+export type ClanColorPreset = { id: string; label: string; hex: number };
+
+function parseClanColorPresets(raw: string): ClanColorPreset[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const out: ClanColorPreset[] = [];
+    for (const row of parsed) {
+      if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+      const id = typeof (row as { id?: unknown }).id === "string" ? (row as { id: string }).id.trim() : "";
+      const label =
+        typeof (row as { label?: unknown }).label === "string" ? (row as { label: string }).label.trim() : "";
+      const hexRaw = (row as { hex?: unknown }).hex;
+      let hex = 0;
+      if (typeof hexRaw === "number" && Number.isFinite(hexRaw)) {
+        hex = Math.max(0, Math.min(0xffffff, Math.floor(hexRaw)));
+      } else if (typeof hexRaw === "string") {
+        const s = hexRaw.trim().replace(/^#/, "");
+        const n = parseInt(s, 16);
+        if (Number.isFinite(n)) hex = Math.max(0, Math.min(0xffffff, n));
+      }
+      if (id && label) out.push({ id, label, hex });
+    }
+    return out;
+  } catch {
+    console.warn("Invalid DISCORD_CLAN_COLOR_PRESETS_JSON, using built-in presets.");
+    return [];
+  }
+}
+
+export function clanRolesConfigured(): boolean {
+  return DISCORD_CLAN_ENABLED && DISCORD_CLAN_LEADER_ROLE_ID.length > 0;
+}
+
+export const DISCORD_CLAN_COLOR_PRESETS_FROM_ENV = parseClanColorPresets(
+  process.env.DISCORD_CLAN_COLOR_PRESETS_JSON ?? "",
+);
