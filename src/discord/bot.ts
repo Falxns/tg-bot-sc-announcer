@@ -23,6 +23,7 @@ import {
   handleClanModButton,
   handleClanModModal,
   handleClanPanelButton,
+  handleClanPanelModal,
   handleClanStringSelect,
   handleClanUserSelect,
   handleClanWizardButton,
@@ -91,6 +92,7 @@ export async function startDiscordBot(): Promise<void> {
         if (interaction.isModalSubmit()) {
           if (await handleTempVoiceModal(interaction)) return;
           if (await handleClanModModal(interaction)) return;
+          if (await handleClanPanelModal(interaction)) return;
           await handleDiscordModal(interaction);
           return;
         }

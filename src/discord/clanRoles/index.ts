@@ -3,6 +3,7 @@ import { setClanColorPresetsFromEnv } from "./colorPresets";
 
 export {
   handleClanPanelButton,
+  handleClanPanelModal,
   handleClanStringSelect,
   handleClanUserSelect,
   isClanPanelCustomId,

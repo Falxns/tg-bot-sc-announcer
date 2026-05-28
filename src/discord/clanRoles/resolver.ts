@@ -20,6 +20,10 @@ export function listClanRoles(guild: Guild): Role[] {
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
 }
 
+export function listMemberClanRoles(guild: Guild, member: GuildMember): Role[] {
+  return listClanRoles(guild).filter((role) => member.roles.cache.has(role.id));
+}
+
 export function resolveClanRole(guild: Guild, query: string): Role[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];

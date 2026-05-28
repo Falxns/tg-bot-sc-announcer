@@ -13,10 +13,22 @@ export const clanTxt = {
   selectClanPlaceholder: "Выберите клан",
   selectClanEmpty: "На сервере нет доступных клановых ролей.",
   selectClanPage: (page: number, total: number) => `Страница ${page + 1} / ${total}`,
+  removeSelectClanPlaceholder: "Выберите клановую роль для снятия",
   selectTargetPlaceholder: "Выберите участника",
+  selectTargetNoMembers: "В выбранном клане пока нет участников с этой ролью.",
+  targetNotTeammate: "Можно выбрать только участника выбранного клана.",
 
   grantLeaderToggle: "Также выдать «Лидер клана»",
   grantLeaderCap: (n: number) => `У этого клана уже ${n} лидер(ов) — максимум 2.`,
+  grantSearchTitle: "Поиск клана",
+  grantSearchLabel: "Название клана (полное или часть)",
+  grantSearchNoResults: (query: string) =>
+    `Не найдено кланов по запросу **${query}**. Попробуйте изменить текст поиска.`,
+  grantRequestSent: "Запрос отправлен. Ожидайте одобрения лидера клана или модератора.",
+  removeDone: (role: string) => `Роль **${role}** снята.`,
+  removeNoOwnClanRole: "У вас нет клановых ролей для снятия.",
+  removeNotYourClanRole: "Вы можете снять только свою клановую роль.",
+  targetDoesNotHaveClanRole: "Участник больше не состоит в выбранном клане.",
 
   pendingGrantTitle: "Запрос: выдать роль",
   pendingRemoveTitle: "Запрос: снять роль",
@@ -40,7 +52,11 @@ export const clanTxt = {
   wizardColorPlaceholder: "Выберите цвет роли",
   wizardAskRoster: (min: number, max: number) =>
     `Отметьте **${min}–${max}** участников \`@mention\`. Лидеры (1–2) **входят** в этот список.\n` +
-    `Отметьте лидеров, добавив 👑 в начале строки или упомянув их первыми — затем отметьте 👑 на сообщении бота (кнопки ниже).`,
+    `Сделайте это в одном сообщении, удобно копипастой (каждый участник с новой строки):\n` +
+    `👑 @Лидер1\n` +
+    `@Участник2\n` +
+    `@Участник3\n` +
+    `Если 👑 не указана, лидером будет считаться первый упомянутый участник.`,
   wizardWrongUser: "Это не ваша заявка.",
   wizardNameInvalid: (min: number, max: number) =>
     `Некорректное название. Длина ${min}–${max} символов, без @ и #.`,
@@ -81,6 +97,8 @@ export const clanTxt = {
     `[Клан] ${mod} одобрил выдачу **${role}** → ${target}`,
   auditRemove: (mod: string, target: string, role: string) =>
     `[Клан] ${mod} одобрил снятие **${role}** с ${target}`,
+  auditRemoveDirect: (actor: string, target: string, role: string) =>
+    `[Клан] ${actor} снял роль **${role}** у ${target}`,
   auditCreate: (mod: string, role: string, n: number) =>
     `[Клан] ${mod} принял заявку — создана роль **${role}**, выдано ${n} участникам.`,
   auditDenyCreate: (mod: string, role: string) => `[Клан] ${mod} отклонил заявку на **${role}**.`,
