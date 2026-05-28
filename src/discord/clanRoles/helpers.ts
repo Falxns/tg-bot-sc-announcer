@@ -1,11 +1,35 @@
 import { randomUUID } from "crypto";
-import type { Guild, TextChannel, ThreadChannel } from "discord.js";
+import type { Guild, PrivateThreadChannel, TextChannel, ThreadChannel } from "discord.js";
 import { ChannelType } from "discord.js";
-import { DISCORD_CLAN_RULES_MESSAGE_ID } from "../../config";
+import { DISCORD_CLAN_RULES_MESSAGE_ID, DISCORD_MODERATOR_ROLE_IDS } from "../../config";
 import type { ClanRulesPanelState } from "../types";
 
 export function newClanRequestId(): string {
   return randomUUID().slice(0, 8);
+}
+
+/** Adds guild members with moderator roles to a private clan-create thread. */
+export async function addClanModeratorsToPrivateThread(
+  guild: Guild,
+  thread: PrivateThreadChannel,
+  excludeUserId?: string,
+): Promise<void> {
+  const roleIds = DISCORD_MODERATOR_ROLE_IDS;
+  if (roleIds.length === 0) return;
+
+  const userIds = new Set<string>();
+  for (const roleId of roleIds) {
+    const role =
+      guild.roles.cache.get(roleId) ?? (await guild.roles.fetch(roleId).catch(() => null));
+    if (!role) continue;
+    for (const [, member] of role.members) {
+      if (member.user.bot) continue;
+      if (excludeUserId && member.id === excludeUserId) continue;
+      userIds.add(member.id);
+    }
+  }
+
+  await Promise.all([...userIds].map((id) => thread.members.add(id).catch(() => undefined)));
 }
 
 export async function resolveClanRequestsThread(

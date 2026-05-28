@@ -33,7 +33,12 @@ import {
   CLAN_WIZ_PREFIX,
   MAX_CLAN_LEADERS,
 } from "./constants";
-import { formatUserList, parseLeaderIdsFromMentions, validateClanName } from "./helpers";
+import {
+  addClanModeratorsToPrivateThread,
+  formatUserList,
+  parseLeaderIdsFromMentions,
+  validateClanName,
+} from "./helpers";
 import { submitCreateRequestToModQueue } from "./modQueue";
 import { clanTxt } from "./strings";
 
@@ -68,6 +73,9 @@ export async function startCreateWizardFromPanel(
     reason: "Clan create wizard",
   });
   await thread.members.add(applicant.id).catch(() => undefined);
+  if (thread.type === ChannelType.PrivateThread) {
+    await addClanModeratorsToPrivateThread(guild, thread, applicant.id);
+  }
 
   const now = Date.now();
   const wizard: ClanCreateWizardState = {
