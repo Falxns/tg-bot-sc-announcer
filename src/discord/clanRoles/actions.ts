@@ -28,6 +28,13 @@ async function getBotMember(guild: Guild): Promise<GuildMember | null> {
   return guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
 }
 
+/** Same ordering discord.js uses for role position updates (low → high). */
+function sortedGuildRoles(guild: Guild): Role[] {
+  return [...guild.roles.cache.values()].sort(
+    (a, b) => a.position - b.position || Number(BigInt(b.id) - BigInt(a.id)),
+  );
+}
+
 async function positionClanRoleAboveAnchor(guild: Guild, role: Role): Promise<void> {
   const anchorId = DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID;
   if (!anchorId) return;
@@ -42,10 +49,18 @@ async function positionClanRoleAboveAnchor(guild: Guild, role: Role): Promise<vo
     console.warn(`Clan role ${role.name} is not editable by the bot; cannot place above anchor.`);
     return;
   }
-  if (role.comparePositionTo(anchor) > 0) return;
+
+  const sorted = sortedGuildRoles(guild);
+  const anchorIndex = sorted.findIndex((r) => r.id === anchor.id);
+  if (anchorIndex < 0) return;
+
+  const targetIndex = anchorIndex + 1;
+  const roleIndex = sorted.findIndex((r) => r.id === role.id);
+  if (roleIndex === targetIndex) return;
 
   try {
-    await role.setPosition(anchor.position + 1, {
+    // setPosition expects sorted index, not raw role.position (those numbers can have gaps).
+    await role.setPosition(targetIndex, {
       reason: `Clan role stacked above ${anchor.name}`,
     });
   } catch (err) {
