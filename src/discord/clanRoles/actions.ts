@@ -81,13 +81,21 @@ async function grantClanRoleClanChatAccess(guild: Guild, role: Role): Promise<vo
   }
 
   const me = await getBotMember(guild);
-  const channelPerms = me?.permissionsIn(channel);
-  const canEditOverwrites =
-    channelPerms?.has(PermissionFlagsBits.ManageChannels) ||
-    channelPerms?.has(PermissionFlagsBits.Administrator);
-  if (!canEditOverwrites) {
+  if (!me) return;
+
+  // Discord API: editing channel permission overwrites requires MANAGE_ROLES (UI: «Управление правами»).
+  if (
+    !me.permissions.has(PermissionFlagsBits.ManageRoles) &&
+    !me.permissions.has(PermissionFlagsBits.Administrator)
+  ) {
     console.warn(
-      `Bot needs Manage Channel (or Administrator) on clan chat ${channelId} to set role overwrites — Manage Roles alone is not enough.`,
+      `Bot needs Manage Roles on clan chat ${channelId} to set role overwrites (Manage Channel alone is not enough per Discord API).`,
+    );
+    return;
+  }
+  if (role.comparePositionTo(me.roles.highest) >= 0) {
+    console.warn(
+      `Bot's highest role must be above clan role ${role.name} to set channel overwrites on ${channelId}.`,
     );
     return;
   }
