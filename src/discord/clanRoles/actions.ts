@@ -28,13 +28,6 @@ async function getBotMember(guild: Guild): Promise<GuildMember | null> {
   return guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
 }
 
-/** Same ordering discord.js uses for role position updates (low → high). */
-function sortedGuildRoles(guild: Guild): Role[] {
-  return [...guild.roles.cache.values()].sort(
-    (a, b) => a.position - b.position || Number(BigInt(b.id) - BigInt(a.id)),
-  );
-}
-
 async function positionClanRoleAboveAnchor(guild: Guild, role: Role): Promise<void> {
   const anchorId = DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID;
   if (!anchorId) return;
@@ -49,18 +42,11 @@ async function positionClanRoleAboveAnchor(guild: Guild, role: Role): Promise<vo
     console.warn(`Clan role ${role.name} is not editable by the bot; cannot place above anchor.`);
     return;
   }
-
-  const sorted = sortedGuildRoles(guild);
-  const anchorIndex = sorted.findIndex((r) => r.id === anchor.id);
-  if (anchorIndex < 0) return;
-
-  const targetIndex = anchorIndex + 1;
-  const roleIndex = sorted.findIndex((r) => r.id === role.id);
-  if (roleIndex === targetIndex) return;
+  if (role.comparePositionTo(anchor) > 0) return;
 
   try {
-    // setPosition expects sorted index, not raw role.position (those numbers can have gaps).
-    await role.setPosition(targetIndex, {
+    // discord.js setPosition uses sorted index; anchor.position matches that slot for the anchor role.
+    await role.setPosition(anchor.position, {
       reason: `Clan role stacked above ${anchor.name}`,
     });
   } catch (err) {
@@ -95,8 +81,14 @@ async function grantClanRoleClanChatAccess(guild: Guild, role: Role): Promise<vo
   }
 
   const me = await getBotMember(guild);
-  if (!me?.permissionsIn(channel).has(PermissionFlagsBits.ManageChannels)) {
-    console.warn(`Bot lacks Manage Channels on clan chat channel ${channelId}; skipping overwrite for ${role.name}.`);
+  const channelPerms = me?.permissionsIn(channel);
+  const canEditOverwrites =
+    channelPerms?.has(PermissionFlagsBits.ManageChannels) ||
+    channelPerms?.has(PermissionFlagsBits.Administrator);
+  if (!canEditOverwrites) {
+    console.warn(
+      `Bot needs Manage Channel (or Administrator) on clan chat ${channelId} to set role overwrites — Manage Roles alone is not enough.`,
+    );
     return;
   }
 
