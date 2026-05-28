@@ -14,6 +14,7 @@ import {
   type ButtonInteraction,
   type Guild,
   type GuildMember,
+  type Message,
   type ModalSubmitInteraction,
   type Role,
   type StringSelectMenuInteraction,
@@ -230,6 +231,22 @@ function getRemoveRoleCandidates(guild: Guild, member: GuildMember): Role[] {
   }
   const ledRoles = ownClanRoles.filter((r) => isClanLeaderFor(member, r.id));
   return ledRoles.length > 0 ? ledRoles : ownClanRoles;
+}
+
+async function finalizeGrantRequestMessage(
+  message: Message,
+  approved: boolean,
+  resolver: GuildMember,
+): Promise<void> {
+  const existing = message.embeds[0];
+  if (!existing) {
+    await message.edit({ components: [] }).catch(() => undefined);
+    return;
+  }
+  const embed = EmbedBuilder.from(existing)
+    .setFooter({ text: clanTxt.requestResolvedFooter(approved, resolver.toString()) })
+    .setColor(approved ? 0x57f287 : 0x747f8d);
+  await message.edit({ embeds: [embed], components: [] }).catch(() => undefined);
 }
 
 async function postPendingGrantRequest(guild: Guild, panel: ClanRulesPanelState, request: ClanGrantRequest): Promise<void> {
@@ -661,7 +678,7 @@ async function handleGrantRequestDecision(interaction: ButtonInteraction): Promi
   if (action === "deny") {
     request.status = "denied";
     setClanGrantRequest(request);
-    await interaction.message.edit({ components: [] }).catch(() => undefined);
+    await finalizeGrantRequestMessage(interaction.message, false, member);
     await saveState(LAST_SEEN_STATE_FILE);
     return true;
   }
@@ -690,7 +707,7 @@ async function handleGrantRequestDecision(interaction: ButtonInteraction): Promi
 
   request.status = "approved";
   setClanGrantRequest(request);
-  await interaction.message.edit({ components: [] }).catch(() => undefined);
+  await finalizeGrantRequestMessage(interaction.message, true, member);
   await saveState(LAST_SEEN_STATE_FILE);
 
   await postClanAuditLine(
