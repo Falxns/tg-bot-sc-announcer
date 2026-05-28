@@ -479,6 +479,14 @@ export const DISCORD_CLAN_RULES_MESSAGE_ID = (process.env.DISCORD_CLAN_RULES_MES
 export const DISCORD_CLAN_LEADER_ROLE_ID = (process.env.DISCORD_CLAN_LEADER_ROLE_ID ?? "").trim();
 
 /**
+ * Anchor role snowflake — new clan roles are placed directly above this role in the hierarchy.
+ * Bot's highest role must still be above the new clan role.
+ */
+export const DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID = (
+  process.env.DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID ?? ""
+).trim();
+
+/**
  * Role IDs excluded from clan discovery.
  * Includes `DISCORD_CLAN_ROLE_EXCLUDE_IDS` from env plus moderator, staff-summary creator, and admin role IDs.
  */

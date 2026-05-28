@@ -9,6 +9,7 @@ import {
 import {
   DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID,
   DISCORD_CLAN_LEADER_ROLE_ID,
+  DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID,
   DISCORD_CLAN_STAFF_LOG_CHANNEL_ID,
   DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID,
 } from "../../config";
@@ -21,6 +22,31 @@ export type RoleActionResult = { ok: true } | { ok: false; error: string };
 
 async function getBotMember(guild: Guild): Promise<GuildMember | null> {
   return guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
+}
+
+async function positionClanRoleAboveAnchor(guild: Guild, role: Role): Promise<void> {
+  const anchorId = DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID;
+  if (!anchorId) return;
+
+  const anchor =
+    guild.roles.cache.get(anchorId) ?? (await guild.roles.fetch(anchorId).catch(() => null));
+  if (!anchor) {
+    console.warn(`Clan role anchor ${anchorId} not found; skipping position for ${role.name}.`);
+    return;
+  }
+  if (!role.editable) {
+    console.warn(`Clan role ${role.name} is not editable by the bot; cannot place above anchor.`);
+    return;
+  }
+  if (role.comparePositionTo(anchor) > 0) return;
+
+  try {
+    await role.setPosition(anchor.position + 1, {
+      reason: `Clan role stacked above ${anchor.name}`,
+    });
+  } catch (err) {
+    console.warn(`Failed to position clan role ${role.name} above anchor ${anchor.name}:`, err);
+  }
 }
 
 function roleBlocker(me: GuildMember, target: GuildMember, role: Role): string | null {
@@ -110,6 +136,8 @@ export async function executeCreateRequest(
   } catch {
     return { ok: false, error: clanTxt.noManageRoles };
   }
+
+  await positionClanRoleAboveAnchor(guild, role);
 
   const leaderMetaId = DISCORD_CLAN_LEADER_ROLE_ID;
   const leaderSet = new Set(request.leaderIds);

@@ -101,6 +101,7 @@ Edit `.env`:
 | `DISCORD_VOICE_INVITE_MAX_AGE_SEC` | No | Invite link TTL from panel (default **86400** = 24 h) |
 | `DISCORD_CLAN_ENABLED` | No | `1` enables clan role panel + wizard; default off |
 | `DISCORD_CLAN_LEADER_ROLE_ID` | Yes* | Snowflake of the shared **«Лидер клана»** meta-role (one role for all clans) |
+| `DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID` | No | Anchor role snowflake — each new clan role is placed **above** this role in the hierarchy (bot’s top role must still be higher) |
 | `DISCORD_CLAN_RULES_MESSAGE_ID` | No | Parent rules post snowflake; grant/remove pending requests go to its public thread (created if missing) |
 | `DISCORD_CLAN_ROLE_EXCLUDE_IDS` | No | Extra role IDs excluded from clan picker; always also excludes `DISCORD_MODERATOR_ROLE_IDS`, `DISCORD_ADMIN_ROLE_IDS`, and `DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS` |
 | `DISCORD_CLAN_ROLE_NAME_PATTERN` | No | Optional regex (case-insensitive) to filter clan role names further |
