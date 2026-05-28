@@ -104,7 +104,7 @@ export async function executeCreateRequest(
   try {
     role = await guild.roles.create({
       name: request.clanName,
-      color: request.colorHex,
+      colors: { primaryColor: request.colorHex },
       reason: `Clan create request ${request.id}`,
     });
   } catch {
