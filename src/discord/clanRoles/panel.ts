@@ -49,6 +49,7 @@ import {
   ensureGuildMembersCached,
   isClanLeaderFor,
   listClanRoles,
+  listClanLeaderIds,
   listMemberClanRoles,
   listMemberIdsWithRole,
   resolveClanRole,
@@ -261,6 +262,19 @@ async function finalizeGrantRequestMessage(
 async function postPendingGrantRequest(guild: Guild, panel: ClanRulesPanelState, request: ClanGrantRequest): Promise<void> {
   const target = await guild.members.fetch(request.targetUserId).catch(() => null);
   const requester = await guild.members.fetch(request.requesterUserId).catch(() => null);
+
+  let pingContent: string | undefined;
+  let leaderIdsToPing: string[] = [];
+  if (request.type === "grant") {
+    await ensureGuildMembersCached(guild);
+    leaderIdsToPing = listClanLeaderIds(guild, request.clanRoleId).filter(
+      (id) => id !== request.requesterUserId,
+    );
+    if (leaderIdsToPing.length > 0) {
+      pingContent = clanTxt.pendingGrantLeaderPing(leaderIdsToPing.map((id) => `<@${id}>`).join(" "));
+    }
+  }
+
   const embed = new EmbedBuilder()
     .setTitle(request.type === "grant" ? clanTxt.pendingGrantTitle : clanTxt.pendingRemoveTitle)
     .setDescription(
@@ -285,7 +299,14 @@ async function postPendingGrantRequest(guild: Guild, panel: ClanRulesPanelState,
 
   const dest = await resolveClanRequestsThread(guild, panel);
   if (!dest) return;
-  const msg = await dest.send({ embeds: [embed], components: [row] }).catch(() => null);
+  const msg = await dest
+    .send({
+      content: pingContent,
+      embeds: [embed],
+      components: [row],
+      allowedMentions: leaderIdsToPing.length > 0 ? { users: leaderIdsToPing } : undefined,
+    })
+    .catch(() => null);
   if (msg) {
     request.pendingMessageId = msg.id;
     request.threadId = dest.isThread() ? dest.id : undefined;

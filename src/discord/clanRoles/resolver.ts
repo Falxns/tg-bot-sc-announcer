@@ -60,14 +60,16 @@ export function isClanLeaderFor(member: GuildMember, clanRoleId: string): boolea
   return member.roles.cache.has(clanRoleId) && member.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID);
 }
 
+export function listClanLeaderIds(guild: Guild, clanRoleId: string): string[] {
+  if (!DISCORD_CLAN_LEADER_ROLE_ID) return [];
+  return listMemberIdsWithRole(guild, clanRoleId).filter((id) => {
+    const member = guild.members.cache.get(id);
+    return member ? isClanLeaderFor(member, clanRoleId) : false;
+  });
+}
+
 export function countClanLeaders(guild: Guild, clanRoleId: string): number {
-  if (!DISCORD_CLAN_LEADER_ROLE_ID) return 0;
-  let n = 0;
-  for (const memberId of listMemberIdsWithRole(guild, clanRoleId)) {
-    const member = guild.members.cache.get(memberId);
-    if (member?.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) n++;
-  }
-  return n;
+  return listClanLeaderIds(guild, clanRoleId).length;
 }
 
 /** True if member holds leader meta-role alongside any discovered clan role. */

@@ -32,6 +32,8 @@ export const clanTxt = {
 
   pendingGrantTitle: "Запрос: выдать роль",
   pendingRemoveTitle: "Запрос: снять роль",
+  pendingGrantLeaderPing: (mentions: string) =>
+    `Лидеры клана, проверьте запрос: ${mentions}`,
   pendingGrantLeaderNote: "Запрошена также роль «Лидер клана».",
   approve: "Одобрить",
   deny: "Отклонить",
