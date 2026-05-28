@@ -5,8 +5,12 @@ import {
   PermissionFlagsBits,
   Role,
   TextChannel,
+  type ForumChannel,
+  type GuildBasedChannel,
+  type NewsChannel,
 } from "discord.js";
 import {
+  DISCORD_CLAN_CHAT_CHANNEL_ID,
   DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID,
   DISCORD_CLAN_LEADER_ROLE_ID,
   DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID,
@@ -46,6 +50,51 @@ async function positionClanRoleAboveAnchor(guild: Guild, role: Role): Promise<vo
     });
   } catch (err) {
     console.warn(`Failed to position clan role ${role.name} above anchor ${anchor.name}:`, err);
+  }
+}
+
+type ClanChatChannel = TextChannel | NewsChannel | ForumChannel;
+
+function resolveClanChatChannel(channel: GuildBasedChannel | null): ClanChatChannel | null {
+  if (!channel) return null;
+  if (
+    channel.type === ChannelType.GuildText ||
+    channel.type === ChannelType.GuildAnnouncement ||
+    channel.type === ChannelType.GuildForum
+  ) {
+    return channel;
+  }
+  return null;
+}
+
+/** Allow Send Messages for the clan role on the configured clan chat channel; other overwrite bits unchanged. */
+async function grantClanRoleClanChatAccess(guild: Guild, role: Role): Promise<void> {
+  const channelId = DISCORD_CLAN_CHAT_CHANNEL_ID;
+  if (!channelId) return;
+
+  const fetched = await guild.channels.fetch(channelId).catch(() => null);
+  const channel = resolveClanChatChannel(fetched);
+  if (!channel) {
+    console.warn(`Clan chat channel ${channelId} not found or unsupported; skipping overwrite for ${role.name}.`);
+    return;
+  }
+
+  const me = await getBotMember(guild);
+  if (!me?.permissionsIn(channel).has(PermissionFlagsBits.ManageChannels)) {
+    console.warn(`Bot lacks Manage Channels on clan chat channel ${channelId}; skipping overwrite for ${role.name}.`);
+    return;
+  }
+
+  const sendMessages = { SendMessages: true } as const;
+  try {
+    const existing = channel.permissionOverwrites.cache.get(role.id);
+    if (existing) {
+      await channel.permissionOverwrites.edit(role.id, sendMessages);
+    } else {
+      await channel.permissionOverwrites.create(role.id, sendMessages);
+    }
+  } catch (err) {
+    console.warn(`Failed to set clan chat Send Messages for role ${role.name}:`, err);
   }
 }
 
@@ -138,6 +187,7 @@ export async function executeCreateRequest(
   }
 
   await positionClanRoleAboveAnchor(guild, role);
+  await grantClanRoleClanChatAccess(guild, role);
 
   const leaderMetaId = DISCORD_CLAN_LEADER_ROLE_ID;
   const leaderSet = new Set(request.leaderIds);
