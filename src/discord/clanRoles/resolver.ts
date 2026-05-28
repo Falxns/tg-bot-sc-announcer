@@ -24,6 +24,28 @@ export function listMemberClanRoles(guild: Guild, member: GuildMember): Role[] {
   return listClanRoles(guild).filter((role) => member.roles.cache.has(role.id));
 }
 
+/** Load full member list when cache is incomplete (Role#members is cache-only in discord.js). */
+export async function ensureGuildMembersCached(guild: Guild): Promise<void> {
+  if (guild.memberCount <= guild.members.cache.size) return;
+  await guild.members.fetch().catch(() => undefined);
+}
+
+export function countMembersWithRole(guild: Guild, roleId: string): number {
+  let n = 0;
+  for (const [, member] of guild.members.cache) {
+    if (member.roles.cache.has(roleId)) n++;
+  }
+  return n;
+}
+
+export function listMemberIdsWithRole(guild: Guild, roleId: string): string[] {
+  const ids: string[] = [];
+  for (const [, member] of guild.members.cache) {
+    if (member.roles.cache.has(roleId)) ids.push(member.id);
+  }
+  return ids;
+}
+
 export function resolveClanRole(guild: Guild, query: string): Role[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
@@ -40,11 +62,10 @@ export function isClanLeaderFor(member: GuildMember, clanRoleId: string): boolea
 
 export function countClanLeaders(guild: Guild, clanRoleId: string): number {
   if (!DISCORD_CLAN_LEADER_ROLE_ID) return 0;
-  const clanRole = guild.roles.cache.get(clanRoleId);
-  if (!clanRole) return 0;
   let n = 0;
-  for (const [, member] of clanRole.members) {
-    if (member.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) n++;
+  for (const memberId of listMemberIdsWithRole(guild, clanRoleId)) {
+    const member = guild.members.cache.get(memberId);
+    if (member?.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) n++;
   }
   return n;
 }

@@ -50,7 +50,7 @@ export async function handleClanSlashCommand(interaction: ChatInputCommandIntera
       await interaction.reply({ content: clanTxt.cannotApprove, flags: MessageFlags.Ephemeral });
       return true;
     }
-    const lines = formatClansListEmbedLines(interaction.guild);
+    const lines = await formatClansListEmbedLines(interaction.guild);
     const embed = new EmbedBuilder()
       .setTitle(clanTxt.clanslistTitle)
       .setDescription(lines.join("\n").slice(0, 4096))

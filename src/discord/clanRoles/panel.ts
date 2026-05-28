@@ -43,7 +43,16 @@ import {
 } from "./constants";
 import { newClanRequestId, resolveClanRequestsThread } from "./helpers";
 import { canApproveGrantRequest, isClanModerator } from "./permissions";
-import { countClanLeaders, isClanLeaderFor, listClanRoles, listMemberClanRoles, resolveClanRole } from "./resolver";
+import {
+  countClanLeaders,
+  countMembersWithRole,
+  ensureGuildMembersCached,
+  isClanLeaderFor,
+  listClanRoles,
+  listMemberClanRoles,
+  listMemberIdsWithRole,
+  resolveClanRole,
+} from "./resolver";
 import { clanTxt } from "./strings";
 
 type FlowType = "grant" | "remove";
@@ -140,7 +149,7 @@ function buildClanSelectComponents(
             new StringSelectMenuOptionBuilder()
               .setLabel(r.name.slice(0, 100))
               .setValue(r.id)
-              .setDescription(`${r.members.size} участн.`),
+              .setDescription(`${countMembersWithRole(guild, r.id)} участн.`),
           ),
         ),
     ),
@@ -375,7 +384,8 @@ async function onClanRolePicked(
   });
 
   if (flow === "remove" && (isClanModerator(member) || isClanLeaderFor(member, clanRoleId))) {
-    const teammates = [...role.members.keys()];
+    await ensureGuildMembersCached(guild);
+    const teammates = listMemberIdsWithRole(guild, clanRoleId);
     if (teammates.length === 0) {
       await interaction.update({ content: clanTxt.selectTargetNoMembers, components: [] });
       return;
@@ -485,6 +495,7 @@ export async function handleClanPanelButton(interaction: ButtonInteraction): Pro
     flow,
     candidates.map((role) => role.id),
   );
+  await ensureGuildMembersCached(interaction.guild);
   await interaction.reply({
     content: clanTxt.removeSelectClanPlaceholder,
     components: buildClanSelectComponents(interaction.guild, flow, interaction.user.id, 0),
@@ -644,6 +655,7 @@ export async function handleClanPanelModal(interaction: ModalSubmitInteraction):
     "grant",
     matches.map((r) => r.id),
   );
+  await ensureGuildMembersCached(interaction.guild);
   await interaction.reply({
     content: clanTxt.selectClanPlaceholder,
     components: buildClanSelectComponents(interaction.guild, "grant", userId, 0),

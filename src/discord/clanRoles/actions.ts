@@ -19,7 +19,7 @@ import {
 } from "../../config";
 import { saveState } from "../../state";
 import type { ClanCreateRequest } from "../types";
-import { countClanLeaders, listClanRoles, memberLeadsAnyClan } from "./resolver";
+import { countClanLeaders, countMembersWithRole, ensureGuildMembersCached, listClanRoles, memberLeadsAnyClan } from "./resolver";
 import { clanTxt } from "./strings";
 
 export type RoleActionResult = { ok: true } | { ok: false; error: string };
@@ -247,11 +247,12 @@ export async function persistClanState(statePath: string): Promise<void> {
   await saveState(statePath);
 }
 
-export function formatClansListEmbedLines(guild: Guild): string[] {
+export async function formatClansListEmbedLines(guild: Guild): Promise<string[]> {
+  await ensureGuildMembersCached(guild);
   const roles = listClanRoles(guild);
   if (roles.length === 0) return [clanTxt.clanslistEmpty];
   return roles.map((r) => {
     const leaders = countClanLeaders(guild, r.id);
-    return clanTxt.clanslistLine(r.name, leaders, r.members.size);
+    return clanTxt.clanslistLine(r.name, leaders, countMembersWithRole(guild, r.id));
   });
 }
