@@ -102,7 +102,7 @@ Edit `.env`:
 | `DISCORD_CLAN_ENABLED` | No | `1` enables clan role panel + wizard; default off |
 | `DISCORD_CLAN_LEADER_ROLE_ID` | Yes* | Snowflake of the shared **«Лидер клана»** meta-role (one role for all clans) |
 | `DISCORD_CLAN_RULES_MESSAGE_ID` | No | Parent rules post snowflake; grant/remove pending requests go to its public thread (created if missing) |
-| `DISCORD_CLAN_ROLE_EXCLUDE_IDS` | No | Comma-separated role IDs excluded from clan picker (mods, ranks, leader meta-role, etc.) |
+| `DISCORD_CLAN_ROLE_EXCLUDE_IDS` | No | Extra role IDs excluded from clan picker; always also excludes `DISCORD_MODERATOR_ROLE_IDS`, `DISCORD_ADMIN_ROLE_IDS`, and `DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS` |
 | `DISCORD_CLAN_ROLE_NAME_PATTERN` | No | Optional regex (case-insensitive) to filter clan role names further |
 | `DISCORD_CLAN_ROSTER_MIN` | No | Min roster size for new-clan wizard (default **15**) |
 | `DISCORD_CLAN_ROSTER_MAX` | No | Max roster size for new-clan wizard (default **35**) |

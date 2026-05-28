@@ -478,10 +478,18 @@ export const DISCORD_CLAN_RULES_MESSAGE_ID = (process.env.DISCORD_CLAN_RULES_MES
 /** Shared «Лидер клана» meta-role snowflake. */
 export const DISCORD_CLAN_LEADER_ROLE_ID = (process.env.DISCORD_CLAN_LEADER_ROLE_ID ?? "").trim();
 
-/** Role IDs excluded from clan picker (mods, ranks, leader meta-role, etc.). */
-export const DISCORD_CLAN_ROLE_EXCLUDE_IDS = parseCommaSeparatedIds(
-  process.env.DISCORD_CLAN_ROLE_EXCLUDE_IDS,
-);
+/**
+ * Role IDs excluded from clan discovery.
+ * Includes `DISCORD_CLAN_ROLE_EXCLUDE_IDS` from env plus moderator, staff-summary creator, and admin role IDs.
+ */
+export const DISCORD_CLAN_ROLE_EXCLUDE_IDS = [
+  ...new Set([
+    ...parseCommaSeparatedIds(process.env.DISCORD_CLAN_ROLE_EXCLUDE_IDS),
+    ...DISCORD_MODERATOR_ROLE_IDS,
+    ...DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS,
+    ...DISCORD_ADMIN_ROLE_IDS,
+  ]),
+];
 
 /** Optional regex (case-insensitive) — extra filter on role display names. */
 export const DISCORD_CLAN_ROLE_NAME_PATTERN = (() => {
