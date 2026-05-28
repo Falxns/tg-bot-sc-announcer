@@ -72,9 +72,8 @@ export function countClanLeaders(guild: Guild, clanRoleId: string): number {
   return listClanLeaderIds(guild, clanRoleId).length;
 }
 
-/** True if member holds leader meta-role alongside any discovered clan role. */
+/** True if member is leader (meta-role) of at least one clan they still belong to. */
 export function memberLeadsAnyClan(guild: Guild, member: GuildMember): boolean {
   if (!DISCORD_CLAN_LEADER_ROLE_ID || !member.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) return false;
-  const clanRoleIds = new Set(listClanRoles(guild).map((r) => r.id));
-  return member.roles.cache.some((r) => clanRoleIds.has(r.id));
+  return listMemberClanRoles(guild, member).some((role) => isClanLeaderFor(member, role.id));
 }

@@ -167,11 +167,19 @@ export async function removeClanRoleFromMember(
     if (target.roles.cache.has(clanRole.id)) {
       await target.roles.remove(clanRole.id);
     }
-    if (DISCORD_CLAN_LEADER_ROLE_ID && target.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) {
-      if (!memberLeadsAnyClan(guild, target)) {
-        await target.roles.remove(DISCORD_CLAN_LEADER_ROLE_ID);
+
+    if (DISCORD_CLAN_LEADER_ROLE_ID) {
+      const updated = await guild.members.fetch(target.id).catch(() => target);
+      if (updated.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID) && !memberLeadsAnyClan(guild, updated)) {
+        const leaderMeta = guild.roles.cache.get(DISCORD_CLAN_LEADER_ROLE_ID);
+        if (leaderMeta && !leaderMeta.editable) {
+          console.warn(`Cannot remove leader meta-role ${DISCORD_CLAN_LEADER_ROLE_ID}: bot role too low.`);
+        } else {
+          await updated.roles.remove(DISCORD_CLAN_LEADER_ROLE_ID);
+        }
       }
     }
+
     return { ok: true };
   } catch {
     return { ok: false, error: clanTxt.noManageRoles };
