@@ -1,5 +1,11 @@
 import { randomUUID } from "crypto";
-import type { Guild, ThreadChannel } from "discord.js";
+import type {
+  Guild,
+  GuildTextBasedChannel,
+  Message,
+  MessageCreateOptions,
+  ThreadChannel,
+} from "discord.js";
 import { DISCORD_CLAN_RULES_MESSAGE_ID } from "../../config";
 
 export function newClanRequestId(): string {
@@ -68,4 +74,65 @@ export async function replyToClanRequestMessage(
     return;
   }
   await channel.send(payload).catch(() => undefined);
+}
+
+export async function ensureThreadReadyForSend(
+  channel: GuildTextBasedChannel,
+): Promise<GuildTextBasedChannel> {
+  if (!channel.isThread()) return channel;
+
+  let thread: ThreadChannel = channel;
+  if (thread.archived) {
+    await thread.setArchived(false).catch(() => undefined);
+    const fresh = await thread.fetch().catch(() => null);
+    if (fresh?.isThread()) thread = fresh;
+  }
+  if (thread.joinable && !thread.joined) {
+    await thread.join().catch(() => undefined);
+  }
+  return thread as GuildTextBasedChannel;
+}
+
+function stripUndefinedSendOptions(options: MessageCreateOptions): MessageCreateOptions {
+  const out = { ...options };
+  if (out.content === undefined) delete out.content;
+  if (out.allowedMentions === undefined) delete out.allowedMentions;
+  return out;
+}
+
+/** Send approval/notification in rules thread; joins/unarchives thread and falls back to source reply. */
+export async function sendInClanChannel(
+  channel: GuildTextBasedChannel,
+  options: MessageCreateOptions,
+  sourceMessageId?: string,
+): Promise<Message | null> {
+  const ready = await ensureThreadReadyForSend(channel);
+  const base = stripUndefinedSendOptions(options);
+
+  const trySend = async (opts: MessageCreateOptions): Promise<Message | null> =>
+    ready.send(opts).catch((err) => {
+      console.warn("Clan channel send failed:", err);
+      return null;
+    });
+
+  let msg = await trySend(base);
+  if (msg) return msg;
+
+  if (options.allowedMentions) {
+    const { allowedMentions: _, ...withoutMentions } = base;
+    msg = await trySend(stripUndefinedSendOptions(withoutMentions));
+    if (msg) return msg;
+  }
+
+  if (sourceMessageId) {
+    const source = await ready.messages.fetch(sourceMessageId).catch(() => null);
+    if (source) {
+      return source.reply(base).catch((err) => {
+        console.warn("Clan source reply failed:", err);
+        return null;
+      });
+    }
+  }
+
+  return null;
 }

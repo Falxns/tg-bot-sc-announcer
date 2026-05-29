@@ -72,10 +72,9 @@ export async function ensureRoleMembersCached(guild: Guild, roleId: string): Pro
 
 export async function listClanLeaderIds(guild: Guild, clanRoleId: string): Promise<string[]> {
   if (!DISCORD_CLAN_LEADER_ROLE_ID) return [];
-  const clanRole = await ensureRoleMembersCached(guild, clanRoleId);
-  if (!clanRole) return [];
+  await ensureGuildMembersCached(guild);
   const ids: string[] = [];
-  for (const [, member] of clanRole.members) {
+  for (const [, member] of guild.members.cache) {
     if (isClanLeaderFor(member, clanRoleId)) ids.push(member.id);
   }
   return ids;

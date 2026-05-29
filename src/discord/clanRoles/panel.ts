@@ -21,7 +21,7 @@ import {
 import type { ClanGrantRequest } from "../types";
 import { grantClanRoleToMember, postClanAuditLine, removeClanRoleFromMember } from "./actions";
 import { CLAN_REQ_PREFIX, MAX_CLAN_LEADERS } from "./constants";
-import { newClanRequestId, replyToClanRequestMessage } from "./helpers";
+import { newClanRequestId, replyToClanRequestMessage, sendInClanChannel } from "./helpers";
 import { canApproveGrantRequest } from "./permissions";
 import { countClanLeaders, isClanLeaderFor, listClanLeaderIds } from "./resolver";
 import { clanTxt } from "./strings";
@@ -100,15 +100,16 @@ export async function postPendingGrantRequest(
       .setStyle(ButtonStyle.Danger),
   );
 
-  const msg = await dest
-    .send({
-      content: pingContent,
+  const msg = await sendInClanChannel(
+    dest,
+    {
+      ...(pingContent ? { content: pingContent } : {}),
       embeds: [embed],
       components: [row],
-      allowedMentions:
-        leaderIdsToPing.length > 0 ? { parse: ["users"], users: leaderIdsToPing } : undefined,
-    })
-    .catch(() => null);
+      ...(leaderIdsToPing.length > 0 ? { allowedMentions: { users: leaderIdsToPing } } : {}),
+    },
+    request.sourceMessageId,
+  );
   if (msg) {
     request.pendingMessageId = msg.id;
     request.threadId = dest.isThread() ? dest.id : undefined;

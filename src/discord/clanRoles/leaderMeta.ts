@@ -27,13 +27,13 @@ import {
   CLAN_MOD_LEADER_META_PREFIX,
   MAX_CLAN_LEADERS,
 } from "./constants";
-import { newClanRequestId, replyToClanRequestMessage } from "./helpers";
+import { newClanRequestId, replyToClanRequestMessage, sendInClanChannel } from "./helpers";
 import {
   canApproveLeaderMetaClanStage,
   canResolveLeaderMetaModRequest,
   isClanModerator,
 } from "./permissions";
-import { countClanLeaders, isClanLeaderFor, listClanLeaderIds } from "./resolver";
+import { countClanLeaders, ensureGuildMembersCached, isClanLeaderFor, listClanLeaderIds } from "./resolver";
 import { clanTxt } from "./strings";
 
 export function isClanLeaderMetaClanCustomId(customId: string): boolean {
@@ -74,7 +74,7 @@ async function postPendingClanLeaderApproval(
   guild: Guild,
   dest: GuildTextBasedChannel,
   request: ClanLeaderMetaRequest,
-): Promise<void> {
+): Promise<boolean> {
   const target = await guild.members.fetch(request.targetUserId).catch(() => null);
   const requester = await guild.members.fetch(request.requesterUserId).catch(() => null);
 
@@ -108,22 +108,25 @@ async function postPendingClanLeaderApproval(
       .setStyle(ButtonStyle.Danger),
   );
 
-  const msg = await dest
-    .send({
-      content: pingContent,
+  const msg = await sendInClanChannel(
+    dest,
+    {
+      ...(pingContent ? { content: pingContent } : {}),
       embeds: [embed],
       components: [row],
-      allowedMentions:
-        leaderIdsToPing.length > 0 ? { parse: ["users"], users: leaderIdsToPing } : undefined,
-    })
-    .catch(() => null);
+      ...(leaderIdsToPing.length > 0 ? { allowedMentions: { users: leaderIdsToPing } } : {}),
+    },
+    request.sourceMessageId,
+  );
   if (msg) {
     request.pendingMessageId = msg.id;
     request.channelId = dest.id;
     request.threadId = dest.isThread() ? dest.id : dest.id;
     setClanLeaderMetaRequest(request);
     await saveState(LAST_SEEN_STATE_FILE);
+    return true;
   }
+  return false;
 }
 
 async function postLeaderMetaToModQueue(
@@ -197,6 +200,7 @@ export async function submitLeaderMetaGrantRequest(
   }
   if (isClanLeaderFor(target, clanRole.id)) return clanTxt.alreadyClanLeader;
 
+  await ensureGuildMembersCached(guild);
   const leaderCount = await countClanLeaders(guild, clanRole.id);
   if (leaderCount >= MAX_CLAN_LEADERS) {
     return clanTxt.grantLeaderCap(MAX_CLAN_LEADERS);
@@ -215,14 +219,15 @@ export async function submitLeaderMetaGrantRequest(
     sourceMessageId,
     createdAt: Date.now(),
   };
-  setClanLeaderMetaRequest(request);
-  await saveState(LAST_SEEN_STATE_FILE);
 
   if (leaderCount === 1) {
-    await postPendingClanLeaderApproval(guild, dest, request);
+    const posted = await postPendingClanLeaderApproval(guild, dest, request);
+    if (!posted) return clanTxt.leaderMetaApprovalPostFailed;
     return null;
   }
 
+  setClanLeaderMetaRequest(request);
+  await saveState(LAST_SEEN_STATE_FILE);
   return postLeaderMetaToModQueue(guild, request);
 }
 
