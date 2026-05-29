@@ -7,6 +7,7 @@ import {
   type ButtonInteraction,
   type Guild,
   type GuildMember,
+  type GuildTextBasedChannel,
   type Message,
   type Role,
 } from "discord.js";
@@ -17,10 +18,10 @@ import {
   saveState,
   setClanGrantRequest,
 } from "../../state";
-import type { ClanGrantRequest, ClanRulesPanelState } from "../types";
+import type { ClanGrantRequest } from "../types";
 import { grantClanRoleToMember, postClanAuditLine, removeClanRoleFromMember } from "./actions";
 import { CLAN_REQ_PREFIX, MAX_CLAN_LEADERS } from "./constants";
-import { newClanRequestId, resolveClanRequestsThread } from "./helpers";
+import { newClanRequestId } from "./helpers";
 import { canApproveGrantRequest } from "./permissions";
 import { countClanLeaders, ensureGuildMembersCached, isClanLeaderFor, listClanLeaderIds } from "./resolver";
 import { clanTxt } from "./strings";
@@ -60,7 +61,7 @@ export async function finalizeGrantRequestMessage(
 
 export async function postPendingGrantRequest(
   guild: Guild,
-  panel: ClanRulesPanelState,
+  dest: GuildTextBasedChannel,
   request: ClanGrantRequest,
 ): Promise<void> {
   const target = await guild.members.fetch(request.targetUserId).catch(() => null);
@@ -100,8 +101,6 @@ export async function postPendingGrantRequest(
       .setStyle(ButtonStyle.Danger),
   );
 
-  const dest = await resolveClanRequestsThread(guild, panel);
-  if (!dest) return;
   const msg = await dest
     .send({
       content: pingContent,
@@ -121,7 +120,7 @@ export async function postPendingGrantRequest(
 
 export async function submitGrantRequest(
   guild: Guild,
-  panel: ClanRulesPanelState,
+  dest: GuildTextBasedChannel,
   requesterId: string,
   clanRole: Role,
   targetUserId: string,
@@ -130,7 +129,7 @@ export async function submitGrantRequest(
   const request: ClanGrantRequest = {
     id: newClanRequestId(),
     guildId: guild.id,
-    channelId: panel.channelId,
+    channelId: dest.id,
     clanRoleId: clanRole.id,
     clanRoleName: clanRole.name,
     targetUserId,
@@ -141,7 +140,7 @@ export async function submitGrantRequest(
     createdAt: Date.now(),
   };
   setClanGrantRequest(request);
-  await postPendingGrantRequest(guild, panel, request);
+  await postPendingGrantRequest(guild, dest, request);
   await saveState(LAST_SEEN_STATE_FILE);
 }
 

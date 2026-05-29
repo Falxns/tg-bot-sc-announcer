@@ -1,10 +1,6 @@
 import type { Message } from "discord.js";
 import { clanRolesConfigured } from "../../config";
-import {
-  buildFallbackClanPanel,
-  getClanRulesPanelForGuild,
-  isClanRulesThread,
-} from "./helpers";
+import { isClanRulesThread } from "./helpers";
 import { submitCreateRequestFromText } from "./modQueue";
 import { performDirectRemove, submitGrantRequest } from "./panel";
 import { ensureGuildMembersCached } from "./resolver";
@@ -30,10 +26,6 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
     return true;
   }
 
-  const panel =
-    getClanRulesPanelForGuild(message.guild.id) ??
-    buildFallbackClanPanel(message.guild.id, message.channel.parentId ?? message.channel.id);
-
   if (parsed.kind === "grant") {
     const target = await message.guild.members.fetch(parsed.targetUserId).catch(() => null);
     if (!target) {
@@ -42,7 +34,7 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
     }
     await submitGrantRequest(
       message.guild,
-      panel,
+      message.channel,
       message.author.id,
       parsed.clanRole,
       parsed.targetUserId,

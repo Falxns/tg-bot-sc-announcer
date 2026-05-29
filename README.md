@@ -103,7 +103,7 @@ Edit `.env`:
 | `DISCORD_CLAN_LEADER_ROLE_ID` | Yes* | Snowflake of the shared **«Лидер клана»** meta-role (one role for all clans) |
 | `DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID` | No | Anchor role snowflake — each new clan role is placed **above** this role in the hierarchy (bot’s top role must still be higher) |
 | `DISCORD_CLAN_CHAT_CHANNEL_ID` | No | Clan chat channel (e.g. #чат-кланов) — on create, role gets a channel overwrite with **Send Messages** allowed; bot needs **Manage Roles** («Управление правами») and its top role above the new clan role |
-| `DISCORD_CLAN_RULES_MESSAGE_ID` | No | Parent rules post snowflake; plain-text commands and grant pending requests go to its public thread (created if missing) |
+| `DISCORD_CLAN_RULES_MESSAGE_ID` | No | Parent rules post snowflake; only the **thread under this post** accepts plain-text clan commands; grant pending messages are posted in that same thread |
 | `DISCORD_CLAN_ROLE_EXCLUDE_IDS` | No | Extra role IDs excluded from clan role discovery; always also excludes `DISCORD_MODERATOR_ROLE_IDS`, `DISCORD_ADMIN_ROLE_IDS`, and `DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS` |
 | `DISCORD_CLAN_ROLE_NAME_PATTERN` | No | Optional regex (case-insensitive) to filter which guild roles count as clans |
 | `DISCORD_CLAN_ROSTER_MIN` | No | Min roster size for `!создать` (default **15**) |
