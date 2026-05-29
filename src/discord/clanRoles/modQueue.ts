@@ -146,7 +146,7 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
   const requestId = customId.slice(`${CLAN_MOD_PREFIX}accept:`.length);
   const request = getClanCreateRequest(requestId);
   if (!request || request.guildId !== interaction.guild.id) {
-    await interaction.reply({ content: clanTxt.panelUnknown, flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: clanTxt.requestUnknown, flags: MessageFlags.Ephemeral });
     return true;
   }
   if (request.status !== "pending") {

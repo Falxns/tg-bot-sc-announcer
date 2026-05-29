@@ -16,10 +16,6 @@ export function canApproveCreateRequest(member: GuildMember): boolean {
   return isClanModerator(member);
 }
 
-export function canUseClanPanel(member: GuildMember): boolean {
-  return true;
-}
-
 export function canResolveCreateRequest(
   member: GuildMember,
   request: ClanCreateRequest,

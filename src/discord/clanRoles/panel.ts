@@ -171,7 +171,7 @@ export async function handleClanGrantButton(interaction: ButtonInteraction): Pro
   const requestId = parts[1];
   const request = getClanGrantRequest(requestId);
   if (!request || request.guildId !== interaction.guild.id) {
-    await interaction.reply({ content: clanTxt.panelUnknown, flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: clanTxt.requestUnknown, flags: MessageFlags.Ephemeral });
     return true;
   }
   if (request.status !== "pending") {

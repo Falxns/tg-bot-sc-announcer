@@ -6,7 +6,6 @@ import {
 } from "./discord/spamFilterCache";
 import type {
   ClanCreateRequest,
-  ClanCreateWizardState,
   ClanGrantRequest,
   ClanRulesPanelState,
   DiscordRolePanelState,
@@ -75,12 +74,10 @@ export const tempVoiceRooms = new Map<string, TempVoiceRoomState>();
 /** Temp voice control panel message (optional, for rehydrate). */
 export const tempVoicePanel = new Map<string, TempVoicePanelState>();
 
-/** Clan rules panel keyed by bot message id. */
+/** Clan help message + rules thread config keyed by bot message id. */
 export const clanRulesPanels = new Map<string, ClanRulesPanelState>();
-/** Pending grant/remove requests keyed by request id. */
+/** Pending grant requests keyed by request id. */
 export const clanGrantRequests = new Map<string, ClanGrantRequest>();
-/** Active create wizards keyed by private thread id. */
-export const clanCreateWizards = new Map<string, ClanCreateWizardState>();
 /** Pending mod-reviewed create requests keyed by request id. */
 export const clanCreateRequests = new Map<string, ClanCreateRequest>();
 
@@ -294,18 +291,6 @@ export function deleteClanGrantRequest(id: string): void {
   clanGrantRequests.delete(id);
 }
 
-export function setClanCreateWizard(w: ClanCreateWizardState): void {
-  clanCreateWizards.set(w.threadId, w);
-}
-
-export function getClanCreateWizard(threadId: string): ClanCreateWizardState | undefined {
-  return clanCreateWizards.get(threadId);
-}
-
-export function deleteClanCreateWizard(threadId: string): void {
-  clanCreateWizards.delete(threadId);
-}
-
 export function setClanCreateRequest(req: ClanCreateRequest): void {
   clanCreateRequests.set(req.id, req);
 }
@@ -505,42 +490,6 @@ export async function loadState(path: string): Promise<void> {
         }
       }
 
-      const wizRaw = obj.clanCreateWizards;
-      if (wizRaw && typeof wizRaw === "object" && !Array.isArray(wizRaw)) {
-        for (const [threadId, value] of Object.entries(wizRaw as Record<string, unknown>)) {
-          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-          const row = value as Record<string, unknown>;
-          const step =
-            row.step === "name" || row.step === "color" || row.step === "roster" || row.step === "review"
-              ? row.step
-              : null;
-          if (!step) continue;
-          const guildId = typeof row.guildId === "string" ? row.guildId : "";
-          const channelId = typeof row.channelId === "string" ? row.channelId : "";
-          const applicantId = typeof row.applicantId === "string" ? row.applicantId : "";
-          if (!guildId || !applicantId) continue;
-          clanCreateWizards.set(threadId, {
-            threadId,
-            guildId,
-            channelId,
-            applicantId,
-            step,
-            clanName: typeof row.clanName === "string" ? row.clanName : undefined,
-            colorPresetId: typeof row.colorPresetId === "string" ? row.colorPresetId : undefined,
-            colorHex: typeof row.colorHex === "number" ? row.colorHex : undefined,
-            colorLabel: typeof row.colorLabel === "string" ? row.colorLabel : undefined,
-            memberIds: Array.isArray(row.memberIds)
-              ? row.memberIds.filter((x): x is string => typeof x === "string")
-              : undefined,
-            leaderIds: Array.isArray(row.leaderIds)
-              ? row.leaderIds.filter((x): x is string => typeof x === "string")
-              : undefined,
-            createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
-            updatedAt: typeof row.updatedAt === "number" ? row.updatedAt : Date.now(),
-          });
-        }
-      }
-
       const createReqRaw = obj.clanCreateRequests;
       if (createReqRaw && typeof createReqRaw === "object" && !Array.isArray(createReqRaw)) {
         for (const [id, value] of Object.entries(createReqRaw as Record<string, unknown>)) {
@@ -584,7 +533,7 @@ export async function loadState(path: string): Promise<void> {
         `State loaded (${STATE_BACKEND}): ${exboAuthors.length} authors, ` +
           `${lastSeenByAuthor.size} lastSeen, ${discordRolePanels.size} role panels, ` +
           `${discordGlobalWarns.size} global warns, ${discordMuteTier.size} mute tiers, ` +
-          `${tempVoiceRooms.size} temp voice rooms, ${clanRulesPanels.size} clan panels, ` +
+          `${tempVoiceRooms.size} temp voice rooms, ${clanRulesPanels.size} clan help posts, ` +
           `${clanGrantRequests.size} clan grant requests.`,
       );
     }
@@ -616,7 +565,6 @@ export async function saveState(path: string): Promise<boolean> {
       tempVoicePanel: Object.fromEntries(tempVoicePanel),
       clanRulesPanels: Object.fromEntries(clanRulesPanels),
       clanGrantRequests: Object.fromEntries(clanGrantRequests),
-      clanCreateWizards: Object.fromEntries(clanCreateWizards),
       clanCreateRequests: Object.fromEntries(clanCreateRequests),
     };
     await store.writeState(JSON.stringify(state, null, 2));

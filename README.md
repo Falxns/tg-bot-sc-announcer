@@ -12,7 +12,7 @@ Telegram + Discord bot service that polls the [Exbo forum](https://forum.exbo.ru
   - admin slash commands `/post` and `/edit` (post or edit bot messages in a target channel)
   - role assignment message buttons via `/rolepanel`
   - channel-aware moderation (light/major severity, **server-wide strikes**, unified timeout ladder, decay, DM + channel fallback, optional log + staff-summary channels, staff `/mute` `/unmute` `/strike` `/unstrike` `/ban` `/unban` `/modstatus`, optional external-link domain blacklist)
-  - optional **clan role automation**: panel for grant/remove with leader approval, private-thread create wizard, mod review queue for new clans (`/clanpanel`, `/clanslist`)
+  - optional **clan role automation**: plain-text commands in the rules thread (`+клан` / `-клан` / `!создать`), leader-approved grants, mod review for new clans (`/clanpanel`, `/clanslist`)
 - Optional HTTP health-check server (e.g. for PaaS readiness probes)
 
 ## Stack
@@ -99,18 +99,18 @@ Edit `.env`:
 | `DISCORD_VOICE_EMPTY_DELETE_MS` | No | Delay before deleting empty rooms (default **60000**) |
 | `DISCORD_VOICE_MAX_CHANNELS_PER_USER` | No | Max owned rooms per user (default **1**) |
 | `DISCORD_VOICE_INVITE_MAX_AGE_SEC` | No | Invite link TTL from panel (default **86400** = 24 h) |
-| `DISCORD_CLAN_ENABLED` | No | `1` enables clan role panel + wizard; default off |
+| `DISCORD_CLAN_ENABLED` | No | `1` enables clan role commands + mod review; default off |
 | `DISCORD_CLAN_LEADER_ROLE_ID` | Yes* | Snowflake of the shared **«Лидер клана»** meta-role (one role for all clans) |
 | `DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID` | No | Anchor role snowflake — each new clan role is placed **above** this role in the hierarchy (bot’s top role must still be higher) |
 | `DISCORD_CLAN_CHAT_CHANNEL_ID` | No | Clan chat channel (e.g. #чат-кланов) — on create, role gets a channel overwrite with **Send Messages** allowed; bot needs **Manage Roles** («Управление правами») and its top role above the new clan role |
-| `DISCORD_CLAN_RULES_MESSAGE_ID` | No | Parent rules post snowflake; grant/remove pending requests go to its public thread (created if missing) |
-| `DISCORD_CLAN_ROLE_EXCLUDE_IDS` | No | Extra role IDs excluded from clan picker; always also excludes `DISCORD_MODERATOR_ROLE_IDS`, `DISCORD_ADMIN_ROLE_IDS`, and `DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS` |
-| `DISCORD_CLAN_ROLE_NAME_PATTERN` | No | Optional regex (case-insensitive) to filter clan role names further |
-| `DISCORD_CLAN_ROSTER_MIN` | No | Min roster size for new-clan wizard (default **15**) |
-| `DISCORD_CLAN_ROSTER_MAX` | No | Max roster size for new-clan wizard (default **35**) |
+| `DISCORD_CLAN_RULES_MESSAGE_ID` | No | Parent rules post snowflake; plain-text commands and grant pending requests go to its public thread (created if missing) |
+| `DISCORD_CLAN_ROLE_EXCLUDE_IDS` | No | Extra role IDs excluded from clan role discovery; always also excludes `DISCORD_MODERATOR_ROLE_IDS`, `DISCORD_ADMIN_ROLE_IDS`, and `DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS` |
+| `DISCORD_CLAN_ROLE_NAME_PATTERN` | No | Optional regex (case-insensitive) to filter which guild roles count as clans |
+| `DISCORD_CLAN_ROSTER_MIN` | No | Min roster size for `!создать` (default **15**) |
+| `DISCORD_CLAN_ROSTER_MAX` | No | Max roster size for `!создать` (default **35**) |
 | `DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID` | Yes* | Staff channel for new-clan **Принять / Отклонить** review messages |
 | `DISCORD_CLAN_STAFF_LOG_CHANNEL_ID` | No | Optional one-line audit for clan actions; falls back to **`DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID`** |
-| `DISCORD_CLAN_COLOR_PRESETS_JSON` | No | JSON array override for color select, e.g. `[{"id":"red","label":"Красный","hex":15158332}]`; default built-in Russian presets |
+| `DISCORD_CLAN_COLOR_PRESETS_JSON` | No | JSON array override for `!создать` color labels, e.g. `[{"id":"red","label":"Красный","hex":15158332}]`; default built-in Russian presets |
 | `LOG_LEVEL` | No | `info` (default), `debug`, or `warn` |
 | `PORT` | No | If set, starts an HTTP server on this port that responds `ok` (for health checks) |
 

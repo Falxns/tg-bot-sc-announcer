@@ -196,7 +196,7 @@ export async function executeCreateRequest(
   }
 
   const existing = guild.roles.cache.find((r) => r.name.toLowerCase() === request.clanName.toLowerCase());
-  if (existing) return { ok: false, error: clanTxt.wizardNameDuplicate };
+  if (existing) return { ok: false, error: clanTxt.createNameDuplicate };
 
   let role: Role;
   try {

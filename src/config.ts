@@ -469,10 +469,10 @@ export function tempVoiceConfigured(): boolean {
   );
 }
 
-/** When false, clan role panel / wizard handlers no-op. */
+/** When false, clan role command handlers no-op. */
 export const DISCORD_CLAN_ENABLED = !/^0|false$/i.test((process.env.DISCORD_CLAN_ENABLED ?? "0").trim());
 
-/** Parent rules post — public thread under it receives grant/remove pending requests. */
+/** Parent rules post — public thread under it receives plain-text clan commands and grant pending requests. */
 export const DISCORD_CLAN_RULES_MESSAGE_ID = (process.env.DISCORD_CLAN_RULES_MESSAGE_ID ?? "").trim();
 
 /** Shared «Лидер клана» meta-role snowflake. */

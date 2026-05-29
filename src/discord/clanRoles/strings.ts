@@ -1,14 +1,8 @@
 export const clanTxt = {
   notConfigured: "Клановые роли не настроены на этом сервере.",
-  panelUnknown: "Панель кланов не найдена или устарела.",
-  wrongGuild: "Эта панель принадлежит другому серверу.",
+  requestUnknown: "Запрос не найден или устарел.",
   internalError: "Произошла ошибка. Попробуйте позже.",
 
-  panelGrant: "Получить роль",
-  panelRemove: "Снять роль",
-  panelCreate: "Создать клан",
-  panelIntro:
-    "Выберите действие:\n• **Получить роль** — запрос роли существующего клана\n• **Снять роль** — снятие клановой роли\n• **Создать клан** — заявка на новую клановую роль",
   rulesHelp:
     "Клановые команды (в этой ветке):\n\n" +
     "+клан Название              — запросить роль себе\n" +
@@ -36,32 +30,22 @@ export const clanTxt = {
   cmdTargetNotInClan: "Участник не состоит в указанном клане.",
   cmdCreateInvalidHeader: "Неверный формат. Первая строка: `!создать`",
   cmdCreateInvalidColor: (label: string) => `Неизвестный цвет: **${label}**. Укажите название из списка пресетов.`,
-  cmdCreateSubmitted:
-    "Заявка на клан отправлена модераторам. D-ранг проверяется вручную.",
+  cmdCreateSubmitted: "Заявка на клан отправлена модераторам. D-ранг проверяется вручную.",
   cmdRemoveDoneTarget: (role: string, target: string) => `Роль **${role}** снята с ${target}.`,
 
-  selectClanPlaceholder: "Выберите клан",
-  selectClanEmpty: "На сервере нет доступных клановых ролей.",
-  selectClanPage: (page: number, total: number) => `Страница ${page + 1} / ${total}`,
-  removeSelectClanPlaceholder: "Выберите клановую роль для снятия",
-  selectTargetPlaceholder: "Выберите участника",
-  selectTargetNoMembers: "В выбранном клане пока нет участников с этой ролью.",
-  targetNotTeammate: "Можно выбрать только участника выбранного клана.",
+  createNameInvalid: (min: number, max: number) =>
+    `Некорректное название. Длина ${min}–${max} символов, без @ и #.`,
+  createNameDuplicate: "Роль с таким названием уже существует.",
+  createRosterInvalid: (min: number, max: number) =>
+    `Нужно **${min}–${max}** уникальных участников на сервере.`,
+  createLeadersInvalid: "Укажите **1–2** лидеров среди участников.",
 
-  grantLeaderToggle: "Также выдать «Лидер клана»",
   grantLeaderCap: (n: number) => `У этого клана уже ${n} лидер(ов) — максимум 2.`,
-  grantSearchTitle: "Поиск клана",
-  grantSearchLabel: "Название клана (полное или часть)",
-  grantSearchNoResults: (query: string) =>
-    `Не найдено кланов по запросу **${query}**. Попробуйте изменить текст поиска.`,
   grantRequestSent: "Запрос отправлен. Ожидайте одобрения лидера клана или модератора.",
-  removeDone: (role: string) => `Роль **${role}** снята.`,
-  removeNoOwnClanRole: "У вас нет клановых ролей для снятия.",
   removeNotYourClanRole: "Вы можете снять только свою клановую роль.",
   targetDoesNotHaveClanRole: "Участник больше не состоит в выбранном клане.",
 
   pendingGrantTitle: "Запрос: выдать роль",
-  pendingRemoveTitle: "Запрос: снять роль",
   pendingGrantLeaderPing: (mentions: string) =>
     `Лидеры клана, проверьте запрос: ${mentions}`,
   pendingGrantLeaderNote: "Запрошена также роль «Лидер клана».",
@@ -78,32 +62,6 @@ export const clanTxt = {
   noManageRoles: "У бота нет права управлять ролями или роль бота слишком низко.",
   roleMissing: "Клановая роль больше не существует.",
   targetMissing: "Участник не найден на сервере.",
-
-  wizardWelcome: (min: number, max: number) =>
-    `Заявка на **новую клановую роль**`,
-  wizardAskName: "Напишите **полное название клана** (как будет называться роль в Discord).",
-  wizardAskColor: "Выберите **цвет роли**:",
-  wizardColorPlaceholder: "Выберите цвет роли",
-  wizardAskRoster: (min: number, max: number) =>
-    `Отметьте **${min}–${max}** участников \`@mention\`. Лидеры (1–2) **входят** в этот список.\n` +
-    `Сделайте это в одном сообщении (каждый участник с новой строки):\n` +
-    `👑 @\n` +
-    `@\n` +
-    `@\n` +
-    `Если 👑 не указана, лидером будет считаться первый упомянутый участник.`,
-  wizardWrongUser: "Это не ваша заявка.",
-  wizardNameInvalid: (min: number, max: number) =>
-    `Некорректное название. Длина ${min}–${max} символов, без @ и #.`,
-  wizardNameDuplicate: "Роль с таким названием уже существует.",
-  wizardRosterInvalid: (min: number, max: number) =>
-    `Нужно **${min}–${max}** уникальных участников на сервере.`,
-  wizardLeadersInvalid: "Укажите **1–2** лидеров среди участников.",
-  wizardReviewTitle: "Проверьте заявку",
-  wizardConfirm: "Подтвердить",
-  wizardEdit: "Изменить",
-  wizardSubmitted:
-    "Заявка отправлена модераторам. Ожидайте решения. D-ранг проверяется модераторами вручную.",
-  wizardCancelled: "Заявка отменена.",
 
   modCreateTitle: "Новая заявка на клан",
   modCreateReminder: "Проверьте D-ранг и состав в игре перед принятием.",
@@ -129,8 +87,6 @@ export const clanTxt = {
 
   auditGrant: (mod: string, target: string, role: string) =>
     `[Клан] ${mod} одобрил выдачу **${role}** → ${target}`,
-  auditRemove: (mod: string, target: string, role: string) =>
-    `[Клан] ${mod} одобрил снятие **${role}** с ${target}`,
   auditRemoveDirect: (actor: string, target: string, role: string) =>
     `[Клан] ${actor} снял роль **${role}** у ${target}`,
   auditCreate: (mod: string, role: string, n: number) =>

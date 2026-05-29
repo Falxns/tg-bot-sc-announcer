@@ -221,11 +221,11 @@ function parseCreateCommand(
 
   const invalid = validateClanName(clanName, CLAN_NAME_MIN_LEN, CLAN_NAME_MAX_LEN);
   if (invalid) {
-    return { kind: "error", message: clanTxt.wizardNameInvalid(CLAN_NAME_MIN_LEN, CLAN_NAME_MAX_LEN) };
+    return { kind: "error", message: clanTxt.createNameInvalid(CLAN_NAME_MIN_LEN, CLAN_NAME_MAX_LEN) };
   }
   const dup = guild.roles.cache.find((r) => r.name.toLowerCase() === clanName.toLowerCase());
   if (dup) {
-    return { kind: "error", message: clanTxt.wizardNameDuplicate };
+    return { kind: "error", message: clanTxt.createNameDuplicate };
   }
 
   const preset = getClanColorPresetByLabel(colorLabel);
@@ -235,7 +235,7 @@ function parseCreateCommand(
 
   const memberIds = [...new Set(mentions.users.keys())];
   if (memberIds.length < DISCORD_CLAN_ROSTER_MIN || memberIds.length > DISCORD_CLAN_ROSTER_MAX) {
-    return { kind: "error", message: clanTxt.wizardRosterInvalid(DISCORD_CLAN_ROSTER_MIN, DISCORD_CLAN_ROSTER_MAX) };
+    return { kind: "error", message: clanTxt.createRosterInvalid(DISCORD_CLAN_ROSTER_MIN, DISCORD_CLAN_ROSTER_MAX) };
   }
 
   const onServer: string[] = [];
@@ -244,7 +244,7 @@ function parseCreateCommand(
     if (m) onServer.push(id);
   }
   if (onServer.length !== memberIds.length) {
-    return { kind: "error", message: clanTxt.wizardRosterInvalid(DISCORD_CLAN_ROSTER_MIN, DISCORD_CLAN_ROSTER_MAX) };
+    return { kind: "error", message: clanTxt.createRosterInvalid(DISCORD_CLAN_ROSTER_MIN, DISCORD_CLAN_ROSTER_MAX) };
   }
 
   let leaders = parseLeaderIdsFromMentions(rosterLines, onServer);
@@ -252,10 +252,10 @@ function parseCreateCommand(
     leaders = [onServer[0]];
   }
   if (leaders.length < 1 || leaders.length > MAX_CLAN_LEADERS) {
-    return { kind: "error", message: clanTxt.wizardLeadersInvalid };
+    return { kind: "error", message: clanTxt.createLeadersInvalid };
   }
   if (!leaders.every((id) => onServer.includes(id))) {
-    return { kind: "error", message: clanTxt.wizardLeadersInvalid };
+    return { kind: "error", message: clanTxt.createLeadersInvalid };
   }
 
   return {

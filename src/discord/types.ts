@@ -79,28 +79,11 @@ export type ClanGrantRequest = {
   createdAt: number;
 };
 
-export type ClanCreateWizardStep = "name" | "color" | "roster" | "review";
-
-export type ClanCreateWizardState = {
-  threadId: string;
-  guildId: string;
-  channelId: string;
-  applicantId: string;
-  step: ClanCreateWizardStep;
-  clanName?: string;
-  colorPresetId?: string;
-  colorHex?: number;
-  colorLabel?: string;
-  memberIds?: string[];
-  leaderIds?: string[];
-  createdAt: number;
-  updatedAt: number;
-};
-
 export type ClanCreateRequest = {
   id: string;
   guildId: string;
   applicantId: string;
+  /** Rules thread or channel id — applicant is notified here on mod decision. */
   threadId: string;
   clanName: string;
   colorHex: number;
