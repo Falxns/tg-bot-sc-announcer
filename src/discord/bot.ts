@@ -140,18 +140,27 @@ export async function startDiscordBot(): Promise<void> {
   });
 
   client.on("messageCreate", (message) => {
-    void handleClanRulesMessage(message).catch((err) => {
-      console.error("Discord clan rules message handler failed:", err);
-    });
-    void handleStaffSummaryCreatorMessage(message).catch((err) => {
-      console.error("Discord staff summary creator message handler failed:", err);
-    });
-    void handleMessageReviewCreate(message).catch((err) => {
-      console.error("Discord message review create handler failed:", err);
-    });
-    void handleModerationMessage(message).catch((err) => {
-      console.error("Discord moderation handler failed:", err);
-    });
+    void (async () => {
+      let clanHandled = false;
+      try {
+        clanHandled = await handleClanRulesMessage(message);
+      } catch (err) {
+        console.error("Discord clan rules message handler failed:", err);
+      }
+
+      if (!clanHandled) {
+        void handleModerationMessage(message).catch((err) => {
+          console.error("Discord moderation handler failed:", err);
+        });
+      }
+
+      void handleStaffSummaryCreatorMessage(message).catch((err) => {
+        console.error("Discord staff summary creator message handler failed:", err);
+      });
+      void handleMessageReviewCreate(message).catch((err) => {
+        console.error("Discord message review create handler failed:", err);
+      });
+    })();
   });
 
   client.on("messageDelete", (message) => {

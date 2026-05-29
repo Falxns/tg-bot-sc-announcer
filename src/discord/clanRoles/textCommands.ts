@@ -267,6 +267,13 @@ function parseCreateCommand(
   };
 }
 
+export function isClanCommandMessage(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  const firstLine = trimmed.split(/\r?\n/)[0] ?? "";
+  return GRANT_PREFIX.test(trimmed) || REMOVE_PREFIX.test(trimmed) || CREATE_HEADER.test(firstLine);
+}
+
 export function parseClanTextCommand(
   guild: Guild,
   member: GuildMember,

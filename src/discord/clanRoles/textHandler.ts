@@ -1,11 +1,22 @@
 import type { Message } from "discord.js";
 import { clanRolesConfigured } from "../../config";
+import { isDiscordModerator } from "../guildPermissions";
+import { applyLightStrikeForMessage, notifyUserEphemeralFallback } from "../moderation";
+import { discordModerationLogTitles as logTitles } from "../userStrings";
 import { isClanRulesThread } from "./helpers";
 import { submitCreateRequestFromText } from "./modQueue";
 import { performDirectRemove, submitGrantRequest } from "./panel";
 import { ensureGuildMembersCached } from "./resolver";
-import { parseClanTextCommand } from "./textCommands";
+import { isClanCommandMessage, parseClanTextCommand } from "./textCommands";
 import { clanTxt } from "./strings";
+
+async function replyClanFeedback(message: Message, content: string, ephemeral: boolean): Promise<void> {
+  if (ephemeral) {
+    await notifyUserEphemeralFallback(message, content);
+    return;
+  }
+  await message.reply({ content, allowedMentions: { parse: [] } }).catch(() => undefined);
+}
 
 export async function handleClanRulesMessage(message: Message): Promise<boolean> {
   if (!message.inGuild() || !message.guild || message.author.bot) return false;
@@ -16,20 +27,31 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
   const member = message.member;
   if (!member) return false;
 
+  if (!isClanCommandMessage(message.content)) {
+    if (isDiscordModerator(member)) return true;
+    await applyLightStrikeForMessage(
+      message,
+      member,
+      clanTxt.clanThreadOffTopicReason,
+      logTitles.minorWarnOnly,
+    );
+    return true;
+  }
+
   await ensureGuildMembersCached(message.guild);
 
   const parsed = parseClanTextCommand(message.guild, member, message.content, message.mentions);
-  if (!parsed) return false;
+  if (!parsed) return true;
 
   if ("kind" in parsed && parsed.kind === "error") {
-    await message.reply(parsed.message).catch(() => undefined);
+    await replyClanFeedback(message, parsed.message, true);
     return true;
   }
 
   if (parsed.kind === "grant") {
     const target = await message.guild.members.fetch(parsed.targetUserId).catch(() => null);
     if (!target) {
-      await message.reply(clanTxt.targetMissing).catch(() => undefined);
+      await replyClanFeedback(message, clanTxt.targetMissing, true);
       return true;
     }
     await submitGrantRequest(
@@ -39,7 +61,7 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       parsed.clanRole,
       parsed.targetUserId,
     );
-    await message.reply(clanTxt.grantRequestSent).catch(() => undefined);
+    await replyClanFeedback(message, clanTxt.grantRequestSent, true);
     return true;
   }
 
@@ -51,28 +73,28 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       parsed.targetUserId,
     );
     if (!removed.ok) {
-      await message.reply(removed.error).catch(() => undefined);
+      await replyClanFeedback(message, removed.error, true);
       return true;
     }
     const targetLabel =
-      parsed.targetUserId === message.author.id
-        ? "вас"
-        : (removed.target.toString());
-    await message
-      .reply(clanTxt.cmdRemoveDoneTarget(parsed.clanRole.name, targetLabel))
-      .catch(() => undefined);
+      parsed.targetUserId === message.author.id ? "вас" : removed.target.toString();
+    await replyClanFeedback(
+      message,
+      clanTxt.cmdRemoveDoneTarget(parsed.clanRole.name, targetLabel),
+      true,
+    );
     return true;
   }
 
   if (parsed.kind === "create") {
     const err = await submitCreateRequestFromText(message.guild, message.author.id, message.channel.id, parsed);
     if (err) {
-      await message.reply(err).catch(() => undefined);
+      await replyClanFeedback(message, err, true);
       return true;
     }
-    await message.reply(clanTxt.cmdCreateSubmitted).catch(() => undefined);
+    await replyClanFeedback(message, clanTxt.cmdCreateSubmitted, true);
     return true;
   }
 
-  return false;
+  return true;
 }

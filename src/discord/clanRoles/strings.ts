@@ -32,6 +32,8 @@ export const clanTxt = {
   cmdCreateInvalidColor: (label: string) => `Неизвестный цвет: **${label}**. Укажите название из списка пресетов.`,
   cmdCreateSubmitted: "Заявка на клан отправлена модераторам. D-ранг проверяется вручную.",
   cmdRemoveDoneTarget: (role: string, target: string) => `Роль **${role}** снята с ${target}.`,
+  clanThreadOffTopicReason:
+    "В ветке клановых команд разрешены только сообщения вида +клан, -клан и блок !создать.",
 
   createNameInvalid: (min: number, max: number) =>
     `Некорректное название. Длина ${min}–${max} символов, без @ и #.`,
