@@ -463,17 +463,10 @@ export async function applyLightStrikeForMessage(
   });
 }
 
-/** DM user; if DMs closed, short-lived reply in the same channel (not true ephemeral). */
-export async function notifyUserEphemeralFallback(message: Message, content: string): Promise<void> {
-  try {
-    await message.author.send(content);
-  } catch {
-    const ch = message.channel;
-    if (ch.isTextBased() && "send" in ch) {
-      const notice = await message.reply({ content, allowedMentions: { parse: [] } }).catch(() => null);
-      if (notice) await deleteLater(notice, DISCORD_WARNING_MESSAGE_TTL_MS);
-    }
-  }
+/** Reply in channel/thread, then delete the bot message after TTL. */
+export async function replyInChannelAutoDelete(message: Message, content: string): Promise<void> {
+  const reply = await message.reply({ content, allowedMentions: { parse: [] } }).catch(() => null);
+  if (reply) await deleteLater(reply, DISCORD_WARNING_MESSAGE_TTL_MS);
 }
 
 /** Prefer human-readable channel/thread name; fetch if missing from cache. */

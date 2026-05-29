@@ -1,7 +1,7 @@
 import type { Message } from "discord.js";
 import { clanRolesConfigured } from "../../config";
 import { isDiscordModerator } from "../guildPermissions";
-import { applyLightStrikeForMessage, notifyUserEphemeralFallback } from "../moderation";
+import { applyLightStrikeForMessage, replyInChannelAutoDelete } from "../moderation";
 import { discordModerationLogTitles as logTitles } from "../userStrings";
 import { isClanRulesThread } from "./helpers";
 import { submitCreateRequestFromText } from "./modQueue";
@@ -9,14 +9,6 @@ import { performDirectRemove, submitGrantRequest } from "./panel";
 import { ensureGuildMembersCached } from "./resolver";
 import { isClanCommandMessage, parseClanTextCommand } from "./textCommands";
 import { clanTxt } from "./strings";
-
-async function replyClanFeedback(message: Message, content: string, ephemeral: boolean): Promise<void> {
-  if (ephemeral) {
-    await notifyUserEphemeralFallback(message, content);
-    return;
-  }
-  await message.reply({ content, allowedMentions: { parse: [] } }).catch(() => undefined);
-}
 
 export async function handleClanRulesMessage(message: Message): Promise<boolean> {
   if (!message.inGuild() || !message.guild || message.author.bot) return false;
@@ -44,14 +36,14 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
   if (!parsed) return true;
 
   if ("kind" in parsed && parsed.kind === "error") {
-    await replyClanFeedback(message, parsed.message, true);
+    await replyInChannelAutoDelete(message, parsed.message);
     return true;
   }
 
   if (parsed.kind === "grant") {
     const target = await message.guild.members.fetch(parsed.targetUserId).catch(() => null);
     if (!target) {
-      await replyClanFeedback(message, clanTxt.targetMissing, true);
+      await replyInChannelAutoDelete(message, clanTxt.targetMissing);
       return true;
     }
     await submitGrantRequest(
@@ -61,7 +53,7 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       parsed.clanRole,
       parsed.targetUserId,
     );
-    await replyClanFeedback(message, clanTxt.grantRequestSent, true);
+    await replyInChannelAutoDelete(message, clanTxt.grantRequestSent);
     return true;
   }
 
@@ -73,15 +65,14 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       parsed.targetUserId,
     );
     if (!removed.ok) {
-      await replyClanFeedback(message, removed.error, true);
+      await replyInChannelAutoDelete(message, removed.error);
       return true;
     }
     const targetLabel =
       parsed.targetUserId === message.author.id ? "вас" : removed.target.toString();
-    await replyClanFeedback(
+    await replyInChannelAutoDelete(
       message,
       clanTxt.cmdRemoveDoneTarget(parsed.clanRole.name, targetLabel),
-      true,
     );
     return true;
   }
@@ -89,10 +80,10 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
   if (parsed.kind === "create") {
     const err = await submitCreateRequestFromText(message.guild, message.author.id, message.channel.id, parsed);
     if (err) {
-      await replyClanFeedback(message, err, true);
+      await replyInChannelAutoDelete(message, err);
       return true;
     }
-    await replyClanFeedback(message, clanTxt.cmdCreateSubmitted, true);
+    await replyInChannelAutoDelete(message, clanTxt.cmdCreateSubmitted);
     return true;
   }
 

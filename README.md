@@ -184,7 +184,7 @@ Leader-approved clan workflows (separate from self-serve **`/rolepanel`** toggle
    - **`+клан @участник`** — leader of one clan grants to a teammate; **`+клан Название @участник`** — explicit clan (leader/mod)
    - **`-клан`** — remove your role if you have exactly one clan role; **`-клан @участник`** — leader/mod shortcuts per rules; **`-клан Название @участник`** — explicit remove (immediate)
    - **`!создать`** block — line 2: clan name, line 3: color preset label (e.g. `Красный`), then `@mention` roster with 👑 for leaders (**`DISCORD_CLAN_ROSTER_MIN`–`DISCORD_CLAN_ROSTER_MAX`**) → mod review in **`DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID`** (**Принять / Отклонить**). D-rank is checked **manually** by mods.
-3. Bot feedback on commands is sent **via DM** (or a short auto-deleted reply if DMs are closed). Other messages in the rules thread are **deleted** and count as a **strike** (same ladder as automod).
+3. Bot replies to commands in the thread and **auto-deletes** after **`DISCORD_WARNING_MESSAGE_TTL_MS`**. Other messages in the rules thread are **deleted** and count as a **strike** (same ladder as automod).
 3. Grant approval embed shows who resolved the request (**лидер клана** or **модератор**) with a working `@mention` in the message body.
 
 **Leader model:** one shared **«Лидер клана»** role; max **2** leaders per clan (live count). Removing a member’s last clan role also strips the leader meta-role if they no longer lead any clan.
