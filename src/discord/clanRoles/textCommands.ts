@@ -314,6 +314,10 @@ function parseRemoveLeaderCommand(
   const isMod = isClanModerator(member);
   const ledClans = listLedClanRoles(guild, member);
 
+  if (!isMod && targetMentionId && targetMentionId !== member.id) {
+    return { kind: "error", message: clanTxt.cmdLeaderRemoveLeaderSelfOnly };
+  }
+
   if (!targetMentionId && !clanQuery) {
     if (isMod) {
       return { kind: "error", message: clanTxt.cmdModNeedsTarget };
@@ -328,17 +332,6 @@ function parseRemoveLeaderCommand(
   }
 
   if (targetMentionId && !clanQuery) {
-    if (ledClans.length === 1) {
-      const role = ledClans[0];
-      const target = guild.members.cache.get(targetMentionId);
-      if (!target || !isClanLeaderFor(target, role.id)) {
-        return { kind: "error", message: clanTxt.notClanLeader };
-      }
-      return { kind: "remove_leader", clanRole: role, targetUserId: targetMentionId };
-    }
-    if (ledClans.length > 1) {
-      return { kind: "error", message: clanTxt.cmdLeaderMultipleClans };
-    }
     if (isMod) {
       const target = guild.members.cache.get(targetMentionId);
       if (!target) {
@@ -353,26 +346,26 @@ function parseRemoveLeaderCommand(
       }
       return { kind: "error", message: clanTxt.notClanLeader };
     }
-    return { kind: "error", message: clanTxt.cmdInvalidFormat("-лидер Название @участник") };
+    return { kind: "error", message: clanTxt.cmdInvalidFormat("-лидер или -лидер Название") };
   }
 
   if (!clanQuery) {
-    return { kind: "error", message: clanTxt.cmdInvalidFormat("-лидер Название или -лидер @участник") };
+    return { kind: "error", message: clanTxt.cmdInvalidFormat("-лидер или -лидер Название") };
   }
 
   const resolved = resolveClanQuery(guild, clanQuery);
   if (isParseError(resolved)) return resolved;
 
   const targetUserId = targetMentionId ?? member.id;
+  if (!isMod && targetUserId !== member.id) {
+    return { kind: "error", message: clanTxt.cmdLeaderRemoveLeaderSelfOnly };
+  }
+
   if (targetUserId === member.id) {
     if (!isMod && !isClanLeaderFor(member, resolved.id)) {
       return { kind: "error", message: clanTxt.notClanLeader };
     }
   } else {
-    const isLeader = isClanLeaderFor(member, resolved.id);
-    if (!isMod && !isLeader) {
-      return { kind: "error", message: clanTxt.cmdTargetOnlyLeaderMod };
-    }
     const target = guild.members.cache.get(targetUserId);
     if (!target || !isClanLeaderFor(target, resolved.id)) {
       return { kind: "error", message: clanTxt.notClanLeader };

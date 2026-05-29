@@ -31,6 +31,7 @@ import { newClanRequestId } from "./helpers";
 import {
   canApproveLeaderMetaClanStage,
   canResolveLeaderMetaModRequest,
+  isClanModerator,
 } from "./permissions";
 import { countClanLeaders, isClanLeaderFor, listClanLeaderIds } from "./resolver";
 import { clanTxt } from "./strings";
@@ -225,6 +226,9 @@ export async function performDirectLeaderMetaRemove(
   role: Role,
   targetUserId: string,
 ): Promise<{ ok: true; target: GuildMember } | { ok: false; error: string }> {
+  if (!isClanModerator(actor) && actor.id !== targetUserId) {
+    return { ok: false, error: clanTxt.cmdLeaderRemoveLeaderSelfOnly };
+  }
   const target = await guild.members.fetch(targetUserId).catch(() => null);
   if (!target) return { ok: false, error: clanTxt.targetMissing };
   const result = await removeLeaderMetaFromMember(guild, target, role);
