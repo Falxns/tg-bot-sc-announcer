@@ -133,7 +133,7 @@ export async function grantClanRoleToMember(
   if (blocker) return { ok: false, error: blocker };
 
   if (grantLeaderMeta) {
-    if (countClanLeaders(guild, clanRole.id) >= 2 && !target.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) {
+    if ((await countClanLeaders(guild, clanRole.id)) >= 2 && !target.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) {
       return { ok: false, error: clanTxt.grantLeaderCap(2) };
     }
   }
@@ -227,7 +227,7 @@ export async function executeCreateRequest(
 
   if (leaderMetaId) {
     for (const userId of request.leaderIds) {
-      if (countClanLeaders(guild, role.id) >= 2) break;
+      if ((await countClanLeaders(guild, role.id)) >= 2) break;
       const member = await guild.members.fetch(userId).catch(() => null);
       if (!member) continue;
       if (!member.roles.cache.has(role.id)) continue;
@@ -259,8 +259,10 @@ export async function formatClansListEmbedLines(guild: Guild): Promise<string[]>
   await ensureGuildMembersCached(guild);
   const roles = listClanRoles(guild);
   if (roles.length === 0) return [clanTxt.clanslistEmpty];
-  return roles.map((r) => {
-    const leaders = countClanLeaders(guild, r.id);
-    return clanTxt.clanslistLine(r.name, leaders, countMembersWithRole(guild, r.id));
-  });
+  const lines: string[] = [];
+  for (const r of roles) {
+    const leaders = await countClanLeaders(guild, r.id);
+    lines.push(clanTxt.clanslistLine(r.name, leaders, countMembersWithRole(guild, r.id)));
+  }
+  return lines;
 }

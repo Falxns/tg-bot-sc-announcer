@@ -23,7 +23,7 @@ import { grantClanRoleToMember, postClanAuditLine, removeClanRoleFromMember } fr
 import { CLAN_REQ_PREFIX, MAX_CLAN_LEADERS } from "./constants";
 import { newClanRequestId } from "./helpers";
 import { canApproveGrantRequest } from "./permissions";
-import { countClanLeaders, ensureGuildMembersCached, isClanLeaderFor, listClanLeaderIds } from "./resolver";
+import { countClanLeaders, isClanLeaderFor, listClanLeaderIds } from "./resolver";
 import { clanTxt } from "./strings";
 
 export function isClanGrantCustomId(customId: string): boolean {
@@ -70,8 +70,7 @@ export async function postPendingGrantRequest(
   let pingContent: string | undefined;
   let leaderIdsToPing: string[] = [];
   if (request.type === "grant") {
-    await ensureGuildMembersCached(guild);
-    leaderIdsToPing = listClanLeaderIds(guild, request.clanRoleId).filter(
+    leaderIdsToPing = (await listClanLeaderIds(guild, request.clanRoleId)).filter(
       (id) => id !== request.requesterUserId,
     );
     if (leaderIdsToPing.length > 0) {
@@ -106,7 +105,8 @@ export async function postPendingGrantRequest(
       content: pingContent,
       embeds: [embed],
       components: [row],
-      allowedMentions: leaderIdsToPing.length > 0 ? { users: leaderIdsToPing } : undefined,
+      allowedMentions:
+        leaderIdsToPing.length > 0 ? { parse: ["users"], users: leaderIdsToPing } : undefined,
     })
     .catch(() => null);
   if (msg) {
@@ -201,7 +201,7 @@ export async function handleClanGrantButton(interaction: ButtonInteraction): Pro
     return true;
   }
 
-  if (request.grantLeaderMeta && countClanLeaders(interaction.guild, request.clanRoleId) >= MAX_CLAN_LEADERS) {
+  if (request.grantLeaderMeta && (await countClanLeaders(interaction.guild, request.clanRoleId)) >= MAX_CLAN_LEADERS) {
     await interaction.followUp({ content: clanTxt.grantLeaderCap(MAX_CLAN_LEADERS), flags: MessageFlags.Ephemeral });
     return true;
   }

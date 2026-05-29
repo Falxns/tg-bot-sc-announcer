@@ -60,16 +60,29 @@ export function isClanLeaderFor(member: GuildMember, clanRoleId: string): boolea
   return member.roles.cache.has(clanRoleId) && member.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID);
 }
 
-export function listClanLeaderIds(guild: Guild, clanRoleId: string): string[] {
-  if (!DISCORD_CLAN_LEADER_ROLE_ID) return [];
-  return listMemberIdsWithRole(guild, clanRoleId).filter((id) => {
-    const member = guild.members.cache.get(id);
-    return member ? isClanLeaderFor(member, clanRoleId) : false;
-  });
+/** Load guild members when a role's member list may be incomplete (cache-only in discord.js). */
+export async function ensureRoleMembersCached(guild: Guild, roleId: string): Promise<Role | null> {
+  const role = guild.roles.cache.get(roleId) ?? (await guild.roles.fetch(roleId).catch(() => null));
+  if (!role) return null;
+  if (role.members.size === 0 && guild.memberCount > 0) {
+    await guild.members.fetch().catch(() => undefined);
+  }
+  return guild.roles.cache.get(roleId) ?? role;
 }
 
-export function countClanLeaders(guild: Guild, clanRoleId: string): number {
-  return listClanLeaderIds(guild, clanRoleId).length;
+export async function listClanLeaderIds(guild: Guild, clanRoleId: string): Promise<string[]> {
+  if (!DISCORD_CLAN_LEADER_ROLE_ID) return [];
+  const clanRole = await ensureRoleMembersCached(guild, clanRoleId);
+  if (!clanRole) return [];
+  const ids: string[] = [];
+  for (const [, member] of clanRole.members) {
+    if (isClanLeaderFor(member, clanRoleId)) ids.push(member.id);
+  }
+  return ids;
+}
+
+export async function countClanLeaders(guild: Guild, clanRoleId: string): Promise<number> {
+  return (await listClanLeaderIds(guild, clanRoleId)).length;
 }
 
 /** True if member is leader (meta-role) of at least one clan they still belong to. */
