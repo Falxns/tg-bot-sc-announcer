@@ -20,15 +20,10 @@ import {
   sweepTempVoiceOnReady,
 } from "./tempVoice";
 import {
+  handleClanGrantButton,
   handleClanModButton,
   handleClanModModal,
-  handleClanPanelButton,
-  handleClanPanelModal,
-  handleClanStringSelect,
-  handleClanUserSelect,
-  handleClanWizardButton,
-  handleClanWizardMessage,
-  handleClanWizardStringSelect,
+  handleClanRulesMessage,
   initClanRolesModule,
   isClanRolesInteractionCustomId,
 } from "./clanRoles";
@@ -92,27 +87,22 @@ export async function startDiscordBot(): Promise<void> {
         if (interaction.isModalSubmit()) {
           if (await handleTempVoiceModal(interaction)) return;
           if (await handleClanModModal(interaction)) return;
-          if (await handleClanPanelModal(interaction)) return;
           await handleDiscordModal(interaction);
           return;
         }
         if (interaction.isStringSelectMenu()) {
           if (await handleTempVoiceStringSelect(interaction)) return;
-          if (await handleClanStringSelect(interaction)) return;
-          if (await handleClanWizardStringSelect(interaction)) return;
           return;
         }
         if (interaction.isUserSelectMenu()) {
           if (await handleTempVoiceUserSelect(interaction)) return;
-          if (await handleClanUserSelect(interaction)) return;
           return;
         }
         if (interaction.isButton()) {
           if (await handleTempVoiceButton(interaction)) return;
           if (isClanRolesInteractionCustomId(interaction.customId)) {
             if (await handleClanModButton(interaction)) return;
-            if (await handleClanWizardButton(interaction)) return;
-            if (await handleClanPanelButton(interaction)) return;
+            if (await handleClanGrantButton(interaction)) return;
           }
           await handleRoleButtonInteraction(interaction);
         }
@@ -150,8 +140,8 @@ export async function startDiscordBot(): Promise<void> {
   });
 
   client.on("messageCreate", (message) => {
-    void handleClanWizardMessage(message).catch((err) => {
-      console.error("Discord clan wizard message handler failed:", err);
+    void handleClanRulesMessage(message).catch((err) => {
+      console.error("Discord clan rules message handler failed:", err);
     });
     void handleStaffSummaryCreatorMessage(message).catch((err) => {
       console.error("Discord staff summary creator message handler failed:", err);

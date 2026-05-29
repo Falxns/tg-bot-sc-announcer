@@ -152,7 +152,7 @@ Author list and “last seen” state are saved to the state file and restored o
 - `/editrolepanel channel:<channel> message_id:<snowflake> [role1…role6] [label1…label6] [single_role] [embed_*] [image]` — edit an existing **role panel** message; **per-slot merge**: set only **`roleN`** / **`labelN`** for the button you want to change (others stay); omit all role/label options to keep buttons; modal edits body text (max **2000** chars). Same **`embed_*`** and **`image`** as `/edit` except no **`embed_footer_icon_url`** / **`embed_author_icon_url`** (Discord 25-option cap with six role slots)
 - `/editlinkpanel channel:<channel> message_id:<snowflake> [url1…url5] [label1…label5] [embed_*] [image]` — edit an existing **link button** message; **per-slot merge**: set only **`urlN`** / **`labelN`** for the slot to change; full **`embed_*`** and **`image`** like `/edit`
 - `/voicepanel [channel]` — publish the **temporary voice** control panel (requires `DISCORD_VOICE_ENABLED=1`; see [docs/DISCORD_VOICE_SETUP.md](docs/DISCORD_VOICE_SETUP.md))
-- `/clanpanel [channel]` — publish the **clan roles** panel (**Получить роль** / **Снять роль** / **Создать клан**); requires `DISCORD_CLAN_ENABLED=1` and **`DISCORD_CLAN_LEADER_ROLE_ID`**
+- `/clanpanel [channel]` — publish **clan role command help** in the rules channel (plain-text `+клан` / `-клан` / `!создать`); requires `DISCORD_CLAN_ENABLED=1` and **`DISCORD_CLAN_LEADER_ROLE_ID`**
 - `/clanslist` — mod-only list of clan roles with live leader/member counts (requires clan roles enabled)
 - `/mute user:<user> duration:<choice> [channel_preset] [rule_preset] [reason] [screenshot] [message_id]` — manual timeout at the chosen duration (not `DISCORD_TIMEOUT_LADDER_MS[tier]`); caps server-wide strikes at **`DISCORD_WARNINGS_BEFORE_TIMEOUT`** and advances the unified ladder tier on success; **`duration`**: 1h, 6h, 12h, 1d, 3d, 7d, 14d, 28d; **`channel_preset`** / **`rule_preset`** autocomplete (empty `channel_preset` → auto channel text from policy); **`reason`** overrides both; optional **`screenshot`** and **`message_id`**
 - `/unmute user:<user>` — clears Discord timeout
@@ -172,19 +172,23 @@ Author list and “last seen” state are saved to the state file and restored o
 
 **Message review (`DISCORD_MESSAGE_REVIEW_CHANNEL_ID` + `DISCORD_MESSAGE_REVIEW_SOURCE_CHANNEL_IDS`):** bot caches posts with media or links in RAM (~1 h). If the author **deletes their own message**, a copy is posted to the review channel for moderator follow-up (`/strike`, `/mute`). Automod-deleted messages are not posted here. Cache is cleared on bot restart.
 
-Role-panel definitions, moderation state (**`discordGlobalWarns`**, **`discordMuteTier`**, **`discordModerationLastViolationAt`**, creator-summary cooldown timestamps), temp voice rooms, and **clan role state** (panel message IDs, pending grant/create requests, active create wizards) are saved in shared bot state (`file` or Upstash) and restored on restart. Old per-channel warning / dual-tier keys are **not** loaded after deploy (one-time reset).
+Role-panel definitions, moderation state (**`discordGlobalWarns`**, **`discordMuteTier`**, **`discordModerationLastViolationAt`**, creator-summary cooldown timestamps), temp voice rooms, and **clan role state** (help message IDs, pending grant/create requests) are saved in shared bot state (`file` or Upstash) and restored on restart. Old per-channel warning / dual-tier keys are **not** loaded after deploy (one-time reset).
 
 ### Clan roles (`DISCORD_CLAN_ENABLED=1`)
 
 Leader-approved clan workflows (separate from self-serve **`/rolepanel`** toggles):
 
-1. Run **`/clanpanel`** in the rules channel (or pass **`channel`**). Set **`DISCORD_CLAN_RULES_MESSAGE_ID`** to the parent rules post so grant/remove requests land in its thread.
-2. **Получить роль / Снять роль** — user picks a clan → pending request in the rules thread → clan leader (has that clan role + **`DISCORD_CLAN_LEADER_ROLE_ID`**) or mod clicks **Одобрить / Отклонить**.
-3. **Создать клан** — opens a **private thread** wizard: reply with clan name → pick color from Russian preset select → `@mention` roster (**`DISCORD_CLAN_ROSTER_MIN`–`DISCORD_CLAN_ROSTER_MAX`**, leaders marked with 👑) → **Подтвердить** → mod review in **`DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID`** (**Принять / Отклонить**). D-rank is checked **manually** by mods (bot shows a reminder only).
+1. Run **`/clanpanel`** in the rules channel (or pass **`channel`**). Set **`DISCORD_CLAN_RULES_MESSAGE_ID`** to the parent rules post so requests land in its thread.
+2. In the **rules thread**, users post plain-text commands:
+   - **`+клан Название`** — request a clan role for yourself (pending; leaders/mods click **Одобрить / Отклонить** on the bot message)
+   - **`+клан @участник`** — leader of one clan grants to a teammate; **`+клан Название @участник`** — explicit clan (leader/mod)
+   - **`-клан`** — remove your role if you have exactly one clan role; **`-клан @участник`** — leader/mod shortcuts per rules; **`-клан Название @участник`** — explicit remove (immediate)
+   - **`!создать`** block — line 2: clan name, line 3: color preset label (e.g. `Красный`), then `@mention` roster with 👑 for leaders (**`DISCORD_CLAN_ROSTER_MIN`–`DISCORD_CLAN_ROSTER_MAX`**) → mod review in **`DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID`** (**Принять / Отклонить**). D-rank is checked **manually** by mods.
+3. Grant approval embed shows who resolved the request (**лидер клана** or **модератор**) with a working `@mention` in the message body.
 
 **Leader model:** one shared **«Лидер клана»** role; max **2** leaders per clan (live count). Removing a member’s last clan role also strips the leader meta-role if they no longer lead any clan.
 
-**Bot needs:** **Manage Roles** (role position above clan roles), **Message Content** intent (roster `@mention` parsing in threads).
+**Bot needs:** **Manage Roles** (role position above clan roles), **Message Content** intent (command parsing and roster `@mention` in the rules thread).
 
 ### Discord AutoMod (recommended)
 

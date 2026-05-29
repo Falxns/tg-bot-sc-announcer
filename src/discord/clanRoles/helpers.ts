@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import type { Guild, PrivateThreadChannel, TextChannel, ThreadChannel } from "discord.js";
 import { ChannelType } from "discord.js";
 import { DISCORD_CLAN_RULES_MESSAGE_ID, DISCORD_MODERATOR_ROLE_IDS } from "../../config";
+import { clanRulesPanels } from "../../state";
 import type { ClanRulesPanelState } from "../types";
 
 export function newClanRequestId(): string {
@@ -77,6 +78,31 @@ export function parseLeaderIdsFromMentions(content: string, memberIds: string[])
     if (re.test(content)) leaders.push(id);
   }
   return leaders;
+}
+
+export function getClanRulesPanelForGuild(guildId: string): ClanRulesPanelState | undefined {
+  for (const panel of clanRulesPanels.values()) {
+    if (panel.guildId === guildId) return panel;
+  }
+  return undefined;
+}
+
+export function buildFallbackClanPanel(guildId: string, channelId: string): ClanRulesPanelState {
+  return {
+    messageId: "",
+    guildId,
+    channelId,
+    rulesParentMessageId: DISCORD_CLAN_RULES_MESSAGE_ID || undefined,
+  };
+}
+
+export async function isClanRulesThread(guild: Guild, thread: ThreadChannel): Promise<boolean> {
+  const rulesMsgId = DISCORD_CLAN_RULES_MESSAGE_ID;
+  if (!rulesMsgId || !thread.parentId) return false;
+  const ch = await guild.channels.fetch(thread.parentId).catch(() => null);
+  if (!ch?.isTextBased()) return false;
+  const msg = await ch.messages.fetch(rulesMsgId).catch(() => null);
+  return msg?.thread?.id === thread.id;
 }
 
 export function formatUserList(guild: Guild, userIds: string[], leaderIds: Set<string>): string {

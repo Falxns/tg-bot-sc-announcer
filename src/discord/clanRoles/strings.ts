@@ -9,6 +9,36 @@ export const clanTxt = {
   panelCreate: "Создать клан",
   panelIntro:
     "Выберите действие:\n• **Получить роль** — запрос роли существующего клана\n• **Снять роль** — снятие клановой роли\n• **Создать клан** — заявка на новую клановую роль",
+  rulesHelp:
+    "Клановые команды (в этой ветке):\n\n" +
+    "+клан Название              — запросить роль себе\n" +
+    "+клан @участник             — выдать роль (лидер одного клана)\n" +
+    "+клан Название @участник    — выдать роль (лидер/мод)\n\n" +
+    "-клан                       — снять свою роль (если один клан)\n" +
+    "-клан @участник             — снять роль (лидер одного клана / мод)\n" +
+    "-клан Название @участник    — снять роль (явно)\n\n" +
+    "!создать\n" +
+    "НазваниеКлана\n" +
+    "Красный\n" +
+    "👑 @лидер\n" +
+    "@участники…\n\n" +
+    "На запрос выдачи роли лидер или модератор нажимает **Одобрить** или **Отклонить**.",
+  rulesHelpPosted: (url: string) => `Справка по командам опубликована: ${url}`,
+
+  cmdInvalidFormat: (example: string) => `Неверный формат. Пример: ${example}`,
+  cmdClanNotFound: (query: string) => `Клан не найден: **${query}**`,
+  cmdClanAmbiguous: "Найдено несколько кланов — уточните полное название.",
+  cmdLeaderMultipleClans: "Вы лидер нескольких кланов — укажите название клана.",
+  cmdTargetMultipleClans: "У участника несколько клановых ролей — укажите название клана.",
+  cmdTargetOnlyLeaderMod: "Указать @участника может только лидер клана или модератор.",
+  cmdNoClanRoles: "У вас нет клановых ролей для снятия.",
+  cmdModNeedsTarget: "Модератор: укажите @участника или название клана.",
+  cmdTargetNotInClan: "Участник не состоит в указанном клане.",
+  cmdCreateInvalidHeader: "Неверный формат. Первая строка: `!создать`",
+  cmdCreateInvalidColor: (label: string) => `Неизвестный цвет: **${label}**. Укажите название из списка пресетов.`,
+  cmdCreateSubmitted:
+    "Заявка на клан отправлена модераторам. D-ранг проверяется вручную.",
+  cmdRemoveDoneTarget: (role: string, target: string) => `Роль **${role}** снята с ${target}.`,
 
   selectClanPlaceholder: "Выберите клан",
   selectClanEmpty: "На сервере нет доступных клановых ролей.",
@@ -39,8 +69,10 @@ export const clanTxt = {
   deny: "Отклонить",
   approved: "Запрос одобрен.",
   denied: "Запрос отклонён.",
-  requestResolvedFooter: (approved: boolean, resolver: string) =>
-    `${approved ? clanTxt.approved : clanTxt.denied} — ${resolver}`,
+  requestResolvedLine: (approved: boolean, userId: string, roleLabel: "лидер клана" | "модератор") =>
+    `\n\n**Статус:** ${approved ? clanTxt.approved : clanTxt.denied} — <@${userId}> (${roleLabel})`,
+  resolverRoleLeader: "лидер клана" as const,
+  resolverRoleMod: "модератор" as const,
   alreadyResolved: "Этот запрос уже обработан.",
   cannotApprove: "У вас нет прав одобрить этот запрос.",
   noManageRoles: "У бота нет права управлять ролями или роль бота слишком низко.",

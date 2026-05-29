@@ -15,16 +15,15 @@ import {
 import { isDiscordModerator } from "../guildPermissions";
 import { saveState, setClanRulesPanel } from "../../state";
 import { formatClansListEmbedLines } from "./actions";
-import { buildClanPanelComponents } from "./panel";
 import { clanTxt } from "./strings";
 
 export const clanPanelSlashCommand = new SlashCommandBuilder()
   .setName("clanpanel")
-  .setDescription("Опубликовать панель клановых ролей (получить / снять / создать клан)")
+  .setDescription("Опубликовать справку по клановым командам в канале правил")
   .addChannelOption((opt) =>
     opt
       .setName("channel")
-      .setDescription("Канал для панели (по умолчанию — текущий)")
+      .setDescription("Канал для справки (по умолчанию — текущий)")
       .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
       .setRequired(false),
   )
@@ -72,7 +71,7 @@ export async function handleClanSlashCommand(interaction: ChatInputCommandIntera
     return true;
   }
 
-  const msg = await channel.send({ content: clanTxt.panelIntro, components: buildClanPanelComponents() });
+  const msg = await channel.send({ content: clanTxt.rulesHelp });
   setClanRulesPanel({
     messageId: msg.id,
     guildId: interaction.guild.id,
@@ -80,6 +79,6 @@ export async function handleClanSlashCommand(interaction: ChatInputCommandIntera
     rulesParentMessageId: DISCORD_CLAN_RULES_MESSAGE_ID || undefined,
   });
   await saveState(LAST_SEEN_STATE_FILE);
-  await interaction.reply({ content: `Панель опубликована: ${msg.url}`, flags: MessageFlags.Ephemeral });
+  await interaction.reply({ content: clanTxt.rulesHelpPosted(msg.url), flags: MessageFlags.Ephemeral });
   return true;
 }

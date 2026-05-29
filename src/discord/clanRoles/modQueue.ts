@@ -18,12 +18,13 @@ import {
   LAST_SEEN_STATE_FILE,
 } from "../../config";
 import { getClanCreateRequest, saveState, setClanCreateRequest } from "../../state";
-import type { ClanCreateRequest, ClanCreateWizardState } from "../types";
+import type { ClanCreateRequest } from "../types";
 import { executeCreateRequest, postClanAuditLine } from "./actions";
 import { CLAN_MOD_PREFIX } from "./constants";
 import { formatUserList, newClanRequestId } from "./helpers";
 import { canResolveCreateRequest } from "./permissions";
 import { clanTxt } from "./strings";
+import type { ParsedCreateCommand } from "./textCommands";
 
 function modAcceptId(requestId: string): string {
   return `${CLAN_MOD_PREFIX}accept:${requestId}`;
@@ -41,49 +42,34 @@ export function isClanModCustomId(customId: string): boolean {
   return customId.startsWith(CLAN_MOD_PREFIX);
 }
 
-export async function submitCreateRequestToModQueue(
+async function postCreateRequestToModQueue(
   guild: Guild,
-  wizard: ClanCreateWizardState,
+  request: ClanCreateRequest,
+  memberIds: string[],
+  leaderIds: string[],
 ): Promise<string | null> {
   if (!DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID) return clanTxt.modReviewChannelMissing;
-  if (!wizard.clanName || wizard.colorHex === undefined || !wizard.colorLabel || !wizard.memberIds?.length) {
-    return clanTxt.internalError;
-  }
 
   const reviewChannel = await guild.channels.fetch(DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID).catch(() => null);
   if (!reviewChannel || (reviewChannel.type !== ChannelType.GuildText && reviewChannel.type !== ChannelType.GuildAnnouncement)) {
     return clanTxt.modReviewChannelMissing;
   }
 
-  const request: ClanCreateRequest = {
-    id: newClanRequestId(),
-    guildId: guild.id,
-    applicantId: wizard.applicantId,
-    threadId: wizard.threadId,
-    clanName: wizard.clanName,
-    colorHex: wizard.colorHex,
-    colorLabel: wizard.colorLabel,
-    memberIds: wizard.memberIds,
-    leaderIds: wizard.leaderIds ?? [],
-    status: "pending",
-    createdAt: Date.now(),
-  };
-
-  const applicant = await guild.members.fetch(wizard.applicantId).catch(() => null);
-  const leaderSet = new Set(wizard.leaderIds ?? []);
+  const applicant = await guild.members.fetch(request.applicantId).catch(() => null);
+  const leaderSet = new Set(leaderIds);
   const embed = new EmbedBuilder()
     .setTitle(clanTxt.modCreateTitle)
-    .setColor(wizard.colorHex)
+    .setColor(request.colorHex)
     .setDescription(
-      `**Заявитель:** ${applicant ?? `<@${wizard.applicantId}>`}\n` +
-        `**Клан:** ${wizard.clanName}\n` +
-        `**Цвет:** ${wizard.colorLabel}\n` +
-        `**Состав:** ${wizard.memberIds.length} (лидеров: ${wizard.leaderIds?.length ?? 0})\n` +
-        `**Ветка:** <#${wizard.threadId}>`,
+      `**Заявитель:** ${applicant ?? `<@${request.applicantId}>`}\n` +
+        `**Клан:** ${request.clanName}\n` +
+        `**Цвет:** ${request.colorLabel}\n` +
+        `**Состав:** ${memberIds.length} (лидеров: ${leaderIds.length})\n` +
+        `**Источник:** <#${request.threadId}>`,
     )
     .addFields({
       name: "Участники",
-      value: formatUserList(guild, wizard.memberIds, leaderSet).slice(0, 1024),
+      value: formatUserList(guild, memberIds, leaderSet).slice(0, 1024),
     })
     .setFooter({ text: clanTxt.modCreateReminder })
     .setTimestamp(request.createdAt);
@@ -99,6 +85,28 @@ export async function submitCreateRequestToModQueue(
   setClanCreateRequest(request);
   await saveState(LAST_SEEN_STATE_FILE);
   return null;
+}
+
+export async function submitCreateRequestFromText(
+  guild: Guild,
+  applicantId: string,
+  sourceChannelId: string,
+  parsed: ParsedCreateCommand,
+): Promise<string | null> {
+  const request: ClanCreateRequest = {
+    id: newClanRequestId(),
+    guildId: guild.id,
+    applicantId,
+    threadId: sourceChannelId,
+    clanName: parsed.clanName,
+    colorHex: parsed.colorPreset.hex,
+    colorLabel: parsed.colorPreset.label,
+    memberIds: parsed.memberIds,
+    leaderIds: parsed.leaderIds,
+    status: "pending",
+    createdAt: Date.now(),
+  };
+  return postCreateRequestToModQueue(guild, request, parsed.memberIds, parsed.leaderIds);
 }
 
 export async function handleClanModButton(interaction: ButtonInteraction): Promise<boolean> {

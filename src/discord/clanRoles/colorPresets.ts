@@ -29,3 +29,9 @@ export function getClanColorPresets(): readonly ClanColorPreset[] {
 export function getClanColorPresetById(id: string): ClanColorPreset | undefined {
   return activePresets.find((p) => p.id === id);
 }
+
+export function getClanColorPresetByLabel(label: string): ClanColorPreset | undefined {
+  const q = label.trim().toLowerCase();
+  if (!q) return undefined;
+  return activePresets.find((p) => p.label.toLowerCase() === q || p.id.toLowerCase() === q);
+}
