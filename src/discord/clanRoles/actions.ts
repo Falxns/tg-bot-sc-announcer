@@ -19,7 +19,7 @@ import {
 } from "../../config";
 import { saveState } from "../../state";
 import type { ClanCreateRequest } from "../types";
-import { countClanLeaders, countMembersWithRole, ensureGuildMembersCached, isClanLeaderFor, listClanRoles, listMemberClanRoles, memberLeadsAnyClan } from "./resolver";
+import { countClanLeaders, countMembersWithRole, ensureGuildMembersCached, isClanLeaderFor, listClanRoles, listMemberClanRoles } from "./resolver";
 import { clanTxt } from "./strings";
 
 export type RoleActionResult = { ok: true } | { ok: false; error: string };
@@ -234,18 +234,29 @@ export async function removeClanRoleFromMember(
   if (blocker) return { ok: false, error: blocker };
 
   try {
+    const ledClanRoleIdsBefore = listMemberClanRoles(guild, target)
+      .filter((r) => isClanLeaderFor(target, r.id))
+      .map((r) => r.id);
+
     if (target.roles.cache.has(clanRole.id)) {
       await target.roles.remove(clanRole.id);
     }
 
     if (DISCORD_CLAN_LEADER_ROLE_ID) {
-      const updated = await guild.members.fetch(target.id).catch(() => target);
-      if (updated.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID) && !memberLeadsAnyClan(guild, updated)) {
-        const leaderMeta = guild.roles.cache.get(DISCORD_CLAN_LEADER_ROLE_ID);
-        if (leaderMeta && !leaderMeta.editable) {
-          console.warn(`Cannot remove leader meta-role ${DISCORD_CLAN_LEADER_ROLE_ID}: bot role too low.`);
-        } else {
-          await updated.roles.remove(DISCORD_CLAN_LEADER_ROLE_ID);
+      const updated = await guild.members.fetch({ user: target.id, force: true }).catch(() => target);
+      if (updated.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) {
+        const remainingClanRoles = listMemberClanRoles(guild, updated).filter((r) => r.id !== clanRole.id);
+        const stillLeadsAnotherClan = ledClanRoleIdsBefore
+          .filter((id) => id !== clanRole.id)
+          .some((id) => updated.roles.cache.has(id));
+
+        if (remainingClanRoles.length === 0 || !stillLeadsAnotherClan) {
+          const leaderMeta = guild.roles.cache.get(DISCORD_CLAN_LEADER_ROLE_ID);
+          if (leaderMeta && !leaderMeta.editable) {
+            console.warn(`Cannot remove leader meta-role ${DISCORD_CLAN_LEADER_ROLE_ID}: bot role too low.`);
+          } else {
+            await updated.roles.remove(DISCORD_CLAN_LEADER_ROLE_ID);
+          }
         }
       }
     }
