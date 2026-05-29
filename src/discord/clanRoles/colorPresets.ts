@@ -35,3 +35,10 @@ export function getClanColorPresetByLabel(label: string): ClanColorPreset | unde
   if (!q) return undefined;
   return activePresets.find((p) => p.label.toLowerCase() === q || p.id.toLowerCase() === q);
 }
+
+/** Comma-separated preset labels for help text and validation errors. */
+export function formatClanColorPresetOptions(): string {
+  return getClanColorPresets()
+    .map((p) => p.label)
+    .join(", ");
+}
