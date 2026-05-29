@@ -224,6 +224,20 @@ function parseRemoveCommand(
   return { kind: "remove", clanRole: resolved, targetUserId };
 }
 
+function leaderMetaNotInClanError(
+  clanName: string,
+  targetUserId: string,
+  actorId: string,
+): ClanTextParseError {
+  return {
+    kind: "error",
+    message:
+      targetUserId === actorId
+        ? clanTxt.leaderMetaNeedsClanFirstSelf(clanName)
+        : clanTxt.leaderMetaNeedsClanFirstTarget(clanName),
+  };
+}
+
 function parseGrantLeaderCommand(
   guild: Guild,
   member: GuildMember,
@@ -245,7 +259,7 @@ function parseGrantLeaderCommand(
       if (isParseError(resolved)) return resolved;
       const target = guild.members.cache.get(targetMentionId);
       if (!target?.roles.cache.has(resolved.id)) {
-        return { kind: "error", message: clanTxt.cmdTargetNotInClan };
+        return leaderMetaNotInClanError(resolved.name, targetMentionId, member.id);
       }
       if (isClanLeaderFor(target, resolved.id)) {
         return { kind: "error", message: clanTxt.alreadyClanLeader };
@@ -257,7 +271,7 @@ function parseGrantLeaderCommand(
       const role = ledClans[0];
       const target = guild.members.cache.get(targetMentionId);
       if (!target?.roles.cache.has(role.id)) {
-        return { kind: "error", message: clanTxt.cmdTargetNotInClan };
+        return leaderMetaNotInClanError(role.name, targetMentionId, member.id);
       }
       if (isClanLeaderFor(target, role.id)) {
         return { kind: "error", message: clanTxt.alreadyClanLeader };
@@ -282,10 +296,13 @@ function parseGrantLeaderCommand(
     if (targetClans.length > 1) {
       return { kind: "error", message: clanTxt.cmdTargetMultipleClans };
     }
-    return { kind: "error", message: clanTxt.cmdClanAmbiguous };
+    return { kind: "error", message: clanTxt.leaderMetaNeedsClanFirstAny };
   }
 
   if (!clanQuery) {
+    if (!targetMentionId && listMemberClanRoles(guild, member).length === 0) {
+      return { kind: "error", message: clanTxt.leaderMetaNeedsClanFirstAny };
+    }
     return {
       kind: "error",
       message: clanTxt.cmdInvalidFormat("+лидер Название или +лидер Название @участник"),
@@ -295,7 +312,7 @@ function parseGrantLeaderCommand(
   const resolved = resolveClanQuery(guild, clanQuery);
   if (isParseError(resolved)) return resolved;
   if (!member.roles.cache.has(resolved.id)) {
-    return { kind: "error", message: clanTxt.cmdTargetNotInClan };
+    return leaderMetaNotInClanError(resolved.name, member.id, member.id);
   }
   if (isClanLeaderFor(member, resolved.id)) {
     return { kind: "error", message: clanTxt.alreadyClanLeader };

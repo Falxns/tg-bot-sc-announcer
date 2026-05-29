@@ -69,6 +69,12 @@ export const clanTxt = {
   alreadyClanLeader: "У участника уже есть роль лидера в этом клане.",
   notClanLeader: "Участник не является лидером указанного клана.",
   leaderMetaNotConfigured: "Роль лидера клана не настроена на сервере.",
+  leaderMetaNeedsClanFirstSelf: (clanName: string) =>
+    `Роль лидера доступна только участникам клана. Сначала запросите роль: \`+клан ${clanName}\`.`,
+  leaderMetaNeedsClanFirstTarget: (clanName: string) =>
+    `У участника нет роли **${clanName}**. Сначала выдайте роль клана: \`+клан ${clanName} @участник\`.`,
+  leaderMetaNeedsClanFirstAny:
+    "Роль лидера доступна только участникам клана. Сначала запросите роль командой `+клан Название`.",
   removeNotYourClanRole: "Вы можете снять только свою клановую роль.",
   targetDoesNotHaveClanRole: "Участник больше не состоит в выбранном клане.",
 

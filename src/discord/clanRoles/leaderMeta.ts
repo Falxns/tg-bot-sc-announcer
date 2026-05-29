@@ -190,7 +190,11 @@ export async function submitLeaderMetaGrantRequest(
 ): Promise<string | null> {
   const target = await guild.members.fetch(targetUserId).catch(() => null);
   if (!target) return clanTxt.targetMissing;
-  if (!target.roles.cache.has(clanRole.id)) return clanTxt.targetDoesNotHaveClanRole;
+  if (!target.roles.cache.has(clanRole.id)) {
+    return requesterId === targetUserId
+      ? clanTxt.leaderMetaNeedsClanFirstSelf(clanRole.name)
+      : clanTxt.leaderMetaNeedsClanFirstTarget(clanRole.name);
+  }
   if (isClanLeaderFor(target, clanRole.id)) return clanTxt.alreadyClanLeader;
 
   const leaderCount = await countClanLeaders(guild, clanRole.id);
