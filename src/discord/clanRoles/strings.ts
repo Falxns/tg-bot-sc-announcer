@@ -55,10 +55,17 @@ export const clanTxt = {
 
   grantLeaderCap: (n: number) => `У этого клана уже ${n} лидер(ов) — максимум 2.`,
   grantRequestSent: "Запрос отправлен. Ожидайте одобрения лидера клана или модератора.",
+  grantApprovedReply: (clanName: string, targetUserId: string, requesterUserId: string) =>
+    requesterUserId === targetUserId
+      ? `Запрос одобрен — роль **${clanName}** выдана вам.`
+      : `Запрос одобрен — роль **${clanName}** выдана <@${targetUserId}>.`,
+  grantDeniedReply: (clanName: string) => `Запрос отклонён — роль **${clanName}**.`,
   leaderMetaGrantRequestSent:
     "Запрос на роль лидера отправлен. Действующий лидер клана должен подтвердить, затем модераторы.",
   leaderMetaGrantRequestSentMod: "Запрос на роль лидера отправлен модераторам.",
   leaderMetaSentToMod: "Лидер клана подтвердил запрос — заявка отправлена модераторам.",
+  leaderMetaClanDeniedReply: (clanName: string) =>
+    `Запрос на роль лидера в **${clanName}** отклонён лидером клана.`,
   alreadyClanLeader: "У участника уже есть роль лидера в этом клане.",
   notClanLeader: "Участник не является лидером указанного клана.",
   leaderMetaNotConfigured: "Роль лидера клана не настроена на сервере.",

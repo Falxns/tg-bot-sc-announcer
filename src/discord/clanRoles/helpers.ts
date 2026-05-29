@@ -40,3 +40,32 @@ export function formatUserList(guild: Guild, userIds: string[], leaderIds: Set<s
   }
   return lines.join("\n") || "—";
 }
+
+/** Reply to the user's original clan command message; falls back to channel send. */
+export async function replyToClanRequestMessage(
+  guild: Guild,
+  channelId: string,
+  sourceMessageId: string | undefined,
+  content: string,
+  mentionUserIds?: string[],
+): Promise<void> {
+  if (!sourceMessageId) return;
+
+  const channel = await guild.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased()) return;
+
+  const payload = {
+    content: content.slice(0, 2000),
+    allowedMentions:
+      mentionUserIds && mentionUserIds.length > 0
+        ? { users: mentionUserIds }
+        : { parse: [] as const },
+  };
+
+  const source = await channel.messages.fetch(sourceMessageId).catch(() => null);
+  if (source) {
+    await source.reply(payload).catch(() => undefined);
+    return;
+  }
+  await channel.send(payload).catch(() => undefined);
+}

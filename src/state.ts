@@ -500,6 +500,7 @@ export async function loadState(path: string): Promise<void> {
             grantLeaderMeta: row.grantLeaderMeta === true,
             status: row.status,
             pendingMessageId: typeof row.pendingMessageId === "string" ? row.pendingMessageId : undefined,
+            sourceMessageId: typeof row.sourceMessageId === "string" ? row.sourceMessageId : undefined,
             createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
           });
         }
@@ -522,6 +523,7 @@ export async function loadState(path: string): Promise<void> {
             guildId,
             applicantId,
             threadId,
+            sourceMessageId: typeof row.sourceMessageId === "string" ? row.sourceMessageId : undefined,
             clanName,
             colorHex: typeof row.colorHex === "number" ? row.colorHex : 0,
             colorLabel,
@@ -576,6 +578,7 @@ export async function loadState(path: string): Promise<void> {
             threadId,
             channelId,
             pendingMessageId: typeof row.pendingMessageId === "string" ? row.pendingMessageId : undefined,
+            sourceMessageId: typeof row.sourceMessageId === "string" ? row.sourceMessageId : undefined,
             clanLeaderApprovedBy: typeof row.clanLeaderApprovedBy === "string" ? row.clanLeaderApprovedBy : undefined,
             reviewMessageId: typeof row.reviewMessageId === "string" ? row.reviewMessageId : undefined,
             reviewChannelId: typeof row.reviewChannelId === "string" ? row.reviewChannelId : undefined,

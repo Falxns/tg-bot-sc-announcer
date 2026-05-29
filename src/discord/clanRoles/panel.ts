@@ -21,7 +21,7 @@ import {
 import type { ClanGrantRequest } from "../types";
 import { grantClanRoleToMember, postClanAuditLine, removeClanRoleFromMember } from "./actions";
 import { CLAN_REQ_PREFIX, MAX_CLAN_LEADERS } from "./constants";
-import { newClanRequestId } from "./helpers";
+import { newClanRequestId, replyToClanRequestMessage } from "./helpers";
 import { canApproveGrantRequest } from "./permissions";
 import { countClanLeaders, isClanLeaderFor, listClanLeaderIds } from "./resolver";
 import { clanTxt } from "./strings";
@@ -125,6 +125,7 @@ export async function submitGrantRequest(
   clanRole: Role,
   targetUserId: string,
   grantLeaderMeta = false,
+  sourceMessageId?: string,
 ): Promise<void> {
   const request: ClanGrantRequest = {
     id: newClanRequestId(),
@@ -137,6 +138,7 @@ export async function submitGrantRequest(
     type: "grant",
     grantLeaderMeta,
     status: "pending",
+    sourceMessageId,
     createdAt: Date.now(),
   };
   setClanGrantRequest(request);
@@ -190,6 +192,12 @@ export async function handleClanGrantButton(interaction: ButtonInteraction): Pro
     request.status = "denied";
     setClanGrantRequest(request);
     await finalizeGrantRequestMessage(interaction.message, false, member, request.clanRoleId);
+    await replyToClanRequestMessage(
+      interaction.guild,
+      request.channelId,
+      request.sourceMessageId,
+      clanTxt.grantDeniedReply(request.clanRoleName),
+    );
     await saveState(LAST_SEEN_STATE_FILE);
     return true;
   }
@@ -215,6 +223,13 @@ export async function handleClanGrantButton(interaction: ButtonInteraction): Pro
   request.status = "approved";
   setClanGrantRequest(request);
   await finalizeGrantRequestMessage(interaction.message, true, member, request.clanRoleId);
+  await replyToClanRequestMessage(
+    interaction.guild,
+    request.channelId,
+    request.sourceMessageId,
+    clanTxt.grantApprovedReply(request.clanRoleName, request.targetUserId, request.requesterUserId),
+    request.requesterUserId === request.targetUserId ? undefined : [request.targetUserId],
+  );
   await saveState(LAST_SEEN_STATE_FILE);
 
   await postClanAuditLine(

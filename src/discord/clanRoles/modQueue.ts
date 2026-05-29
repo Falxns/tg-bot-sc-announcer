@@ -21,7 +21,7 @@ import { getClanCreateRequest, saveState, setClanCreateRequest } from "../../sta
 import type { ClanCreateRequest } from "../types";
 import { executeCreateRequest, postClanAuditLine } from "./actions";
 import { CLAN_MOD_PREFIX } from "./constants";
-import { formatUserList, newClanRequestId } from "./helpers";
+import { formatUserList, newClanRequestId, replyToClanRequestMessage } from "./helpers";
 import { handleClanLeaderMetaModButton } from "./leaderMeta";
 import { canResolveCreateRequest } from "./permissions";
 import { clanTxt } from "./strings";
@@ -93,12 +93,14 @@ export async function submitCreateRequestFromText(
   applicantId: string,
   sourceChannelId: string,
   parsed: ParsedCreateCommand,
+  sourceMessageId?: string,
 ): Promise<string | null> {
   const request: ClanCreateRequest = {
     id: newClanRequestId(),
     guildId: guild.id,
     applicantId,
     threadId: sourceChannelId,
+    sourceMessageId,
     clanName: parsed.clanName,
     colorHex: parsed.colorPreset.hex,
     colorLabel: parsed.colorPreset.label,
@@ -177,10 +179,12 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
   await interaction.message.edit({ components: [] }).catch(() => undefined);
   await saveState(LAST_SEEN_STATE_FILE);
 
-  const thread = await interaction.guild.channels.fetch(request.threadId).catch(() => null);
-  if (thread?.isTextBased()) {
-    await (thread as TextChannel).send(clanTxt.createSuccess(request.clanName));
-  }
+  await replyToClanRequestMessage(
+    interaction.guild,
+    request.threadId,
+    request.sourceMessageId,
+    clanTxt.createSuccess(request.clanName),
+  );
 
   await postClanAuditLine(
     interaction.guild,
@@ -213,10 +217,12 @@ export async function handleClanModModal(interaction: ModalSubmitInteraction): P
   setClanCreateRequest(request);
   await saveState(LAST_SEEN_STATE_FILE);
 
-  const thread = await interaction.guild.channels.fetch(request.threadId).catch(() => null);
-  if (thread?.isTextBased()) {
-    await (thread as TextChannel).send(clanTxt.createDeniedApplicant(reason));
-  }
+  await replyToClanRequestMessage(
+    interaction.guild,
+    request.threadId,
+    request.sourceMessageId,
+    clanTxt.createDeniedApplicant(reason),
+  );
 
   await postClanAuditLine(
     interaction.guild,

@@ -76,6 +76,8 @@ export type ClanGrantRequest = {
   grantLeaderMeta: boolean;
   status: "pending" | "approved" | "denied";
   pendingMessageId?: string;
+  /** Original command message in the rules thread — notified on resolve. */
+  sourceMessageId?: string;
   createdAt: number;
 };
 
@@ -92,6 +94,8 @@ export type ClanLeaderMetaRequest = {
   threadId: string;
   channelId: string;
   pendingMessageId?: string;
+  /** Original command message in the rules thread — notified on resolve. */
+  sourceMessageId?: string;
   clanLeaderApprovedBy?: string;
   reviewMessageId?: string;
   reviewChannelId?: string;
@@ -107,6 +111,8 @@ export type ClanCreateRequest = {
   applicantId: string;
   /** Rules thread or channel id — applicant is notified here on mod decision. */
   threadId: string;
+  /** Original !создать message in the rules thread — notified on resolve. */
+  sourceMessageId?: string;
   clanName: string;
   colorHex: number;
   colorLabel: string;

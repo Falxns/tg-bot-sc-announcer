@@ -57,6 +57,8 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       message.author.id,
       parsed.clanRole,
       parsed.targetUserId,
+      false,
+      message.id,
     );
     await replyInChannelAutoDelete(message, clanTxt.grantRequestSent);
     return true;
@@ -83,7 +85,13 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
   }
 
   if (parsed.kind === "create") {
-    const err = await submitCreateRequestFromText(message.guild, message.author.id, message.channel.id, parsed);
+    const err = await submitCreateRequestFromText(
+      message.guild,
+      message.author.id,
+      message.channel.id,
+      parsed,
+      message.id,
+    );
     if (err) {
       await replyInChannelAutoDelete(message, err);
       return true;
@@ -99,6 +107,7 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       message.author.id,
       parsed.clanRole,
       parsed.targetUserId,
+      message.id,
     );
     if (err) {
       await replyInChannelAutoDelete(message, err);
