@@ -27,6 +27,18 @@ export type ParsedRemoveCommand = {
   targetUserId: string;
 };
 
+export type ParsedGrantLeaderCommand = {
+  kind: "grant_leader";
+  clanRole: Role;
+  targetUserId: string;
+};
+
+export type ParsedRemoveLeaderCommand = {
+  kind: "remove_leader";
+  clanRole: Role;
+  targetUserId: string;
+};
+
 export type ParsedCreateCommand = {
   kind: "create";
   clanName: string;
@@ -40,10 +52,17 @@ export type ClanTextParseError = {
   message: string;
 };
 
-export type ClanTextCommand = ParsedGrantCommand | ParsedRemoveCommand | ParsedCreateCommand;
+export type ClanTextCommand =
+  | ParsedGrantCommand
+  | ParsedRemoveCommand
+  | ParsedGrantLeaderCommand
+  | ParsedRemoveLeaderCommand
+  | ParsedCreateCommand;
 
 const GRANT_PREFIX = /^\+клан\s*:?\s*/i;
 const REMOVE_PREFIX = /^-клан\s*:?\s*/i;
+const GRANT_LEADER_PREFIX = /^\+лидер\s*:?\s*/i;
+const REMOVE_LEADER_PREFIX = /^-лидер\s*:?\s*/i;
 const CREATE_HEADER = /^!создать\s*$/i;
 
 function stripMentions(text: string): string {
@@ -205,6 +224,164 @@ function parseRemoveCommand(
   return { kind: "remove", clanRole: resolved, targetUserId };
 }
 
+function parseGrantLeaderCommand(
+  guild: Guild,
+  member: GuildMember,
+  body: string,
+  mentions: MessageMentions,
+): ParsedGrantLeaderCommand | ClanTextParseError {
+  const targetMentionId = firstMentionId(mentions);
+  const clanQuery = stripMentions(body);
+  const isMod = isClanModerator(member);
+  const ledClans = listLedClanRoles(guild, member);
+
+  if (targetMentionId) {
+    if (!isMod && ledClans.length === 0) {
+      return { kind: "error", message: clanTxt.cmdTargetOnlyLeaderMod };
+    }
+
+    if (clanQuery) {
+      const resolved = resolveClanQuery(guild, clanQuery);
+      if (isParseError(resolved)) return resolved;
+      const target = guild.members.cache.get(targetMentionId);
+      if (!target?.roles.cache.has(resolved.id)) {
+        return { kind: "error", message: clanTxt.cmdTargetNotInClan };
+      }
+      if (isClanLeaderFor(target, resolved.id)) {
+        return { kind: "error", message: clanTxt.alreadyClanLeader };
+      }
+      return { kind: "grant_leader", clanRole: resolved, targetUserId: targetMentionId };
+    }
+
+    if (ledClans.length === 1) {
+      const role = ledClans[0];
+      const target = guild.members.cache.get(targetMentionId);
+      if (!target?.roles.cache.has(role.id)) {
+        return { kind: "error", message: clanTxt.cmdTargetNotInClan };
+      }
+      if (isClanLeaderFor(target, role.id)) {
+        return { kind: "error", message: clanTxt.alreadyClanLeader };
+      }
+      return { kind: "grant_leader", clanRole: role, targetUserId: targetMentionId };
+    }
+    if (ledClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdLeaderMultipleClans };
+    }
+
+    const targetMember = guild.members.cache.get(targetMentionId);
+    if (!targetMember) {
+      return { kind: "error", message: clanTxt.targetMissing };
+    }
+    const targetClans = listMemberClanRoles(guild, targetMember);
+    if (targetClans.length === 1) {
+      if (isClanLeaderFor(targetMember, targetClans[0].id)) {
+        return { kind: "error", message: clanTxt.alreadyClanLeader };
+      }
+      return { kind: "grant_leader", clanRole: targetClans[0], targetUserId: targetMentionId };
+    }
+    if (targetClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdTargetMultipleClans };
+    }
+    return { kind: "error", message: clanTxt.cmdClanAmbiguous };
+  }
+
+  if (!clanQuery) {
+    return {
+      kind: "error",
+      message: clanTxt.cmdInvalidFormat("+лидер Название или +лидер Название @участник"),
+    };
+  }
+
+  const resolved = resolveClanQuery(guild, clanQuery);
+  if (isParseError(resolved)) return resolved;
+  if (!member.roles.cache.has(resolved.id)) {
+    return { kind: "error", message: clanTxt.cmdTargetNotInClan };
+  }
+  if (isClanLeaderFor(member, resolved.id)) {
+    return { kind: "error", message: clanTxt.alreadyClanLeader };
+  }
+  return { kind: "grant_leader", clanRole: resolved, targetUserId: member.id };
+}
+
+function parseRemoveLeaderCommand(
+  guild: Guild,
+  member: GuildMember,
+  body: string,
+  mentions: MessageMentions,
+): ParsedRemoveLeaderCommand | ClanTextParseError {
+  const targetMentionId = firstMentionId(mentions);
+  const clanQuery = stripMentions(body);
+  const isMod = isClanModerator(member);
+  const ledClans = listLedClanRoles(guild, member);
+
+  if (!targetMentionId && !clanQuery) {
+    if (isMod) {
+      return { kind: "error", message: clanTxt.cmdModNeedsTarget };
+    }
+    if (ledClans.length === 0) {
+      return { kind: "error", message: clanTxt.notClanLeader };
+    }
+    if (ledClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdLeaderMultipleClans };
+    }
+    return { kind: "remove_leader", clanRole: ledClans[0], targetUserId: member.id };
+  }
+
+  if (targetMentionId && !clanQuery) {
+    if (ledClans.length === 1) {
+      const role = ledClans[0];
+      const target = guild.members.cache.get(targetMentionId);
+      if (!target || !isClanLeaderFor(target, role.id)) {
+        return { kind: "error", message: clanTxt.notClanLeader };
+      }
+      return { kind: "remove_leader", clanRole: role, targetUserId: targetMentionId };
+    }
+    if (ledClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdLeaderMultipleClans };
+    }
+    if (isMod) {
+      const target = guild.members.cache.get(targetMentionId);
+      if (!target) {
+        return { kind: "error", message: clanTxt.targetMissing };
+      }
+      const targetLed = listLedClanRoles(guild, target);
+      if (targetLed.length === 1) {
+        return { kind: "remove_leader", clanRole: targetLed[0], targetUserId: targetMentionId };
+      }
+      if (targetLed.length > 1) {
+        return { kind: "error", message: clanTxt.cmdTargetMultipleClans };
+      }
+      return { kind: "error", message: clanTxt.notClanLeader };
+    }
+    return { kind: "error", message: clanTxt.cmdInvalidFormat("-лидер Название @участник") };
+  }
+
+  if (!clanQuery) {
+    return { kind: "error", message: clanTxt.cmdInvalidFormat("-лидер Название или -лидер @участник") };
+  }
+
+  const resolved = resolveClanQuery(guild, clanQuery);
+  if (isParseError(resolved)) return resolved;
+
+  const targetUserId = targetMentionId ?? member.id;
+  if (targetUserId === member.id) {
+    if (!isMod && !isClanLeaderFor(member, resolved.id)) {
+      return { kind: "error", message: clanTxt.notClanLeader };
+    }
+  } else {
+    const isLeader = isClanLeaderFor(member, resolved.id);
+    if (!isMod && !isLeader) {
+      return { kind: "error", message: clanTxt.cmdTargetOnlyLeaderMod };
+    }
+    const target = guild.members.cache.get(targetUserId);
+    if (!target || !isClanLeaderFor(target, resolved.id)) {
+      return { kind: "error", message: clanTxt.notClanLeader };
+    }
+  }
+
+  return { kind: "remove_leader", clanRole: resolved, targetUserId };
+}
+
 function parseCreateCommand(
   guild: Guild,
   content: string,
@@ -271,7 +448,7 @@ export function isClanCommandMessage(content: string): boolean {
   const trimmed = content.trim();
   if (!trimmed) return false;
   const firstLine = trimmed.split(/\r?\n/)[0] ?? "";
-  return GRANT_PREFIX.test(trimmed) || REMOVE_PREFIX.test(trimmed) || CREATE_HEADER.test(firstLine);
+  return GRANT_PREFIX.test(trimmed) || REMOVE_PREFIX.test(trimmed) || GRANT_LEADER_PREFIX.test(trimmed) || REMOVE_LEADER_PREFIX.test(trimmed) || CREATE_HEADER.test(firstLine);
 }
 
 export function parseClanTextCommand(
@@ -295,6 +472,16 @@ export function parseClanTextCommand(
   if (REMOVE_PREFIX.test(trimmed)) {
     const body = trimmed.replace(REMOVE_PREFIX, "").trim();
     return parseRemoveCommand(guild, member, body, mentions);
+  }
+
+  if (GRANT_LEADER_PREFIX.test(trimmed)) {
+    const body = trimmed.replace(GRANT_LEADER_PREFIX, "").trim();
+    return parseGrantLeaderCommand(guild, member, body, mentions);
+  }
+
+  if (REMOVE_LEADER_PREFIX.test(trimmed)) {
+    const body = trimmed.replace(REMOVE_LEADER_PREFIX, "").trim();
+    return parseRemoveLeaderCommand(guild, member, body, mentions);
   }
 
   return null;

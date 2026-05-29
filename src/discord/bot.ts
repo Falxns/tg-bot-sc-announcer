@@ -21,6 +21,7 @@ import {
 } from "./tempVoice";
 import {
   handleClanGrantButton,
+  handleClanLeaderMetaClanButton,
   handleClanModButton,
   handleClanModModal,
   handleClanRulesMessage,
@@ -102,6 +103,7 @@ export async function startDiscordBot(): Promise<void> {
           if (await handleTempVoiceButton(interaction)) return;
           if (isClanRolesInteractionCustomId(interaction.customId)) {
             if (await handleClanModButton(interaction)) return;
+            if (await handleClanLeaderMetaClanButton(interaction)) return;
             if (await handleClanGrantButton(interaction)) return;
           }
           await handleRoleButtonInteraction(interaction);

@@ -11,12 +11,19 @@ export const clanTxt = {
     "-клан                       — снять свою роль (если один клан)\n" +
     "-клан @участник             — снять роль (лидер одного клана / мод)\n" +
     "-клан Название @участник    — снять роль (явно)\n\n" +
+    "+лидер Название             — запросить роль лидера себе\n" +
+    "+лидер @участник            — назначить лидера (лидер одного клана)\n" +
+    "+лидер Название @участник   — назначить лидера (лидер/мод)\n\n" +
+    "-лидер                      — снять роль лидера (если один клан)\n" +
+    "-лидер @участник            — снять роль лидера (лидер одного клана / мод)\n" +
+    "-лидер Название @участник   — снять роль лидера (явно)\n\n" +
     "!создать\n" +
     "НазваниеКлана\n" +
     "Красный\n" +
     "👑 @лидер\n" +
     "@участники…\n\n" +
-    "На запрос выдачи роли лидер или модератор нажимает **Одобрить** или **Отклонить**.",
+    "На запрос выдачи роли лидер или модератор нажимает **Одобрить** или **Отклонить**.\n" +
+    "На запрос роли лидера: при одном лидере в клане сначала подтверждает действующий лидер, затем модераторы.",
   rulesHelpPosted: (url: string) => `Справка по командам опубликована: ${url}`,
 
   cmdInvalidFormat: (example: string) => `Неверный формат. Пример: ${example}`,
@@ -32,8 +39,10 @@ export const clanTxt = {
   cmdCreateInvalidColor: (label: string) => `Неизвестный цвет: **${label}**. Укажите название из списка пресетов.`,
   cmdCreateSubmitted: "Заявка на клан отправлена модераторам. D-ранг проверяется вручную.",
   cmdRemoveDoneTarget: (role: string, target: string) => `Роль **${role}** снята с ${target}.`,
+  cmdRemoveLeaderDoneTarget: (role: string, target: string) =>
+    `Роль лидера снята с ${target} (клан **${role}**).`,
   clanThreadOffTopicReason:
-    "В ветке клановых команд разрешены только сообщения вида +клан, -клан и блок !создать.",
+    "В ветке клановых команд разрешены только сообщения вида +клан, -клан, +лидер, -лидер и блок !создать.",
 
   createNameInvalid: (min: number, max: number) =>
     `Некорректное название. Длина ${min}–${max} символов, без @ и #.`,
@@ -44,6 +53,13 @@ export const clanTxt = {
 
   grantLeaderCap: (n: number) => `У этого клана уже ${n} лидер(ов) — максимум 2.`,
   grantRequestSent: "Запрос отправлен. Ожидайте одобрения лидера клана или модератора.",
+  leaderMetaGrantRequestSent:
+    "Запрос на роль лидера отправлен. Действующий лидер клана должен подтвердить, затем модераторы.",
+  leaderMetaGrantRequestSentMod: "Запрос на роль лидера отправлен модераторам.",
+  leaderMetaSentToMod: "Лидер клана подтвердил запрос — заявка отправлена модераторам.",
+  alreadyClanLeader: "У участника уже есть роль лидера в этом клане.",
+  notClanLeader: "Участник не является лидером указанного клана.",
+  leaderMetaNotConfigured: "Роль лидера клана не настроена на сервере.",
   removeNotYourClanRole: "Вы можете снять только свою клановую роль.",
   targetDoesNotHaveClanRole: "Участник больше не состоит в выбранном клане.",
 
@@ -51,6 +67,13 @@ export const clanTxt = {
   pendingGrantLeaderPing: (mentions: string) =>
     `Лидеры клана, проверьте запрос: ${mentions}`,
   pendingGrantLeaderNote: "Запрошена также роль «Лидер клана».",
+  pendingLeaderMetaTitle: "Запрос: назначить лидера клана",
+  pendingLeaderMetaClanPing: (mentions: string) =>
+    `Лидер клана, подтвердите назначение второго лидера: ${mentions}`,
+  pendingLeaderMetaClanNote:
+    "После вашего подтверждения заявка уйдёт модераторам на финальное одобрение.",
+  leaderMetaClanResolvedLine: (approved: boolean, userId: string) =>
+    `\n\n**Статус:** ${approved ? clanTxt.approved : clanTxt.denied} — <@${userId}> (лидер клана)`,
   approve: "Одобрить",
   deny: "Отклонить",
   approved: "Запрос одобрен.",
@@ -67,6 +90,8 @@ export const clanTxt = {
 
   modCreateTitle: "Новая заявка на клан",
   modCreateReminder: "Проверьте D-ранг и состав в игре перед принятием.",
+  modLeaderMetaTitle: "Заявка: назначить лидера клана",
+  modLeaderMetaReminder: "Убедитесь, что у клана не больше двух лидеров.",
   modAccept: "Принять",
   modDeny: "Отклонить",
   modAccepted: "Заявка принята — роль создана и выдана.",
@@ -81,6 +106,9 @@ export const clanTxt = {
     reason?.trim()
       ? `Заявка отклонена модераторами.\n**Причина:** ${reason.trim()}`
       : "Заявка отклонена модераторами.",
+  leaderMetaDeniedApplicant: () => "Заявка на роль лидера отклонена модераторами.",
+  leaderMetaApprovedApplicant: (clanName: string, targetUserId: string) =>
+    `Роль лидера в клане **${clanName}** выдана <@${targetUserId}>.`,
 
   clanslistTitle: "Клановые роли",
   clanslistEmpty: "Клановые роли не найдены.",
@@ -94,4 +122,10 @@ export const clanTxt = {
   auditCreate: (mod: string, role: string, n: number) =>
     `[Клан] ${mod} принял заявку — создана роль **${role}**, выдано ${n} участникам.`,
   auditDenyCreate: (mod: string, role: string) => `[Клан] ${mod} отклонил заявку на **${role}**.`,
+  auditGrantLeaderMeta: (mod: string, target: string, role: string) =>
+    `[Клан] ${mod} одобрил роль лидера **${role}** → ${target}`,
+  auditRemoveLeaderMeta: (actor: string, target: string, role: string) =>
+    `[Клан] ${actor} снял роль лидера **${role}** у ${target}`,
+  auditDenyLeaderMeta: (mod: string, role: string, targetUserId: string) =>
+    `[Клан] ${mod} отклонил заявку на лидера **${role}** (<@${targetUserId}>)`,
 } as const;

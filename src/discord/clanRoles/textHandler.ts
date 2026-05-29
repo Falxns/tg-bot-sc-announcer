@@ -5,7 +5,12 @@ import { applyLightStrikeForMessage, replyInChannelAutoDelete } from "../moderat
 import { discordModerationLogTitles as logTitles } from "../userStrings";
 import { isClanRulesThread } from "./helpers";
 import { submitCreateRequestFromText } from "./modQueue";
+import {
+  performDirectLeaderMetaRemove,
+  submitLeaderMetaGrantRequest,
+} from "./leaderMeta";
 import { performDirectRemove, submitGrantRequest } from "./panel";
+import { countClanLeaders } from "./resolver";
 import { ensureGuildMembersCached } from "./resolver";
 import { isClanCommandMessage, parseClanTextCommand } from "./textCommands";
 import { clanTxt } from "./strings";
@@ -84,6 +89,45 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       return true;
     }
     await replyInChannelAutoDelete(message, clanTxt.cmdCreateSubmitted);
+    return true;
+  }
+
+  if (parsed.kind === "grant_leader") {
+    const err = await submitLeaderMetaGrantRequest(
+      message.guild,
+      message.channel,
+      message.author.id,
+      parsed.clanRole,
+      parsed.targetUserId,
+    );
+    if (err) {
+      await replyInChannelAutoDelete(message, err);
+      return true;
+    }
+    const leaderCount = await countClanLeaders(message.guild, parsed.clanRole.id);
+    const reply =
+      leaderCount === 1 ? clanTxt.leaderMetaGrantRequestSent : clanTxt.leaderMetaGrantRequestSentMod;
+    await replyInChannelAutoDelete(message, reply);
+    return true;
+  }
+
+  if (parsed.kind === "remove_leader") {
+    const removed = await performDirectLeaderMetaRemove(
+      message.guild,
+      member,
+      parsed.clanRole,
+      parsed.targetUserId,
+    );
+    if (!removed.ok) {
+      await replyInChannelAutoDelete(message, removed.error);
+      return true;
+    }
+    const targetLabel =
+      parsed.targetUserId === message.author.id ? "вас" : removed.target.toString();
+    await replyInChannelAutoDelete(
+      message,
+      clanTxt.cmdRemoveLeaderDoneTarget(parsed.clanRole.name, targetLabel),
+    );
     return true;
   }
 

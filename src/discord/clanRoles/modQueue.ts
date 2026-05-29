@@ -22,6 +22,7 @@ import type { ClanCreateRequest } from "../types";
 import { executeCreateRequest, postClanAuditLine } from "./actions";
 import { CLAN_MOD_PREFIX } from "./constants";
 import { formatUserList, newClanRequestId } from "./helpers";
+import { handleClanLeaderMetaModButton } from "./leaderMeta";
 import { canResolveCreateRequest } from "./permissions";
 import { clanTxt } from "./strings";
 import type { ParsedCreateCommand } from "./textCommands";
@@ -113,6 +114,8 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
   if (!interaction.inGuild() || !interaction.guild) return false;
   const { customId } = interaction;
   if (!customId.startsWith(CLAN_MOD_PREFIX)) return false;
+
+  if (await handleClanLeaderMetaModButton(interaction)) return true;
 
   if (customId.startsWith(`${CLAN_MOD_PREFIX}deny:`) && !customId.includes("deny_modal")) {
     const requestId = customId.slice(`${CLAN_MOD_PREFIX}deny:`.length);

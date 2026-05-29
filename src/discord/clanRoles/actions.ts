@@ -19,7 +19,7 @@ import {
 } from "../../config";
 import { saveState } from "../../state";
 import type { ClanCreateRequest } from "../types";
-import { countClanLeaders, countMembersWithRole, ensureGuildMembersCached, listClanRoles, memberLeadsAnyClan } from "./resolver";
+import { countClanLeaders, countMembersWithRole, ensureGuildMembersCached, isClanLeaderFor, listClanRoles, listMemberClanRoles, memberLeadsAnyClan } from "./resolver";
 import { clanTxt } from "./strings";
 
 export type RoleActionResult = { ok: true } | { ok: false; error: string };
@@ -146,6 +146,76 @@ export async function grantClanRoleToMember(
       if (!target.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) {
         await target.roles.add(DISCORD_CLAN_LEADER_ROLE_ID);
       }
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: clanTxt.noManageRoles };
+  }
+}
+
+export async function grantLeaderMetaOnly(
+  guild: Guild,
+  target: GuildMember,
+  clanRole: Role,
+): Promise<RoleActionResult> {
+  const me = await getBotMember(guild);
+  if (!me) return { ok: false, error: clanTxt.noManageRoles };
+  if (!DISCORD_CLAN_LEADER_ROLE_ID) return { ok: false, error: clanTxt.leaderMetaNotConfigured };
+
+  const leaderMeta = guild.roles.cache.get(DISCORD_CLAN_LEADER_ROLE_ID);
+  if (!leaderMeta) return { ok: false, error: clanTxt.leaderMetaNotConfigured };
+
+  if (!target.roles.cache.has(clanRole.id)) {
+    return { ok: false, error: clanTxt.targetDoesNotHaveClanRole };
+  }
+  if (isClanLeaderFor(target, clanRole.id)) {
+    return { ok: false, error: clanTxt.alreadyClanLeader };
+  }
+
+  const blocker = roleBlocker(me, target, leaderMeta);
+  if (blocker) return { ok: false, error: blocker };
+
+  if ((await countClanLeaders(guild, clanRole.id)) >= 2) {
+    return { ok: false, error: clanTxt.grantLeaderCap(2) };
+  }
+
+  try {
+    if (!target.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) {
+      await target.roles.add(DISCORD_CLAN_LEADER_ROLE_ID);
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: clanTxt.noManageRoles };
+  }
+}
+
+export async function removeLeaderMetaFromMember(
+  guild: Guild,
+  target: GuildMember,
+  clanRole: Role,
+): Promise<RoleActionResult> {
+  const me = await getBotMember(guild);
+  if (!me) return { ok: false, error: clanTxt.noManageRoles };
+  if (!DISCORD_CLAN_LEADER_ROLE_ID) return { ok: false, error: clanTxt.leaderMetaNotConfigured };
+
+  if (!isClanLeaderFor(target, clanRole.id)) {
+    return { ok: false, error: clanTxt.notClanLeader };
+  }
+
+  const ledClans = listMemberClanRoles(guild, target).filter((r) => isClanLeaderFor(target, r.id));
+  if (ledClans.length > 1) {
+    return { ok: false, error: clanTxt.cmdLeaderMultipleClans };
+  }
+
+  const leaderMeta = guild.roles.cache.get(DISCORD_CLAN_LEADER_ROLE_ID);
+  if (!leaderMeta) return { ok: false, error: clanTxt.leaderMetaNotConfigured };
+
+  const blocker = roleBlocker(me, target, leaderMeta);
+  if (blocker) return { ok: false, error: blocker };
+
+  try {
+    if (target.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) {
+      await target.roles.remove(DISCORD_CLAN_LEADER_ROLE_ID);
     }
     return { ok: true };
   } catch {

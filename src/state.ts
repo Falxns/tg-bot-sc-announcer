@@ -7,6 +7,7 @@ import {
 import type {
   ClanCreateRequest,
   ClanGrantRequest,
+  ClanLeaderMetaRequest,
   ClanRulesPanelState,
   DiscordRolePanelState,
   TempVoicePanelState,
@@ -80,6 +81,8 @@ export const clanRulesPanels = new Map<string, ClanRulesPanelState>();
 export const clanGrantRequests = new Map<string, ClanGrantRequest>();
 /** Pending mod-reviewed create requests keyed by request id. */
 export const clanCreateRequests = new Map<string, ClanCreateRequest>();
+/** Pending leader-meta grant requests keyed by request id. */
+export const clanLeaderMetaRequests = new Map<string, ClanLeaderMetaRequest>();
 
 /** Server-wide warn count: `${guildId}:${userId}`. */
 export const discordGlobalWarns = new Map<string, number>();
@@ -297,6 +300,18 @@ export function setClanCreateRequest(req: ClanCreateRequest): void {
 
 export function getClanCreateRequest(id: string): ClanCreateRequest | undefined {
   return clanCreateRequests.get(id);
+}
+
+export function setClanLeaderMetaRequest(req: ClanLeaderMetaRequest): void {
+  clanLeaderMetaRequests.set(req.id, req);
+}
+
+export function getClanLeaderMetaRequest(id: string): ClanLeaderMetaRequest | undefined {
+  return clanLeaderMetaRequests.get(id);
+}
+
+export function deleteClanLeaderMetaRequest(id: string): void {
+  clanLeaderMetaRequests.delete(id);
 }
 
 function parseNumberMap(raw: unknown): Map<string, number> {
@@ -527,6 +542,50 @@ export async function loadState(path: string): Promise<void> {
           });
         }
       }
+
+      const leaderMetaReqRaw = obj.clanLeaderMetaRequests;
+      if (leaderMetaReqRaw && typeof leaderMetaReqRaw === "object" && !Array.isArray(leaderMetaReqRaw)) {
+        for (const [id, value] of Object.entries(leaderMetaReqRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          const status = row.status;
+          if (
+            status !== "pending_clan_leader" &&
+            status !== "pending_mod" &&
+            status !== "approved" &&
+            status !== "denied"
+          ) {
+            continue;
+          }
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const clanRoleId = typeof row.clanRoleId === "string" ? row.clanRoleId : "";
+          const clanRoleName = typeof row.clanRoleName === "string" ? row.clanRoleName : "";
+          const targetUserId = typeof row.targetUserId === "string" ? row.targetUserId : "";
+          const requesterUserId = typeof row.requesterUserId === "string" ? row.requesterUserId : "";
+          const threadId = typeof row.threadId === "string" ? row.threadId : "";
+          const channelId = typeof row.channelId === "string" ? row.channelId : "";
+          if (!guildId || !clanRoleId || !targetUserId || !threadId) continue;
+          clanLeaderMetaRequests.set(id, {
+            id,
+            guildId,
+            clanRoleId,
+            clanRoleName,
+            targetUserId,
+            requesterUserId,
+            status,
+            threadId,
+            channelId,
+            pendingMessageId: typeof row.pendingMessageId === "string" ? row.pendingMessageId : undefined,
+            clanLeaderApprovedBy: typeof row.clanLeaderApprovedBy === "string" ? row.clanLeaderApprovedBy : undefined,
+            reviewMessageId: typeof row.reviewMessageId === "string" ? row.reviewMessageId : undefined,
+            reviewChannelId: typeof row.reviewChannelId === "string" ? row.reviewChannelId : undefined,
+            denyReason: typeof row.denyReason === "string" ? row.denyReason : undefined,
+            createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
+            resolvedAt: typeof row.resolvedAt === "number" ? row.resolvedAt : undefined,
+            resolvedBy: typeof row.resolvedBy === "string" ? row.resolvedBy : undefined,
+          });
+        }
+      }
     }
     if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
       console.log(
@@ -534,7 +593,8 @@ export async function loadState(path: string): Promise<void> {
           `${lastSeenByAuthor.size} lastSeen, ${discordRolePanels.size} role panels, ` +
           `${discordGlobalWarns.size} global warns, ${discordMuteTier.size} mute tiers, ` +
           `${tempVoiceRooms.size} temp voice rooms, ${clanRulesPanels.size} clan help posts, ` +
-          `${clanGrantRequests.size} clan grant requests.`,
+          `${clanGrantRequests.size} clan grant requests, ` +
+          `${clanLeaderMetaRequests.size} clan leader-meta requests.`,
       );
     }
   } catch (err) {
@@ -566,6 +626,7 @@ export async function saveState(path: string): Promise<boolean> {
       clanRulesPanels: Object.fromEntries(clanRulesPanels),
       clanGrantRequests: Object.fromEntries(clanGrantRequests),
       clanCreateRequests: Object.fromEntries(clanCreateRequests),
+      clanLeaderMetaRequests: Object.fromEntries(clanLeaderMetaRequests),
     };
     await store.writeState(JSON.stringify(state, null, 2));
     return true;

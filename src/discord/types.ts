@@ -79,6 +79,28 @@ export type ClanGrantRequest = {
   createdAt: number;
 };
 
+export type ClanLeaderMetaRequestStatus = "pending_clan_leader" | "pending_mod" | "approved" | "denied";
+
+export type ClanLeaderMetaRequest = {
+  id: string;
+  guildId: string;
+  clanRoleId: string;
+  clanRoleName: string;
+  targetUserId: string;
+  requesterUserId: string;
+  status: ClanLeaderMetaRequestStatus;
+  threadId: string;
+  channelId: string;
+  pendingMessageId?: string;
+  clanLeaderApprovedBy?: string;
+  reviewMessageId?: string;
+  reviewChannelId?: string;
+  denyReason?: string;
+  createdAt: number;
+  resolvedAt?: number;
+  resolvedBy?: string;
+};
+
 export type ClanCreateRequest = {
   id: string;
   guildId: string;

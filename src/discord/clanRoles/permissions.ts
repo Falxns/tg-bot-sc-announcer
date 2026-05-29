@@ -1,6 +1,6 @@
 import type { GuildMember } from "discord.js";
 import { isDiscordModerator } from "../guildPermissions";
-import type { ClanCreateRequest, ClanGrantRequest } from "../types";
+import type { ClanCreateRequest, ClanGrantRequest, ClanLeaderMetaRequest } from "../types";
 import { isClanLeaderFor } from "./resolver";
 
 export function isClanModerator(member: GuildMember | null): boolean {
@@ -21,5 +21,22 @@ export function canResolveCreateRequest(
   request: ClanCreateRequest,
 ): boolean {
   if (request.status !== "pending") return false;
+  return canApproveCreateRequest(member);
+}
+
+export function canApproveLeaderMetaClanStage(
+  member: GuildMember,
+  request: ClanLeaderMetaRequest,
+): boolean {
+  if (request.status !== "pending_clan_leader") return false;
+  if (member.id === request.targetUserId) return false;
+  return isClanLeaderFor(member, request.clanRoleId);
+}
+
+export function canResolveLeaderMetaModRequest(
+  member: GuildMember,
+  request: ClanLeaderMetaRequest,
+): boolean {
+  if (request.status !== "pending_mod") return false;
   return canApproveCreateRequest(member);
 }
