@@ -184,7 +184,7 @@ Leader-approved clan workflows (separate from self-serve **`/rolepanel`** toggle
    - **`+клан Название`** — request a clan role for yourself (pending; leaders/mods click **Одобрить / Отклонить** on the bot message)
    - **`+клан @участник`** — leader of one clan grants to a teammate; **`+клан Название @участник`** — explicit clan (leader/mod)
    - **`-клан`** — remove your role if you have exactly one clan role; **`-клан @участник`** — leader/mod shortcuts per rules; **`-клан Название @участник`** — explicit remove (immediate)
-   - **`!состав`** — leaders receive a **DM** with everyone who has the clan role (👑 marks leaders); **`!состав Название`** when leading multiple clans or for mods
+   - **`!состав`** — DM roster of clan members (👑 = leaders). **Leaders:** own clan only (`!состав` or `!состав Название`). **Mods:** any clan via `!состав Название`
    - **`!создать`** block — line 2: clan name, line 3: color preset label (e.g. `Красный`), then `@mention` roster with 👑 for leaders (**`DISCORD_CLAN_ROSTER_MIN`–`DISCORD_CLAN_ROSTER_MAX`**) → mod review in **`DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID`** (**Принять / Отклонить**). D-rank is checked **manually** by mods.
 3. Bot replies to commands in the thread and **auto-deletes** after **`DISCORD_WARNING_MESSAGE_TTL_MS`**. Other messages in the rules thread are **deleted** and count as a **strike** (same ladder as automod).
 3. Grant approval embed shows who resolved the request (**лидер клана** or **модератор**) with a working `@mention` in the message body.

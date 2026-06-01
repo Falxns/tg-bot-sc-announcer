@@ -1,7 +1,9 @@
 import { EmbedBuilder, type Guild, type GuildMember, type Role } from "discord.js";
 import { formatUserList } from "./helpers";
+import { isClanModerator } from "./permissions";
 import {
   ensureGuildMembersCached,
+  isClanLeaderFor,
   listClanLeaderIds,
   listMemberIdsWithRole,
 } from "./resolver";
@@ -37,6 +39,10 @@ export async function sendClanRosterDm(
   requester: GuildMember,
   clanRole: Role,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isClanModerator(requester) && !isClanLeaderFor(requester, clanRole.id)) {
+    return { ok: false, error: clanTxt.cmdRosterNotYourClan(clanRole.name) };
+  }
+
   await ensureGuildMembersCached(guild);
   const memberIds = listMemberIdsWithRole(guild, clanRole.id);
   const leaderIds = await listClanLeaderIds(guild, clanRole.id);

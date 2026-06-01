@@ -511,10 +511,10 @@ function parseRosterCommand(
   const ledClans = listLedClanRoles(guild, member);
 
   if (!clanQuery) {
-    if (isMod) {
-      return { kind: "error", message: clanTxt.cmdModNeedsTarget };
-    }
     if (ledClans.length === 0) {
+      if (isMod) {
+        return { kind: "error", message: clanTxt.cmdRosterModNeedsClan };
+      }
       return { kind: "error", message: clanTxt.cmdRosterLeaderOnly };
     }
     if (ledClans.length > 1) {
@@ -527,7 +527,7 @@ function parseRosterCommand(
   if (isParseError(resolved)) return resolved;
 
   if (!isMod && !isClanLeaderFor(member, resolved.id)) {
-    return { kind: "error", message: clanTxt.cmdRosterLeaderOnly };
+    return { kind: "error", message: clanTxt.cmdRosterNotYourClan(resolved.name) };
   }
 
   return { kind: "roster", clanRole: resolved };
