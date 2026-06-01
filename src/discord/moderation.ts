@@ -464,9 +464,16 @@ export async function applyLightStrikeForMessage(
 }
 
 /** Reply in channel/thread, then delete the bot message after TTL. */
-export async function replyInChannelAutoDelete(message: Message, content: string): Promise<void> {
+export async function replyInChannelAutoDelete(
+  message: Message,
+  content: string,
+  options?: { deleteUserMessage?: boolean },
+): Promise<void> {
   const reply = await message.reply({ content, allowedMentions: { parse: [] } }).catch(() => null);
   if (reply) await deleteLater(reply, DISCORD_WARNING_MESSAGE_TTL_MS);
+  if (options?.deleteUserMessage) {
+    await deleteLater(message, DISCORD_WARNING_MESSAGE_TTL_MS);
+  }
 }
 
 /** Prefer human-readable channel/thread name; fetch if missing from cache. */

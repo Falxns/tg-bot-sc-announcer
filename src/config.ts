@@ -72,7 +72,7 @@ export const DISCORD_WARNINGS_BEFORE_TIMEOUT = clampParseInt(
   20,
 );
 export const DISCORD_WARNING_MESSAGE_TTL_MS = clampParseInt(
-  process.env.DISCORD_WARNING_MESSAGE_TTL_MS ?? "12000",
+  process.env.DISCORD_WARNING_MESSAGE_TTL_MS ?? "30000",
   1000,
   600_000,
 );

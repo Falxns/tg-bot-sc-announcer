@@ -15,6 +15,10 @@ import { ensureGuildMembersCached } from "./resolver";
 import { isClanCommandMessage, parseClanTextCommand } from "./textCommands";
 import { clanTxt } from "./strings";
 
+async function replyClanCommandError(message: Message, content: string): Promise<void> {
+  await replyInChannelAutoDelete(message, content, { deleteUserMessage: true });
+}
+
 export async function handleClanRulesMessage(message: Message): Promise<boolean> {
   if (!message.inGuild() || !message.guild || message.author.bot) return false;
   if (!clanRolesConfigured()) return false;
@@ -41,14 +45,14 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
   if (!parsed) return true;
 
   if ("kind" in parsed && parsed.kind === "error") {
-    await replyInChannelAutoDelete(message, parsed.message);
+    await replyClanCommandError(message, parsed.message);
     return true;
   }
 
   if (parsed.kind === "grant") {
     const target = await message.guild.members.fetch(parsed.targetUserId).catch(() => null);
     if (!target) {
-      await replyInChannelAutoDelete(message, clanTxt.targetMissing);
+      await replyClanCommandError(message, clanTxt.targetMissing);
       return true;
     }
     const err = await submitGrantRequest(
@@ -61,7 +65,7 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       message.id,
     );
     if (err) {
-      await replyInChannelAutoDelete(message, err);
+      await replyClanCommandError(message, err);
       return true;
     }
     await replyInChannelAutoDelete(message, clanTxt.grantRequestSent);
@@ -76,7 +80,7 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       parsed.targetUserId,
     );
     if (!removed.ok) {
-      await replyInChannelAutoDelete(message, removed.error);
+      await replyClanCommandError(message, removed.error);
       return true;
     }
     const targetLabel =
@@ -97,7 +101,7 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       message.id,
     );
     if (err) {
-      await replyInChannelAutoDelete(message, err);
+      await replyClanCommandError(message, err);
       return true;
     }
     await replyInChannelAutoDelete(message, clanTxt.cmdCreateSubmitted);
@@ -114,7 +118,7 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       message.id,
     );
     if (err) {
-      await replyInChannelAutoDelete(message, err);
+      await replyClanCommandError(message, err);
       return true;
     }
     const leaderCount = await countClanLeaders(message.guild, parsed.clanRole.id);
@@ -132,7 +136,7 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       parsed.targetUserId,
     );
     if (!removed.ok) {
-      await replyInChannelAutoDelete(message, removed.error);
+      await replyClanCommandError(message, removed.error);
       return true;
     }
     const targetLabel =
