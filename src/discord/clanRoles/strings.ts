@@ -1,12 +1,20 @@
-import { DISCORD_CLAN_MAX_ROLES_PER_MEMBER } from "../../config";
-import { formatClanColorPresetOptions, getClanColorPresets } from "./colorPresets";
+import { EmbedBuilder } from "discord.js";
+import {
+  DISCORD_CLAN_MAX_ROLES_PER_MEMBER,
+  DISCORD_CLAN_ROSTER_MAX,
+  DISCORD_CLAN_ROSTER_MIN,
+} from "../../config";
+import { CLAN_NAME_MAX_LEN, CLAN_NAME_MIN_LEN } from "./constants";
+import { formatClanColorPresetOptions } from "./colorPresets";
 
 export const clanTxt = {
   notConfigured: "Клановые роли не настроены на этом сервере.",
   requestUnknown: "Запрос не найден или устарел.",
   internalError: "Произошла ошибка. Попробуйте позже.",
 
-  rulesHelpPosted: (url: string) => `Справка по командам опубликована: ${url}`,
+  rulesHelpTitle: "Клановые команды",
+  rulesHelpDescription: "Пишите только в ветке под этим сообщением. Неверные команды удаляются.",
+  rulesHelpFooter: "Одобрение: кнопки на сообщении бота · ответ приходит на вашу команду",
 
   cmdInvalidFormat: (example: string) => `Неверный формат. Пример: ${example}`,
   cmdClanNotFound: (query: string) => `Клан не найден: **${query}**`,
@@ -138,45 +146,68 @@ export const clanTxt = {
     `[Клан] ${actor} снял роль лидера **${role}** у ${target}`,
   auditDenyLeaderMeta: (mod: string, role: string, targetUserId: string) =>
     `[Клан] ${mod} отклонил заявку на лидера **${role}** (<@${targetUserId}>)`,
+
+  rulesHelpPosted: (url: string) => `Справка по командам опубликована: ${url}`,
 } as const;
 
-function clanRoleCapHelpLine(): string {
+function clanRoleCapLimitFragment(): string {
   if (DISCORD_CLAN_MAX_ROLES_PER_MEMBER === 1) {
-    return "**Лимит:** одна клановая роль на участника (роль лидера — отдельно). Смена клана: сначала `-клан`.\n\n";
+    return "**1** клановая роль на человека";
   }
   if (DISCORD_CLAN_MAX_ROLES_PER_MEMBER > 1) {
-    return `**Лимит:** до ${DISCORD_CLAN_MAX_ROLES_PER_MEMBER} клановых ролей на участника.\n\n`;
+    return `**${DISCORD_CLAN_MAX_ROLES_PER_MEMBER}** клановых ролей на человека`;
   }
-  return "";
+  return "без лимита клановых ролей на человека";
 }
 
-export function buildClanRulesHelp(): string {
+export function buildClanRulesHelpEmbed(): EmbedBuilder {
   const colorOptions = formatClanColorPresetOptions();
-  const exampleColor = getClanColorPresets()[0]?.label ?? "Красный";
 
-  return (
-    "Клановые команды (в этой ветке):\n\n" +
-    clanRoleCapHelpLine() +
-    "+клан Название              — запросить роль себе\n" +
-    "+клан @участник             — выдать роль (лидер одного клана)\n" +
-    "+клан Название @участник    — выдать роль (лидер/мод)\n\n" +
-    "-клан                       — снять свою роль (если один клан)\n" +
-    "-клан @участник             — снять роль (лидер одного клана / мод)\n" +
-    "-клан Название @участник    — снять роль (явно)\n\n" +
-    "+лидер Название             — запросить роль лидера себе\n" +
-    "+лидер @участник            — назначить лидера (лидер одного клана)\n" +
-    "+лидер Название @участник   — назначить лидера (лидер/мод)\n\n" +
-    "-лидер                      — снять свою роль лидера (если один клан)\n" +
-    "-лидер Название             — снять свою роль лидера (явно)\n" +
-    "-лидер @участник            — снять роль лидера (только модератор)\n\n" +
-    "!создать\n" +
-    "НазваниеКлана\n" +
-    `${exampleColor}\n` +
-    "👑 @лидер\n" +
-    "@участники…\n\n" +
-    `**Доступные цвета:** ${colorOptions}\n` +
-    "**Или свой цвет:** `#RRGGBB` (например `#e74c3c`)\n\n" +
-    "На запрос выдачи роли лидер или модератор нажимает **Одобрить** или **Отклонить**.\n" +
-    "На запрос роли лидера: при одном лидере в клане сначала подтверждает действующий лидер, затем модераторы."
-  );
+  return new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle(clanTxt.rulesHelpTitle)
+    .setDescription(clanTxt.rulesHelpDescription)
+    .addFields(
+      {
+        name: "+клан",
+        value:
+          "`+клан Название` — получить роль для себя\n" +
+          "`+клан @участник` — выдать роль своего клана (для лидера)\n" +
+          "`+клан Название @участник` — явно указать клан при выдаче\n" +
+          "→ одобрение лидером/модератором",
+      },
+      {
+        name: "-клан",
+        value:
+          "`-клан` — снять роль с себя\n" +
+          "`-клан @участник` — снять роль с участника своего клана (для лидера)\n" +
+          "→ роль снимается сразу",
+      },
+      {
+        name: "+лидер",
+        value:
+          "Нужна роль клана. **2** лидера на клан.\n" +
+          "`+лидер Название` - запросить роль лидера себе\n" +
+          "`+лидер @участник` - запросить роль лидера для участника\n" +
+          "→ при 1 лидере: одобрение лидера → одобрение модераторов",
+      },
+      {
+        name: "-лидер",
+        value: "`-лидер` — снять роль лидера с себя\n`-лидер @участник` — **только для модератора**",
+      },
+      {
+        name: "!создать",
+        value: "Блок:\n`!создать` → название клана → цвет роли → `👑 @лидер` → `@участники`",
+      },
+      {
+        name: "Лимиты",
+        value:
+          `Имя **${CLAN_NAME_MIN_LEN}–${CLAN_NAME_MAX_LEN}** · состав **${DISCORD_CLAN_ROSTER_MIN}–${DISCORD_CLAN_ROSTER_MAX}** · ${clanRoleCapLimitFragment()} · лидеров **1–2**`,
+      },
+      {
+        name: "Цвета",
+        value: `${colorOptions}\nИли \`#RRGGBB\` (например \`#e74c3c\`). \`Желтый\` = \`Жёлтый\`.`,
+      },
+    )
+    .setFooter({ text: clanTxt.rulesHelpFooter });
 }
