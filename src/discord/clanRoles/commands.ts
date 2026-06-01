@@ -12,7 +12,7 @@ import {
   LAST_SEEN_STATE_FILE,
   clanRolesConfigured,
 } from "../../config";
-import { isDiscordModerator } from "../guildPermissions";
+import { isClanModerator } from "./permissions";
 import { saveState, setClanRulesPanel } from "../../state";
 import { formatClansListEmbedLines } from "./actions";
 import { buildClanRulesHelpEmbed, clanTxt } from "./strings";
@@ -31,7 +31,7 @@ export const clanPanelSlashCommand = new SlashCommandBuilder()
 
 export const clanslistSlashCommand = new SlashCommandBuilder()
   .setName("clanslist")
-  .setDescription("Список клановых ролей и число лидеров (для модераторов)")
+  .setDescription("Список клановых ролей и число лидеров (для админов)")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
 export async function handleClanSlashCommand(interaction: ChatInputCommandInteraction): Promise<boolean> {
@@ -45,7 +45,7 @@ export async function handleClanSlashCommand(interaction: ChatInputCommandIntera
   }
 
   if (name === "clanslist") {
-    if (!isDiscordModerator(interaction.member)) {
+    if (!isClanModerator(interaction.member as import("discord.js").GuildMember)) {
       await interaction.reply({ content: clanTxt.cannotApprove, flags: MessageFlags.Ephemeral });
       return true;
     }

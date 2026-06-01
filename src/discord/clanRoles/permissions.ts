@@ -1,10 +1,13 @@
 import type { GuildMember } from "discord.js";
-import { isDiscordModerator } from "../guildPermissions";
+import { DISCORD_ADMIN_ROLE_IDS } from "../../config";
+import { memberRoleIds } from "../guildPermissions";
 import type { ClanCreateRequest, ClanGrantRequest, ClanLeaderMetaRequest } from "../types";
 import { isClanLeaderFor } from "./resolver";
 
+/** Clan staff (approvals, overrides) — `DISCORD_ADMIN_ROLE_IDS` only; moderators are treated as regular users. */
 export function isClanModerator(member: GuildMember | null): boolean {
-  return isDiscordModerator(member);
+  if (DISCORD_ADMIN_ROLE_IDS.length === 0) return false;
+  return memberRoleIds(member).some((id) => DISCORD_ADMIN_ROLE_IDS.includes(id));
 }
 
 export function canApproveGrantRequest(member: GuildMember, request: ClanGrantRequest): boolean {

@@ -24,11 +24,11 @@ export const clanTxt = {
   cmdClanAmbiguous: "Найдено несколько кланов — уточните полное название.",
   cmdLeaderMultipleClans: "Вы лидер нескольких кланов — укажите название клана.",
   cmdTargetMultipleClans: "У участника несколько клановых ролей — укажите название клана.",
-  cmdTargetOnlyLeaderMod: "Указать @участника может только лидер клана или модератор.",
+  cmdTargetOnlyLeaderMod: "Указать @участника может только лидер клана или админ.",
   cmdLeaderRemoveLeaderSelfOnly:
-    "Снять роль лидера у другого участника может только модератор. Лидер снимает только свою — командой `-лидер`.",
+    "Снять роль лидера у другого участника может только админ. Лидер снимает только свою — командой `-лидер`.",
   cmdNoClanRoles: "У вас нет клановых ролей для снятия.",
-  cmdModNeedsTarget: "Модератор: укажите @участника или название клана.",
+  cmdModNeedsTarget: "Админ: укажите @участника или название клана.",
   cmdTargetNotInClan: "Участник не состоит в указанном клане.",
   clanRoleCapSelf: (existingClan: string) =>
     DISCORD_CLAN_MAX_ROLES_PER_MEMBER === 1
@@ -43,14 +43,14 @@ export const clanTxt = {
   cmdCreateInvalidHeader: "Неверный формат. Первая строка: `!создать`",
   cmdCreateInvalidColor: (label: string, colorOptions: string) =>
     `Неизвестный цвет: **${label}**. Укажите название из списка (${colorOptions}) или hex (#RRGGBB).`,
-  cmdCreateSubmitted: "Заявка на клан отправлена модераторам. D-ранг проверяется вручную.",
+  cmdCreateSubmitted: "Заявка на клан отправлена админам. D-ранг проверяется вручную.",
   cmdRosterLeaderOnly: "Список состава доступен только лидерам клана.",
-  cmdRosterModNeedsClan: "Модератор: укажите название клана (`!состав Название`).",
+  cmdRosterModNeedsClan: "Админ: укажите название клана (`!состав Название`).",
   cmdRosterNotYourClan: (clanName: string) =>
     `Вы не лидер клана **${clanName}** — можно запросить состав только своего клана.`,
   cmdRosterDmSent: "Список участников отправлен в личные сообщения.",
   cmdColorLeaderOnly: "Сменить цвет роли могут только лидеры клана.",
-  cmdColorModNeedsClan: "Модератор: укажите клан и цвет (`!цвет Название Красный`).",
+  cmdColorModNeedsClan: "Админ: укажите клан и цвет (`!цвет Название Красный`).",
   cmdColorNotYourClan: (clanName: string) =>
     `Вы не лидер клана **${clanName}** — можно менять цвет только своего клана.`,
   cmdColorInvalidFormat: (colorOptions: string) =>
@@ -81,18 +81,18 @@ export const clanTxt = {
   createLeadersInvalid: "Укажите **1–2** лидеров среди участников.",
 
   grantLeaderCap: (n: number) => `У этого клана уже ${n} лидер(ов) — максимум 2.`,
-  grantRequestSent: "Запрос отправлен. Ожидайте одобрения лидера клана или модератора.",
+  grantRequestSent: "Запрос отправлен. Ожидайте одобрения лидера клана или админа.",
   grantApprovedReply: (clanName: string, targetUserId: string, requesterUserId: string) =>
     requesterUserId === targetUserId
       ? `Запрос одобрен — роль **${clanName}** выдана вам.`
       : `Запрос одобрен — роль **${clanName}** выдана <@${targetUserId}>.`,
   grantDeniedReply: (clanName: string) => `Запрос отклонён — роль **${clanName}**.`,
   leaderMetaGrantRequestSent:
-    "Запрос на роль лидера отправлен. Действующий лидер клана должен подтвердить, затем модераторы.",
-  leaderMetaGrantRequestSentMod: "Запрос на роль лидера отправлен модераторам.",
+    "Запрос на роль лидера отправлен. Действующий лидер клана должен подтвердить, затем админы.",
+  leaderMetaGrantRequestSentMod: "Запрос на роль лидера отправлен админам.",
   leaderMetaApprovalPostFailed:
     "Не удалось опубликовать запрос на подтверждение. Проверьте, что у бота есть право «Отправка сообщений в ветках» в канале правил.",
-  leaderMetaSentToMod: "Лидер клана подтвердил запрос — заявка отправлена модераторам.",
+  leaderMetaSentToMod: "Лидер клана подтвердил запрос — заявка отправлена админам.",
   leaderMetaClanDeniedReply: (clanName: string) =>
     `Запрос на роль лидера в **${clanName}** отклонён лидером клана.`,
   alreadyClanLeader: "У участника уже есть роль лидера в этом клане.",
@@ -115,17 +115,17 @@ export const clanTxt = {
   pendingLeaderMetaClanPing: (mentions: string) =>
     `Лидер клана, подтвердите назначение второго лидера: ${mentions}`,
   pendingLeaderMetaClanNote:
-    "После вашего подтверждения заявка уйдёт модераторам на финальное одобрение.",
+    "После вашего подтверждения заявка уйдёт админам на финальное одобрение.",
   leaderMetaClanResolvedLine: (approved: boolean, userId: string) =>
     `\n\n**Статус:** ${approved ? clanTxt.approved : clanTxt.denied} — <@${userId}> (лидер клана)`,
   approve: "Одобрить",
   deny: "Отклонить",
   approved: "Запрос одобрен.",
   denied: "Запрос отклонён.",
-  requestResolvedLine: (approved: boolean, userId: string, roleLabel: "лидер клана" | "модератор") =>
+  requestResolvedLine: (approved: boolean, userId: string, roleLabel: "лидер клана" | "админ") =>
     `\n\n**Статус:** ${approved ? clanTxt.approved : clanTxt.denied} — <@${userId}> (${roleLabel})`,
   resolverRoleLeader: "лидер клана" as const,
-  resolverRoleMod: "модератор" as const,
+  resolverRoleMod: "админ" as const,
   alreadyResolved: "Этот запрос уже обработан.",
   cannotApprove: "У вас нет прав одобрить этот запрос.",
   noManageRoles: "У бота нет права управлять ролями или роль бота слишком низко.",
@@ -148,9 +148,9 @@ export const clanTxt = {
   createSuccess: (roleName: string) => `Роль **${roleName}** создана, участникам выданы роли.`,
   createDeniedApplicant: (reason?: string) =>
     reason?.trim()
-      ? `Заявка отклонена модераторами.\n**Причина:** ${reason.trim()}`
-      : "Заявка отклонена модераторами.",
-  leaderMetaDeniedApplicant: () => "Заявка на роль лидера отклонена модераторами.",
+      ? `Заявка отклонена админами.\n**Причина:** ${reason.trim()}`
+      : "Заявка отклонена админами.",
+  leaderMetaDeniedApplicant: () => "Заявка на роль лидера отклонена админами.",
   leaderMetaApprovedApplicant: (clanName: string, targetUserId: string) =>
     `Роль лидера в клане **${clanName}** выдана <@${targetUserId}>.`,
 
@@ -179,7 +179,7 @@ export const clanTxt = {
   auditColorChangeLeader: (actor: string, role: string, color: string) =>
     `[Клан] ${actor} сменил цвет **${role}** → ${color}`,
   auditColorChangeMod: (actor: string, role: string, color: string) =>
-    `[Клан] ${actor} (мод) сменил цвет **${role}** → ${color}`,
+    `[Клан] ${actor} (админ) сменил цвет **${role}** → ${color}`,
 
   enforcementUnderstaffedDm: (
     clanName: string,
@@ -228,7 +228,7 @@ export function buildClanRulesHelpEmbed(): EmbedBuilder {
           "`+клан Название` — получить роль для себя\n" +
           "`+клан @участник` — выдать роль своего клана (для лидера)\n" +
           "`+клан Название @участник` — явно указать клан при выдаче\n" +
-          "→ одобрение лидером/модератором",
+          "→ одобрение лидером/админом",
       },
       {
         name: "-клан",
@@ -243,11 +243,11 @@ export function buildClanRulesHelpEmbed(): EmbedBuilder {
           "Нужна роль клана. **2** лидера на клан.\n" +
           "`+лидер Название` - запросить роль лидера себе\n" +
           "`+лидер @участник` - запросить роль лидера для участника\n" +
-          "→ при 1 лидере: одобрение лидера → одобрение модераторов",
+          "→ при 1 лидере: одобрение лидера → одобрение админов",
       },
       {
         name: "-лидер",
-        value: "`-лидер` — снять роль лидера с себя\n`-лидер @участник` — **только для модератора**",
+        value: "`-лидер` — снять роль лидера с себя\n`-лидер @участник` — **только для админа**",
       },
       {
         name: "!создать",
@@ -258,14 +258,14 @@ export function buildClanRulesHelpEmbed(): EmbedBuilder {
         value:
           "Список участников с ролью клана в ЛС.\n" +
           "**Лидеры:** `!состав` (один клан) или `!состав Название` — только свой клан\n" +
-          "**Модераторы:** `!состав Название` — любой клан",
+          "**Админы:** `!состав Название` — любой клан",
       },
       {
         name: "!цвет",
         value:
           "Сменить цвет клановой роли.\n" +
           "**Лидеры:** `!цвет Красный` (один клан) или `!цвет Название Красный` — **1 раз в неделю** на клан\n" +
-          "**Модераторы:** `!цвет Название Красный` — любой клан, без лимита",
+          "**Админы:** `!цвет Название Красный` — любой клан, без лимита",
       },
       {
         name: "Лимиты",

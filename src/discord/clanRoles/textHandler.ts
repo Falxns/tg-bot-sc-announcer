@@ -1,6 +1,6 @@
 import type { Message } from "discord.js";
 import { clanRolesConfigured } from "../../config";
-import { isDiscordModerator } from "../guildPermissions";
+import { isClanModerator } from "./permissions";
 import { applyLightStrikeForMessage, replyInChannelAutoDelete } from "../moderation";
 import { discordModerationLogTitles as logTitles } from "../userStrings";
 import { isClanRulesThread } from "./helpers";
@@ -30,7 +30,7 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
   if (!member) return false;
 
   if (!isClanCommandMessage(message.content)) {
-    if (isDiscordModerator(member)) return true;
+    if (isClanModerator(member)) return true;
     await applyLightStrikeForMessage(
       message,
       member,

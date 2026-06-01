@@ -30,7 +30,7 @@ export function isClanGrantCustomId(customId: string): boolean {
   return customId.startsWith(CLAN_REQ_PREFIX);
 }
 
-function resolverRoleLabel(resolver: GuildMember, clanRoleId: string): "лидер клана" | "модератор" {
+function resolverRoleLabel(resolver: GuildMember, clanRoleId: string): "лидер клана" | "админ" {
   if (isClanLeaderFor(resolver, clanRoleId)) return clanTxt.resolverRoleLeader;
   return clanTxt.resolverRoleMod;
 }

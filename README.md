@@ -114,7 +114,7 @@ Edit `.env`:
 | `DISCORD_CLAN_ACTIVE_MIN_MEMBERS` | No | Min members with a clan role; below this leaders get a DM warning, then auto-purge after grace (default **10**) |
 | `DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS` | No | Days to restore roster or appoint leaders before the bot deletes the clan role (default **3**) |
 | `DISCORD_CLAN_ENFORCEMENT_CHECK_MS` | No | How often to run enforcement checks (default **86400000** = 24h) |
-| `DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS` | No | Leader `!цвет` cooldown per clan in days (default **7**; mods bypass) |
+| `DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS` | No | Leader `!цвет` cooldown per clan in days (default **7**; admins bypass) |
 | `DISCORD_CLAN_COLOR_PRESETS_JSON` | No | JSON array override for `!создать` color labels, e.g. `[{"id":"red","label":"Красный","hex":15158332}]`; default built-in Russian presets |
 | `LOG_LEVEL` | No | `info` (default), `debug`, or `warn` |
 | `PORT` | No | If set, starts an HTTP server on this port that responds `ok` (for health checks) |
@@ -158,7 +158,7 @@ Author list and “last seen” state are saved to the state file and restored o
 - `/editlinkpanel channel:<channel> message_id:<snowflake> [url1…url5] [label1…label5] [embed_*] [image]` — edit an existing **link button** message; **per-slot merge**: set only **`urlN`** / **`labelN`** for the slot to change; full **`embed_*`** and **`image`** like `/edit`
 - `/voicepanel [channel]` — publish the **temporary voice** control panel (requires `DISCORD_VOICE_ENABLED=1`; see [docs/DISCORD_VOICE_SETUP.md](docs/DISCORD_VOICE_SETUP.md))
 - `/clanpanel [channel]` — publish **clan role command help** embed in the rules channel; requires `DISCORD_CLAN_ENABLED=1` and **`DISCORD_CLAN_LEADER_ROLE_ID`**
-- `/clanslist` — mod-only list of clan roles with live leader/member counts (requires clan roles enabled)
+- `/clanslist` — admin-only (`DISCORD_ADMIN_ROLE_IDS`) list of clan roles with live leader/member counts (requires clan roles enabled)
 - `/mute user:<user> duration:<choice> [channel_preset] [rule_preset] [reason] [screenshot] [message_id]` — manual timeout at the chosen duration (not `DISCORD_TIMEOUT_LADDER_MS[tier]`); caps server-wide strikes at **`DISCORD_WARNINGS_BEFORE_TIMEOUT`** and advances the unified ladder tier on success; **`duration`**: 1h, 6h, 12h, 1d, 3d, 7d, 14d, 28d; **`channel_preset`** / **`rule_preset`** autocomplete (empty `channel_preset` → auto channel text from policy); **`reason`** overrides both; optional **`screenshot`** and **`message_id`**
 - `/unmute user:<user>` — clears Discord timeout
 - `/strike user:<user> [amount] [channel_preset] [rule_preset] [reason] [screenshot] [message_id]` — same light path as automod: +**global** strike(s); warn-only below **`DISCORD_WARNINGS_BEFORE_TIMEOUT`**, else timeout at **`DISCORD_TIMEOUT_LADDER_MS`** current tier; DM title **«Предупреждение»** or **«Наказание»** when timed out; user DM may show **«Нарушение в канале»** and **«Правило сервера (п. X)»** separately
@@ -185,16 +185,18 @@ Leader-approved clan workflows (separate from self-serve **`/rolepanel`** toggle
 
 1. Run **`/clanpanel`** in the rules channel (or pass **`channel`**). Set **`DISCORD_CLAN_RULES_MESSAGE_ID`** to the parent rules post so requests land in its thread.
 2. In the **rules thread**, users post plain-text commands:
-   - **`+клан Название`** — request a clan role for yourself (pending; leaders/mods click **Одобрить / Отклонить** on the bot message)
-   - **`+клан @участник`** — leader of one clan grants to a teammate; **`+клан Название @участник`** — explicit clan (leader/mod)
-   - **`-клан`** — remove your role if you have exactly one clan role; **`-клан @участник`** — leader/mod shortcuts per rules; **`-клан Название @участник`** — explicit remove (immediate)
-   - **`!состав`** — DM roster of clan members (👑 = leaders). **Leaders:** own clan only (`!состав` or `!состав Название`). **Mods:** any clan via `!состав Название`
-   - **`!цвет`** — change clan role color (preset label or `#RRGGBB`). **Leaders:** own clan, **once per week per clan**. **Mods:** any clan, no cooldown
-   - **`!создать`** block — line 2: clan name, line 3: color preset label (e.g. `Красный`), then `@mention` roster with 👑 for leaders (**`DISCORD_CLAN_ROSTER_MIN`–`DISCORD_CLAN_ROSTER_MAX`**) → mod review in **`DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID`** (**Принять / Отклонить**). D-rank is checked **manually** by mods.
+   - **`+клан Название`** — request a clan role for yourself (pending; leaders/admins click **Одобрить / Отклонить** on the bot message)
+   - **`+клан @участник`** — leader of one clan grants to a teammate; **`+клан Название @участник`** — explicit clan (leader/admin)
+   - **`-клан`** — remove your role if you have exactly one clan role; **`-клан @участник`** — leader/admin shortcuts per rules; **`-клан Название @участник`** — explicit remove (immediate)
+   - **`!состав`** — DM roster of clan members (👑 = leaders). **Leaders:** own clan only (`!состав` or `!состав Название`). **Admins:** any clan via `!состав Название`
+   - **`!цвет`** — change clan role color (preset label or `#RRGGBB`). **Leaders:** own clan, **once per week per clan**. **Admins:** any clan, no cooldown
+   - **`!создать`** block — line 2: clan name, line 3: color preset label (e.g. `Красный`), then `@mention` roster with 👑 for leaders (**`DISCORD_CLAN_ROSTER_MIN`–`DISCORD_CLAN_ROSTER_MAX`**) → admin review in **`DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID`** (**Принять / Отклонить**). D-rank is checked **manually** by admins.
 3. Bot replies to commands in the thread and **auto-deletes** after **`DISCORD_WARNING_MESSAGE_TTL_MS`**. Other messages in the rules thread are **deleted** and count as a **strike** (same ladder as automod).
 3. Grant approval embed shows who resolved the request (**лидер клана** or **модератор**) with a working `@mention` in the message body.
 
 **Leader model:** one shared **«Лидер клана»** role; max **2** leaders per clan (live count). Removing a member’s last clan role also strips the leader meta-role if they no longer lead any clan.
+
+**Clan staff:** approvals, `!создать` review, overrides, and `/clanslist` require **`DISCORD_ADMIN_ROLE_IDS`** only — **`DISCORD_MODERATOR_ROLE_IDS`** do not grant clan privileges (moderators use clan commands as regular users/leaders).
 
 **Auto-enforcement (daily check):** if a clan role has fewer than **`DISCORD_CLAN_ACTIVE_MIN_MEMBERS`** (default **10**) members, leaders get a **DM** reminder each day to recruit via `+клан`. If still understaffed after **`DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS`** (default **3**), the bot strips leader meta-roles and **deletes** the clan role. If a clan has **no leaders** for the same grace period, the role is deleted (no leader DMs). Grace timers reset when the roster or leadership is restored. Audit lines go to **`DISCORD_CLAN_STAFF_LOG_CHANNEL_ID`**.
 
