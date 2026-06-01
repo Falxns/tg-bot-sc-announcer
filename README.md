@@ -111,6 +111,9 @@ Edit `.env`:
 | `DISCORD_CLAN_MAX_ROLES_PER_MEMBER` | No | Max clan roles one member may hold (default **1**; **0** = unlimited). Shared leader meta-role does not count |
 | `DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID` | Yes* | Staff channel for new-clan **Принять / Отклонить** review messages |
 | `DISCORD_CLAN_STAFF_LOG_CHANNEL_ID` | No | Optional one-line audit for clan actions; falls back to **`DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID`** |
+| `DISCORD_CLAN_ACTIVE_MIN_MEMBERS` | No | Min members with a clan role; below this leaders get a DM warning, then auto-purge after grace (default **10**) |
+| `DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS` | No | Days to restore roster or appoint leaders before the bot deletes the clan role (default **3**) |
+| `DISCORD_CLAN_ENFORCEMENT_CHECK_MS` | No | How often to run enforcement checks (default **86400000** = 24h) |
 | `DISCORD_CLAN_COLOR_PRESETS_JSON` | No | JSON array override for `!создать` color labels, e.g. `[{"id":"red","label":"Красный","hex":15158332}]`; default built-in Russian presets |
 | `LOG_LEVEL` | No | `info` (default), `debug`, or `warn` |
 | `PORT` | No | If set, starts an HTTP server on this port that responds `ok` (for health checks) |
@@ -190,6 +193,8 @@ Leader-approved clan workflows (separate from self-serve **`/rolepanel`** toggle
 3. Grant approval embed shows who resolved the request (**лидер клана** or **модератор**) with a working `@mention` in the message body.
 
 **Leader model:** one shared **«Лидер клана»** role; max **2** leaders per clan (live count). Removing a member’s last clan role also strips the leader meta-role if they no longer lead any clan.
+
+**Auto-enforcement (daily check):** if a clan role has fewer than **`DISCORD_CLAN_ACTIVE_MIN_MEMBERS`** (default **10**) members, leaders get a **DM** reminder each day to recruit via `+клан`. If still understaffed after **`DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS`** (default **3**), the bot strips leader meta-roles and **deletes** the clan role. If a clan has **no leaders** for the same grace period, the role is deleted (no leader DMs). Grace timers reset when the roster or leadership is restored. Audit lines go to **`DISCORD_CLAN_STAFF_LOG_CHANNEL_ID`**.
 
 **Bot needs:** **Manage Roles** (role position above clan roles), **Message Content** intent (command parsing and roster `@mention` in the rules thread).
 

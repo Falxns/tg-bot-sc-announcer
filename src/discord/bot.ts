@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits, MessageFlags } from "discord.js";
-import { DISCORD_BOT_TOKEN, DISCORD_DEV_MODE, DISCORD_GUILD_ID, LOG_LEVEL } from "../config";
+import { DISCORD_BOT_TOKEN, DISCORD_DEV_MODE, DISCORD_GUILD_ID, LOG_LEVEL, clanRolesConfigured } from "../config";
 import { discordCommonReplies as com } from "./userStrings";
 import {
   handleDiscordCommand,
@@ -27,6 +27,8 @@ import {
   handleClanRulesMessage,
   initClanRolesModule,
   isClanRolesInteractionCustomId,
+  startClanEnforcementScheduler,
+  stopClanEnforcementScheduler,
 } from "./clanRoles";
 import {
   handleStaffSummaryCreatorMessage,
@@ -65,6 +67,9 @@ export async function startDiscordBot(): Promise<void> {
         const guild = await client.guilds.fetch(DISCORD_GUILD_ID);
         await registerGuildCommands(guild);
         await sweepTempVoiceOnReady(guild);
+        if (clanRolesConfigured()) {
+          startClanEnforcementScheduler(guild);
+        }
         if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
           console.log(`Discord bot ready as ${client.user?.tag ?? "unknown"} in guild ${guild.id}.`);
         }
@@ -198,6 +203,7 @@ export async function stopDiscordBot(): Promise<void> {
   }
 
   if (!discordClient) return;
+  stopClanEnforcementScheduler();
   discordClient.destroy();
   discordClient = null;
 }

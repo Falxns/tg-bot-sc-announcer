@@ -8,6 +8,7 @@ import type {
   ClanCreateRequest,
   ClanGrantRequest,
   ClanLeaderMetaRequest,
+  ClanRoleEnforcementState,
   ClanRulesPanelState,
   DiscordRolePanelState,
   TempVoicePanelState,
@@ -83,6 +84,10 @@ export const clanGrantRequests = new Map<string, ClanGrantRequest>();
 export const clanCreateRequests = new Map<string, ClanCreateRequest>();
 /** Pending leader-meta grant requests keyed by request id. */
 export const clanLeaderMetaRequests = new Map<string, ClanLeaderMetaRequest>();
+/** Understaffed / leaderless grace tracking keyed by `${guildId}:${clanRoleId}`. */
+export const clanRoleEnforcement = new Map<string, ClanRoleEnforcementState>();
+/** Last clan enforcement sweep timestamp (ms). */
+export let clanEnforcementLastRunAtMs = 0;
 
 /** Server-wide warn count: `${guildId}:${userId}`. */
 export const discordGlobalWarns = new Map<string, number>();
@@ -312,6 +317,26 @@ export function getClanLeaderMetaRequest(id: string): ClanLeaderMetaRequest | un
 
 export function deleteClanLeaderMetaRequest(id: string): void {
   clanLeaderMetaRequests.delete(id);
+}
+
+export function clanRoleEnforcementKey(guildId: string, clanRoleId: string): string {
+  return `${guildId}:${clanRoleId}`;
+}
+
+export function getClanRoleEnforcement(guildId: string, clanRoleId: string): ClanRoleEnforcementState | undefined {
+  return clanRoleEnforcement.get(clanRoleEnforcementKey(guildId, clanRoleId));
+}
+
+export function setClanRoleEnforcement(state: ClanRoleEnforcementState): void {
+  clanRoleEnforcement.set(clanRoleEnforcementKey(state.guildId, state.clanRoleId), state);
+}
+
+export function deleteClanRoleEnforcement(guildId: string, clanRoleId: string): void {
+  clanRoleEnforcement.delete(clanRoleEnforcementKey(guildId, clanRoleId));
+}
+
+export function setClanEnforcementLastRunAtMs(ms: number): void {
+  clanEnforcementLastRunAtMs = ms;
 }
 
 function parseNumberMap(raw: unknown): Map<string, number> {
@@ -589,6 +614,31 @@ export async function loadState(path: string): Promise<void> {
           });
         }
       }
+
+      const enforcementRaw = obj.clanRoleEnforcement;
+      if (enforcementRaw && typeof enforcementRaw === "object" && !Array.isArray(enforcementRaw)) {
+        for (const [key, value] of Object.entries(enforcementRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const clanRoleId = typeof row.clanRoleId === "string" ? row.clanRoleId : "";
+          const clanRoleName = typeof row.clanRoleName === "string" ? row.clanRoleName : "";
+          if (!guildId || !clanRoleId) continue;
+          clanRoleEnforcement.set(key, {
+            guildId,
+            clanRoleId,
+            clanRoleName,
+            understaffedSinceMs:
+              typeof row.understaffedSinceMs === "number" ? row.understaffedSinceMs : undefined,
+            leaderlessSinceMs:
+              typeof row.leaderlessSinceMs === "number" ? row.leaderlessSinceMs : undefined,
+          });
+        }
+      }
+
+      if (typeof obj.clanEnforcementLastRunAtMs === "number" && Number.isFinite(obj.clanEnforcementLastRunAtMs)) {
+        clanEnforcementLastRunAtMs = Math.max(0, Math.floor(obj.clanEnforcementLastRunAtMs));
+      }
     }
     if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
       console.log(
@@ -597,7 +647,8 @@ export async function loadState(path: string): Promise<void> {
           `${discordGlobalWarns.size} global warns, ${discordMuteTier.size} mute tiers, ` +
           `${tempVoiceRooms.size} temp voice rooms, ${clanRulesPanels.size} clan help posts, ` +
           `${clanGrantRequests.size} clan grant requests, ` +
-          `${clanLeaderMetaRequests.size} clan leader-meta requests.`,
+          `${clanLeaderMetaRequests.size} clan leader-meta requests, ` +
+          `${clanRoleEnforcement.size} clan enforcement records.`,
       );
     }
   } catch (err) {
@@ -630,6 +681,8 @@ export async function saveState(path: string): Promise<boolean> {
       clanGrantRequests: Object.fromEntries(clanGrantRequests),
       clanCreateRequests: Object.fromEntries(clanCreateRequests),
       clanLeaderMetaRequests: Object.fromEntries(clanLeaderMetaRequests),
+      clanRoleEnforcement: Object.fromEntries(clanRoleEnforcement),
+      clanEnforcementLastRunAtMs,
     };
     await store.writeState(JSON.stringify(state, null, 2));
     return true;

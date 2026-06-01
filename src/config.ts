@@ -531,6 +531,29 @@ export const DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID = (
 /** Optional audit channel for clan actions (falls back to staff summary channel). */
 export const DISCORD_CLAN_STAFF_LOG_CHANNEL_ID = (process.env.DISCORD_CLAN_STAFF_LOG_CHANNEL_ID ?? "").trim();
 
+/** Min members with a clan role before auto-purge grace applies (default 10). */
+export const DISCORD_CLAN_ACTIVE_MIN_MEMBERS = clampParseInt(
+  process.env.DISCORD_CLAN_ACTIVE_MIN_MEMBERS ?? "10",
+  1,
+  100,
+);
+
+/** Days to restore roster or appoint leaders before the bot purges the clan role (default 3). */
+export const DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS = clampParseInt(
+  process.env.DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS ?? "3",
+  1,
+  30,
+);
+
+/** How often to run clan enforcement checks (default 24h). */
+export const DISCORD_CLAN_ENFORCEMENT_CHECK_MS = clampParseInt(
+  process.env.DISCORD_CLAN_ENFORCEMENT_CHECK_MS ?? String(24 * 60 * 60 * 1000),
+  60_000,
+  7 * 24 * 60 * 60 * 1000,
+);
+
+export const DISCORD_CLAN_ENFORCEMENT_GRACE_MS = DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS * 24 * 60 * 60 * 1000;
+
 export type ClanColorPreset = { id: string; label: string; hex: number };
 
 function parseClanColorPresets(raw: string): ClanColorPreset[] {

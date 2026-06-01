@@ -127,3 +127,12 @@ export type ClanCreateRequest = {
   resolvedBy?: string;
   denyReason?: string;
 };
+
+/** Tracks understaffed / leaderless grace periods before auto-purge of a clan role. */
+export type ClanRoleEnforcementState = {
+  guildId: string;
+  clanRoleId: string;
+  clanRoleName: string;
+  understaffedSinceMs?: number;
+  leaderlessSinceMs?: number;
+};

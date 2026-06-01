@@ -1,5 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import {
+  DISCORD_CLAN_ACTIVE_MIN_MEMBERS,
+  DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS,
   DISCORD_CLAN_MAX_ROLES_PER_MEMBER,
   DISCORD_CLAN_ROSTER_MAX,
   DISCORD_CLAN_ROSTER_MIN,
@@ -157,6 +159,30 @@ export const clanTxt = {
     `[Клан] ${actor} снял роль лидера **${role}** у ${target}`,
   auditDenyLeaderMeta: (mod: string, role: string, targetUserId: string) =>
     `[Клан] ${mod} отклонил заявку на лидера **${role}** (<@${targetUserId}>)`,
+  auditEnforcementUnderstaffed: (role: string) =>
+    `[Клан] Авто-удаление: **${role}** — меньше минимального состава ${DISCORD_CLAN_ACTIVE_MIN_MEMBERS} после ${DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS} дн.`,
+  auditEnforcementLeaderless: (role: string) =>
+    `[Клан] Авто-удаление: **${role}** — нет лидеров ${DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS} дн.`,
+
+  enforcementUnderstaffedDm: (
+    clanName: string,
+    memberCount: number,
+    minMembers: number,
+    graceDays: number,
+    deadlineMs: number,
+  ) => {
+    const deadline = new Date(deadlineMs).toLocaleDateString("ru-RU", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+    return (
+      `⚠️ Клан **${clanName}**: с ролью меньше **${minMembers}** участников (сейчас **${memberCount}**).\n\n` +
+      `Добавьте участников через \`+клан\` в ветке правил кланов.\n\n` +
+      `Если через **${graceDays}** дн. состав не восстановится (до **${deadline}**), ` +
+      `бот снимет роль лидера и удалит клановую роль.`
+    );
+  },
 
   rulesHelpPosted: (url: string) => `Справка по командам опубликована: ${url}`,
 } as const;
@@ -220,7 +246,8 @@ export function buildClanRulesHelpEmbed(): EmbedBuilder {
       {
         name: "Лимиты",
         value:
-          `Имя **${CLAN_NAME_MIN_LEN}–${CLAN_NAME_MAX_LEN}** · состав **${DISCORD_CLAN_ROSTER_MIN}–${DISCORD_CLAN_ROSTER_MAX}** · ${clanRoleCapLimitFragment()} · лидеров **1–2**`,
+          `Имя **${CLAN_NAME_MIN_LEN}–${CLAN_NAME_MAX_LEN}** · состав **${DISCORD_CLAN_ROSTER_MIN}–${DISCORD_CLAN_ROSTER_MAX}** · ${clanRoleCapLimitFragment()} · лидеров **1–2**\n` +
+          `Минимум **${DISCORD_CLAN_ACTIVE_MIN_MEMBERS}** участников с ролью · иначе через **${DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS}** дн. роль удаляется`,
       },
       {
         name: "Цвета",

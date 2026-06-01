@@ -17,9 +17,13 @@ import {
   DISCORD_CLAN_STAFF_LOG_CHANNEL_ID,
   DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID,
 } from "../../config";
-import { saveState } from "../../state";
+import {
+  clanGrantRequests,
+  clanLeaderMetaRequests,
+  saveState,
+} from "../../state";
 import type { ClanCreateRequest } from "../types";
-import { countClanLeaders, countMembersWithRole, ensureGuildMembersCached, getMemberClanRoleCapConflict, isClanLeaderFor, listClanRoles, listMemberClanRoles } from "./resolver";
+import { countClanLeaders, countMembersWithRole, ensureGuildMembersCached, getMemberClanRoleCapConflict, isClanLeaderFor, listClanRoles, listMemberClanRoles, listMemberIdsWithRole } from "./resolver";
 import { clanTxt } from "./strings";
 
 export type RoleActionResult = { ok: true } | { ok: false; error: string };
@@ -361,4 +365,62 @@ export async function formatClansListEmbedLines(guild: Guild): Promise<string[]>
     lines.push(clanTxt.clanslistLine(r.name, leaders, countMembersWithRole(guild, r.id)));
   }
   return lines;
+}
+
+export type ClanPurgeReason = "understaffed" | "leaderless";
+
+function purgePendingRequestsForClanRole(clanRoleId: string): void {
+  for (const [id, req] of clanGrantRequests) {
+    if (req.clanRoleId === clanRoleId && req.status === "pending") {
+      clanGrantRequests.delete(id);
+    }
+  }
+  for (const [id, req] of clanLeaderMetaRequests) {
+    if (
+      req.clanRoleId === clanRoleId &&
+      (req.status === "pending_clan_leader" || req.status === "pending_mod")
+    ) {
+      clanLeaderMetaRequests.delete(id);
+    }
+  }
+}
+
+/** Remove a clan role from all members, cancel pending requests, and delete the Discord role. */
+export async function purgeClanRole(
+  guild: Guild,
+  clanRole: Role,
+  reason: ClanPurgeReason,
+): Promise<RoleActionResult> {
+  const me = await getBotMember(guild);
+  if (!me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
+    return { ok: false, error: clanTxt.noManageRoles };
+  }
+  if (!clanRole.editable) {
+    return { ok: false, error: "Бот не может удалить эту роль (позиция в иерархии)." };
+  }
+
+  await ensureGuildMembersCached(guild);
+  const memberIds = listMemberIdsWithRole(guild, clanRole.id);
+
+  for (const userId of memberIds) {
+    const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
+    if (!member) continue;
+    await removeClanRoleFromMember(guild, member, clanRole);
+  }
+
+  purgePendingRequestsForClanRole(clanRole.id);
+
+  try {
+    await clanRole.delete(`Clan enforcement: ${reason}`);
+  } catch {
+    return { ok: false, error: clanTxt.noManageRoles };
+  }
+
+  const auditLine =
+    reason === "understaffed"
+      ? clanTxt.auditEnforcementUnderstaffed(clanRole.name)
+      : clanTxt.auditEnforcementLeaderless(clanRole.name);
+  await postClanAuditLine(guild, auditLine);
+
+  return { ok: true };
 }
