@@ -4,7 +4,7 @@ import {
   DISCORD_CLAN_ROSTER_MIN,
 } from "../../config";
 import type { ClanColorPreset } from "../../config";
-import { getClanColorPresetByLabel, formatClanColorPresetOptions } from "./colorPresets";
+import { formatClanColorPresetOptions, resolveClanCreateColor } from "./colorPresets";
 import { CLAN_NAME_MAX_LEN, CLAN_NAME_MIN_LEN, MAX_CLAN_LEADERS } from "./constants";
 import { parseLeaderIdsFromMentions, validateClanName } from "./helpers";
 import { isClanModerator } from "./permissions";
@@ -446,7 +446,7 @@ function parseCreateCommand(
     return { kind: "error", message: clanTxt.createNameDuplicate };
   }
 
-  const preset = getClanColorPresetByLabel(colorLabel);
+  const preset = resolveClanCreateColor(colorLabel);
   if (!preset) {
     return { kind: "error", message: clanTxt.cmdCreateInvalidColor(colorLabel, formatClanColorPresetOptions()) };
   }

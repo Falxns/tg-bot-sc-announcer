@@ -31,7 +31,7 @@ export const clanTxt = {
     `У <@${userId}> уже есть клановая роль **${existingClan}**. Участник должен сначала снять её (\`-клан\`).`,
   cmdCreateInvalidHeader: "Неверный формат. Первая строка: `!создать`",
   cmdCreateInvalidColor: (label: string, colorOptions: string) =>
-    `Неизвестный цвет: **${label}**. Доступные цвета: ${colorOptions}.`,
+    `Неизвестный цвет: **${label}**. Укажите название из списка (${colorOptions}) или hex (#RRGGBB).`,
   cmdCreateSubmitted: "Заявка на клан отправлена модераторам. D-ранг проверяется вручную.",
   cmdRemoveDoneTarget: (role: string, target: string) => `Роль **${role}** снята с ${target}.`,
   cmdRemoveLeaderDoneTarget: (role: string, target: string) =>
@@ -174,7 +174,8 @@ export function buildClanRulesHelp(): string {
     `${exampleColor}\n` +
     "👑 @лидер\n" +
     "@участники…\n\n" +
-    `**Доступные цвета:** ${colorOptions}\n\n` +
+    `**Доступные цвета:** ${colorOptions}\n` +
+    "**Или свой цвет:** `#RRGGBB` (например `#e74c3c`)\n\n" +
     "На запрос выдачи роли лидер или модератор нажимает **Одобрить** или **Отклонить**.\n" +
     "На запрос роли лидера: при одном лидере в клане сначала подтверждает действующий лидер, затем модераторы."
   );

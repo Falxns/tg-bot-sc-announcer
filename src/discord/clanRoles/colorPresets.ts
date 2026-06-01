@@ -26,14 +26,52 @@ export function getClanColorPresets(): readonly ClanColorPreset[] {
   return activePresets;
 }
 
+/** Normalize preset labels for comparison (ё → е, case-insensitive). */
+export function normalizeColorLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/ё/g, "е");
+}
+
+function formatHexColorLabel(hex: number): string {
+  return `#${hex.toString(16).padStart(6, "0")}`;
+}
+
+/** Parse #RGB or #RRGGBB (with or without #). Returns 0xRRGGBB or null. */
+export function parseClanHexColor(input: string): number | null {
+  const trimmed = input.trim();
+  const match = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(trimmed);
+  if (!match) return null;
+
+  let digits = match[1];
+  if (digits.length === 3) {
+    digits = digits
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  return parseInt(digits, 16);
+}
+
 export function getClanColorPresetById(id: string): ClanColorPreset | undefined {
   return activePresets.find((p) => p.id === id);
 }
 
 export function getClanColorPresetByLabel(label: string): ClanColorPreset | undefined {
-  const q = label.trim().toLowerCase();
+  const q = normalizeColorLabel(label);
   if (!q) return undefined;
-  return activePresets.find((p) => p.label.toLowerCase() === q || p.id.toLowerCase() === q);
+  return activePresets.find((p) => normalizeColorLabel(p.label) === q || p.id.toLowerCase() === q);
+}
+
+/** Preset by Russian label / id, or custom #hex for !создать line 3. */
+export function resolveClanCreateColor(input: string): ClanColorPreset | undefined {
+  const trimmed = input.trim();
+  if (!trimmed) return undefined;
+
+  const hex = parseClanHexColor(trimmed);
+  if (hex !== null) {
+    return { id: "custom", label: formatHexColorLabel(hex), hex };
+  }
+
+  return getClanColorPresetByLabel(trimmed);
 }
 
 /** Comma-separated preset labels for help text and validation errors. */
