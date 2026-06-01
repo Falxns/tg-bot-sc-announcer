@@ -516,6 +516,12 @@ export const DISCORD_CLAN_ROLE_NAME_PATTERN = (() => {
 
 export const DISCORD_CLAN_ROSTER_MIN = clampParseInt(process.env.DISCORD_CLAN_ROSTER_MIN ?? "15", 1, 100);
 export const DISCORD_CLAN_ROSTER_MAX = clampParseInt(process.env.DISCORD_CLAN_ROSTER_MAX ?? "35", 1, 100);
+/** Max clan roles per member (0 = unlimited). Default 1 — leader meta-role is separate. */
+export const DISCORD_CLAN_MAX_ROLES_PER_MEMBER = clampParseInt(
+  process.env.DISCORD_CLAN_MAX_ROLES_PER_MEMBER ?? "1",
+  0,
+  20,
+);
 
 /** Mod queue channel for new clan create requests. */
 export const DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID = (

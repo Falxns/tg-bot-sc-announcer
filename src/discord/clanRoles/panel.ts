@@ -23,7 +23,7 @@ import { grantClanRoleToMember, postClanAuditLine, removeClanRoleFromMember } fr
 import { CLAN_REQ_PREFIX, MAX_CLAN_LEADERS } from "./constants";
 import { newClanRequestId, replyToClanRequestMessage, sendInClanChannel } from "./helpers";
 import { canApproveGrantRequest } from "./permissions";
-import { countClanLeaders, isClanLeaderFor, listClanLeaderIds } from "./resolver";
+import { countClanLeaders, getMemberClanRoleCapConflict, isClanLeaderFor, listClanLeaderIds } from "./resolver";
 import { clanTxt } from "./strings";
 
 export function isClanGrantCustomId(customId: string): boolean {
@@ -127,7 +127,16 @@ export async function submitGrantRequest(
   targetUserId: string,
   grantLeaderMeta = false,
   sourceMessageId?: string,
-): Promise<void> {
+): Promise<string | null> {
+  const target = await guild.members.fetch(targetUserId).catch(() => null);
+  if (!target) return clanTxt.targetMissing;
+  const capConflict = getMemberClanRoleCapConflict(guild, target, clanRole.id);
+  if (capConflict) {
+    return requesterId === targetUserId
+      ? clanTxt.clanRoleCapSelf(capConflict.name)
+      : clanTxt.clanRoleCapTarget(capConflict.name);
+  }
+
   const request: ClanGrantRequest = {
     id: newClanRequestId(),
     guildId: guild.id,
@@ -145,6 +154,7 @@ export async function submitGrantRequest(
   setClanGrantRequest(request);
   await postPendingGrantRequest(guild, dest, request);
   await saveState(LAST_SEEN_STATE_FILE);
+  return null;
 }
 
 export async function performDirectRemove(

@@ -19,7 +19,7 @@ import {
 } from "../../config";
 import { saveState } from "../../state";
 import type { ClanCreateRequest } from "../types";
-import { countClanLeaders, countMembersWithRole, ensureGuildMembersCached, isClanLeaderFor, listClanRoles, listMemberClanRoles } from "./resolver";
+import { countClanLeaders, countMembersWithRole, ensureGuildMembersCached, getMemberClanRoleCapConflict, isClanLeaderFor, listClanRoles, listMemberClanRoles } from "./resolver";
 import { clanTxt } from "./strings";
 
 export type RoleActionResult = { ok: true } | { ok: false; error: string };
@@ -131,6 +131,11 @@ export async function grantClanRoleToMember(
   if (!me) return { ok: false, error: clanTxt.noManageRoles };
   const blocker = roleBlocker(me, target, clanRole);
   if (blocker) return { ok: false, error: blocker };
+
+  const capConflict = getMemberClanRoleCapConflict(guild, target, clanRole.id);
+  if (capConflict) {
+    return { ok: false, error: clanTxt.clanRoleCapTarget(capConflict.name) };
+  }
 
   if (grantLeaderMeta) {
     if ((await countClanLeaders(guild, clanRole.id)) >= 2 && !target.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) {
@@ -278,6 +283,16 @@ export async function executeCreateRequest(
 
   const existing = guild.roles.cache.find((r) => r.name.toLowerCase() === request.clanName.toLowerCase());
   if (existing) return { ok: false, error: clanTxt.createNameDuplicate };
+
+  await ensureGuildMembersCached(guild);
+  for (const userId of request.memberIds) {
+    const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
+    if (!member) continue;
+    const conflict = getMemberClanRoleCapConflict(guild, member);
+    if (conflict) {
+      return { ok: false, error: clanTxt.createMemberClanRoleCap(userId, conflict.name) };
+    }
+  }
 
   let role: Role;
   try {

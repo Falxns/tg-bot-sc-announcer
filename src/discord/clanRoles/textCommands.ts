@@ -9,6 +9,7 @@ import { CLAN_NAME_MAX_LEN, CLAN_NAME_MIN_LEN, MAX_CLAN_LEADERS } from "./consta
 import { parseLeaderIdsFromMentions, validateClanName } from "./helpers";
 import { isClanModerator } from "./permissions";
 import {
+  getMemberClanRoleCapConflict,
   isClanLeaderFor,
   listMemberClanRoles,
   resolveClanRole,
@@ -92,6 +93,36 @@ function listLedClanRoles(guild: Guild, member: GuildMember): Role[] {
   return listMemberClanRoles(guild, member).filter((role) => isClanLeaderFor(member, role.id));
 }
 
+function validateGrantTargetCap(
+  guild: Guild,
+  targetUserId: string,
+  clanRole: Role,
+  actorId: string,
+): ClanTextParseError | null {
+  const target = guild.members.cache.get(targetUserId);
+  if (!target) return { kind: "error", message: clanTxt.targetMissing };
+  const conflict = getMemberClanRoleCapConflict(guild, target, clanRole.id);
+  if (!conflict) return null;
+  return {
+    kind: "error",
+    message:
+      targetUserId === actorId
+        ? clanTxt.clanRoleCapSelf(conflict.name)
+        : clanTxt.clanRoleCapTarget(conflict.name),
+  };
+}
+
+function finishGrant(
+  guild: Guild,
+  member: GuildMember,
+  clanRole: Role,
+  targetUserId: string,
+): ParsedGrantCommand | ClanTextParseError {
+  const capErr = validateGrantTargetCap(guild, targetUserId, clanRole, member.id);
+  if (capErr) return capErr;
+  return { kind: "grant", clanRole, targetUserId };
+}
+
 function parseGrantCommand(
   guild: Guild,
   member: GuildMember,
@@ -111,11 +142,11 @@ function parseGrantCommand(
     if (clanQuery) {
       const resolved = resolveClanQuery(guild, clanQuery);
       if (isParseError(resolved)) return resolved;
-      return { kind: "grant", clanRole: resolved, targetUserId: targetMentionId };
+      return finishGrant(guild, member, resolved, targetMentionId);
     }
 
     if (ledClans.length === 1) {
-      return { kind: "grant", clanRole: ledClans[0], targetUserId: targetMentionId };
+      return finishGrant(guild, member, ledClans[0], targetMentionId);
     }
     if (ledClans.length > 1) {
       return { kind: "error", message: clanTxt.cmdLeaderMultipleClans };
@@ -127,7 +158,7 @@ function parseGrantCommand(
     }
     const targetClans = listMemberClanRoles(guild, targetMember);
     if (targetClans.length === 1) {
-      return { kind: "grant", clanRole: targetClans[0], targetUserId: targetMentionId };
+      return finishGrant(guild, member, targetClans[0], targetMentionId);
     }
     if (targetClans.length > 1) {
       return { kind: "error", message: clanTxt.cmdTargetMultipleClans };
@@ -141,7 +172,7 @@ function parseGrantCommand(
 
   const resolved = resolveClanQuery(guild, clanQuery);
   if (isParseError(resolved)) return resolved;
-  return { kind: "grant", clanRole: resolved, targetUserId: member.id };
+  return finishGrant(guild, member, resolved, member.id);
 }
 
 function parseRemoveCommand(
@@ -443,6 +474,15 @@ function parseCreateCommand(
   }
   if (!leaders.every((id) => onServer.includes(id))) {
     return { kind: "error", message: clanTxt.createLeadersInvalid };
+  }
+
+  for (const id of onServer) {
+    const m = guild.members.cache.get(id);
+    if (!m) continue;
+    const conflict = getMemberClanRoleCapConflict(guild, m);
+    if (conflict) {
+      return { kind: "error", message: clanTxt.createMemberClanRoleCap(id, conflict.name) };
+    }
   }
 
   return {

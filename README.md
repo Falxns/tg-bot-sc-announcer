@@ -108,6 +108,7 @@ Edit `.env`:
 | `DISCORD_CLAN_ROLE_NAME_PATTERN` | No | Optional regex (case-insensitive) to filter which guild roles count as clans |
 | `DISCORD_CLAN_ROSTER_MIN` | No | Min roster size for `!создать` (default **15**) |
 | `DISCORD_CLAN_ROSTER_MAX` | No | Max roster size for `!создать` (default **35**) |
+| `DISCORD_CLAN_MAX_ROLES_PER_MEMBER` | No | Max clan roles one member may hold (default **1**; **0** = unlimited). Shared leader meta-role does not count |
 | `DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID` | Yes* | Staff channel for new-clan **Принять / Отклонить** review messages |
 | `DISCORD_CLAN_STAFF_LOG_CHANNEL_ID` | No | Optional one-line audit for clan actions; falls back to **`DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID`** |
 | `DISCORD_CLAN_COLOR_PRESETS_JSON` | No | JSON array override for `!создать` color labels, e.g. `[{"id":"red","label":"Красный","hex":15158332}]`; default built-in Russian presets |

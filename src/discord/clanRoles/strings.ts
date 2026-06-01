@@ -1,3 +1,4 @@
+import { DISCORD_CLAN_MAX_ROLES_PER_MEMBER } from "../../config";
 import { formatClanColorPresetOptions, getClanColorPresets } from "./colorPresets";
 
 export const clanTxt = {
@@ -18,6 +19,16 @@ export const clanTxt = {
   cmdNoClanRoles: "У вас нет клановых ролей для снятия.",
   cmdModNeedsTarget: "Модератор: укажите @участника или название клана.",
   cmdTargetNotInClan: "Участник не состоит в указанном клане.",
+  clanRoleCapSelf: (existingClan: string) =>
+    DISCORD_CLAN_MAX_ROLES_PER_MEMBER === 1
+      ? `У вас уже есть клановая роль **${existingClan}**. Чтобы получить другую — сначала снимите текущую: \`-клан\`.`
+      : `У вас уже ${DISCORD_CLAN_MAX_ROLES_PER_MEMBER} клановых роли (максимум ${DISCORD_CLAN_MAX_ROLES_PER_MEMBER}). Сначала снимите одну: \`-клан\`.`,
+  clanRoleCapTarget: (existingClan: string) =>
+    DISCORD_CLAN_MAX_ROLES_PER_MEMBER === 1
+      ? `У участника уже есть клановая роль **${existingClan}**. Сначала снимите её: \`-клан @участник\`.`
+      : `У участника уже ${DISCORD_CLAN_MAX_ROLES_PER_MEMBER} клановых ролей (максимум ${DISCORD_CLAN_MAX_ROLES_PER_MEMBER}). Сначала снимите одну.`,
+  createMemberClanRoleCap: (userId: string, existingClan: string) =>
+    `У <@${userId}> уже есть клановая роль **${existingClan}**. Участник должен сначала снять её (\`-клан\`).`,
   cmdCreateInvalidHeader: "Неверный формат. Первая строка: `!создать`",
   cmdCreateInvalidColor: (label: string, colorOptions: string) =>
     `Неизвестный цвет: **${label}**. Доступные цвета: ${colorOptions}.`,
@@ -129,12 +140,23 @@ export const clanTxt = {
     `[Клан] ${mod} отклонил заявку на лидера **${role}** (<@${targetUserId}>)`,
 } as const;
 
+function clanRoleCapHelpLine(): string {
+  if (DISCORD_CLAN_MAX_ROLES_PER_MEMBER === 1) {
+    return "**Лимит:** одна клановая роль на участника (роль лидера — отдельно). Смена клана: сначала `-клан`.\n\n";
+  }
+  if (DISCORD_CLAN_MAX_ROLES_PER_MEMBER > 1) {
+    return `**Лимит:** до ${DISCORD_CLAN_MAX_ROLES_PER_MEMBER} клановых ролей на участника.\n\n`;
+  }
+  return "";
+}
+
 export function buildClanRulesHelp(): string {
   const colorOptions = formatClanColorPresetOptions();
   const exampleColor = getClanColorPresets()[0]?.label ?? "Красный";
 
   return (
     "Клановые команды (в этой ветке):\n\n" +
+    clanRoleCapHelpLine() +
     "+клан Название              — запросить роль себе\n" +
     "+клан @участник             — выдать роль (лидер одного клана)\n" +
     "+клан Название @участник    — выдать роль (лидер/мод)\n\n" +

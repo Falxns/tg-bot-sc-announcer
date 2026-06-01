@@ -1,6 +1,7 @@
 import type { Guild, GuildMember, Role } from "discord.js";
 import {
   DISCORD_CLAN_LEADER_ROLE_ID,
+  DISCORD_CLAN_MAX_ROLES_PER_MEMBER,
   DISCORD_CLAN_ROLE_EXCLUDE_IDS,
   DISCORD_CLAN_ROLE_NAME_PATTERN,
 } from "../../config";
@@ -22,6 +23,25 @@ export function listClanRoles(guild: Guild): Role[] {
 
 export function listMemberClanRoles(guild: Guild, member: GuildMember): Role[] {
   return listClanRoles(guild).filter((role) => member.roles.cache.has(role.id));
+}
+
+/** When cap is enabled, returns an existing clan role blocking a new grant (undefined grantRoleId = any clan). */
+export function getMemberClanRoleCapConflict(
+  guild: Guild,
+  member: GuildMember,
+  grantRoleId?: string,
+): Role | null {
+  if (DISCORD_CLAN_MAX_ROLES_PER_MEMBER <= 0) return null;
+  if (grantRoleId && member.roles.cache.has(grantRoleId)) return null;
+
+  const occupying = grantRoleId
+    ? listMemberClanRoles(guild, member).filter((r) => r.id !== grantRoleId)
+    : listMemberClanRoles(guild, member);
+
+  if (occupying.length >= DISCORD_CLAN_MAX_ROLES_PER_MEMBER) {
+    return occupying[0] ?? null;
+  }
+  return null;
 }
 
 /** Load full member list when cache is incomplete (Role#members is cache-only in discord.js). */

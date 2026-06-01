@@ -51,7 +51,7 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       await replyInChannelAutoDelete(message, clanTxt.targetMissing);
       return true;
     }
-    await submitGrantRequest(
+    const err = await submitGrantRequest(
       message.guild,
       message.channel,
       message.author.id,
@@ -60,6 +60,10 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       false,
       message.id,
     );
+    if (err) {
+      await replyInChannelAutoDelete(message, err);
+      return true;
+    }
     await replyInChannelAutoDelete(message, clanTxt.grantRequestSent);
     return true;
   }
