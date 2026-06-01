@@ -10,8 +10,8 @@ import {
   submitLeaderMetaGrantRequest,
 } from "./leaderMeta";
 import { performDirectRemove, submitGrantRequest } from "./panel";
-import { countClanLeaders } from "./resolver";
-import { ensureGuildMembersCached } from "./resolver";
+import { sendClanRosterDm } from "./roster";
+import { countClanLeaders, ensureGuildMembersCached } from "./resolver";
 import { isClanCommandMessage, parseClanTextCommand } from "./textCommands";
 import { clanTxt } from "./strings";
 
@@ -145,6 +145,16 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       message,
       clanTxt.cmdRemoveLeaderDoneTarget(parsed.clanRole.name, targetLabel),
     );
+    return true;
+  }
+
+  if (parsed.kind === "roster") {
+    const result = await sendClanRosterDm(message.guild, member, parsed.clanRole);
+    if (!result.ok) {
+      await replyClanCommandError(message, result.error);
+      return true;
+    }
+    await replyInChannelAutoDelete(message, clanTxt.cmdRosterDmSent);
     return true;
   }
 

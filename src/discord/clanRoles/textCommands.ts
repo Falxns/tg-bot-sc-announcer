@@ -48,6 +48,11 @@ export type ParsedCreateCommand = {
   leaderIds: string[];
 };
 
+export type ParsedRosterCommand = {
+  kind: "roster";
+  clanRole: Role;
+};
+
 export type ClanTextParseError = {
   kind: "error";
   message: string;
@@ -58,13 +63,15 @@ export type ClanTextCommand =
   | ParsedRemoveCommand
   | ParsedGrantLeaderCommand
   | ParsedRemoveLeaderCommand
-  | ParsedCreateCommand;
+  | ParsedCreateCommand
+  | ParsedRosterCommand;
 
 const GRANT_PREFIX = /^\+клан\s*:?\s*/i;
 const REMOVE_PREFIX = /^-клан\s*:?\s*/i;
 const GRANT_LEADER_PREFIX = /^\+лидер\s*:?\s*/i;
 const REMOVE_LEADER_PREFIX = /^-лидер\s*:?\s*/i;
 const CREATE_HEADER = /^!создать\s*$/i;
+const ROSTER_PREFIX = /^!состав\s*:?\s*/i;
 
 function stripMentions(text: string): string {
   return text.replace(/<@!?\d+>/g, " ").replace(/\s+/g, " ").trim();
@@ -494,11 +501,50 @@ function parseCreateCommand(
   };
 }
 
+function parseRosterCommand(
+  guild: Guild,
+  member: GuildMember,
+  body: string,
+): ParsedRosterCommand | ClanTextParseError {
+  const clanQuery = body.trim();
+  const isMod = isClanModerator(member);
+  const ledClans = listLedClanRoles(guild, member);
+
+  if (!clanQuery) {
+    if (isMod) {
+      return { kind: "error", message: clanTxt.cmdModNeedsTarget };
+    }
+    if (ledClans.length === 0) {
+      return { kind: "error", message: clanTxt.cmdRosterLeaderOnly };
+    }
+    if (ledClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdLeaderMultipleClans };
+    }
+    return { kind: "roster", clanRole: ledClans[0] };
+  }
+
+  const resolved = resolveClanQuery(guild, clanQuery);
+  if (isParseError(resolved)) return resolved;
+
+  if (!isMod && !isClanLeaderFor(member, resolved.id)) {
+    return { kind: "error", message: clanTxt.cmdRosterLeaderOnly };
+  }
+
+  return { kind: "roster", clanRole: resolved };
+}
+
 export function isClanCommandMessage(content: string): boolean {
   const trimmed = content.trim();
   if (!trimmed) return false;
   const firstLine = trimmed.split(/\r?\n/)[0] ?? "";
-  return GRANT_PREFIX.test(trimmed) || REMOVE_PREFIX.test(trimmed) || GRANT_LEADER_PREFIX.test(trimmed) || REMOVE_LEADER_PREFIX.test(trimmed) || CREATE_HEADER.test(firstLine);
+  return (
+    GRANT_PREFIX.test(trimmed) ||
+    REMOVE_PREFIX.test(trimmed) ||
+    GRANT_LEADER_PREFIX.test(trimmed) ||
+    REMOVE_LEADER_PREFIX.test(trimmed) ||
+    CREATE_HEADER.test(firstLine) ||
+    ROSTER_PREFIX.test(trimmed)
+  );
 }
 
 export function parseClanTextCommand(
@@ -532,6 +578,11 @@ export function parseClanTextCommand(
   if (REMOVE_LEADER_PREFIX.test(trimmed)) {
     const body = trimmed.replace(REMOVE_LEADER_PREFIX, "").trim();
     return parseRemoveLeaderCommand(guild, member, body, mentions);
+  }
+
+  if (ROSTER_PREFIX.test(trimmed)) {
+    const body = trimmed.replace(ROSTER_PREFIX, "").trim();
+    return parseRosterCommand(guild, member, body);
   }
 
   return null;

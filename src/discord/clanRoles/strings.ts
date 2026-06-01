@@ -41,11 +41,19 @@ export const clanTxt = {
   cmdCreateInvalidColor: (label: string, colorOptions: string) =>
     `Неизвестный цвет: **${label}**. Укажите название из списка (${colorOptions}) или hex (#RRGGBB).`,
   cmdCreateSubmitted: "Заявка на клан отправлена модераторам. D-ранг проверяется вручную.",
+  cmdRosterLeaderOnly: "Список состава доступен только лидерам клана.",
+  cmdRosterDmSent: "Список участников отправлен в личные сообщения.",
+  rosterDmFailed:
+    "Не удалось отправить ЛС. Откройте личные сообщения от участников сервера и повторите команду.",
+  rosterDmTitle: (clanName: string) => `Состав клана ${clanName}`,
+  rosterDmCount: (members: number, leaders: number) =>
+    `Участников с ролью: **${members}** · лидеров: **${leaders}**`,
+  rosterDmFooter: "Лидеры отмечены 👑",
   cmdRemoveDoneTarget: (role: string, target: string) => `Роль **${role}** снята с ${target}.`,
   cmdRemoveLeaderDoneTarget: (role: string, target: string) =>
     `Роль лидера снята с ${target} (клан **${role}**).`,
   clanThreadOffTopicReason:
-    "В ветке клановых команд разрешены только сообщения вида +клан, -клан, +лидер, -лидер и блок !создать.",
+    "В ветке клановых команд разрешены только сообщения вида +клан, -клан, +лидер, -лидер, !состав и блок !создать.",
 
   createNameInvalid: (min: number, max: number) =>
     `Некорректное название. Длина ${min}–${max} символов, без @ и #.`,
@@ -198,6 +206,13 @@ export function buildClanRulesHelpEmbed(): EmbedBuilder {
       {
         name: "!создать",
         value: "Блок:\n`!создать` → название клана → цвет роли → `👑 @лидер` → `@участники`",
+      },
+      {
+        name: "!состав",
+        value:
+          "Список участников с ролью клана в ЛС (только для лидеров).\n" +
+          "`!состав` — ваш клан, если вы лидер одного клана\n" +
+          "`!состав Название` — явно указать клан",
       },
       {
         name: "Лимиты",
