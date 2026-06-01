@@ -1,6 +1,7 @@
 import { EmbedBuilder, type Guild, type Role } from "discord.js";
 import {
   DISCORD_CLAN_ACTIVE_MIN_MEMBERS,
+  DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_MS,
   DISCORD_CLAN_ENFORCEMENT_CHECK_MS,
   DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS,
   DISCORD_CLAN_ENFORCEMENT_GRACE_MS,
@@ -10,9 +11,9 @@ import {
 } from "../../config";
 import {
   clanEnforcementLastRunAtMs,
-  clanRoleEnforcement,
   deleteClanRoleEnforcement,
   getClanRoleEnforcement,
+  pruneClanMaintenanceState,
   setClanEnforcementLastRunAtMs,
   setClanRoleEnforcement,
   saveState,
@@ -163,27 +164,13 @@ export async function runClanEnforcementCheck(guild: Guild): Promise<void> {
   const nowMs = Date.now();
 
   const activeRoleIds = new Set(roles.map((r) => r.id));
-  for (const [, record] of getStaleEnforcementEntries(guild.id, activeRoleIds)) {
-    deleteClanRoleEnforcement(record.guildId, record.clanRoleId);
-  }
+  pruneClanMaintenanceState(guild.id, activeRoleIds, nowMs, DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_MS);
 
   for (const clanRole of roles) {
     await evaluateClanRole(guild, clanRole, nowMs);
   }
 
   await persistClanState(LAST_SEEN_STATE_FILE);
-}
-
-function getStaleEnforcementEntries(
-  guildId: string,
-  activeRoleIds: Set<string>,
-): [string, ClanRoleEnforcementState][] {
-  const out: [string, ClanRoleEnforcementState][] = [];
-  for (const [key, record] of clanRoleEnforcement) {
-    if (record.guildId !== guildId) continue;
-    if (!activeRoleIds.has(record.clanRoleId)) out.push([key, record]);
-  }
-  return out;
 }
 
 export async function runClanEnforcementSweep(guild: Guild): Promise<void> {

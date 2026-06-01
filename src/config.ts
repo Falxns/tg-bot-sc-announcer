@@ -554,6 +554,16 @@ export const DISCORD_CLAN_ENFORCEMENT_CHECK_MS = clampParseInt(
 
 export const DISCORD_CLAN_ENFORCEMENT_GRACE_MS = DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS * 24 * 60 * 60 * 1000;
 
+/** Leader-initiated clan color change cooldown per clan (default 7 days). Mods bypass. */
+export const DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS = clampParseInt(
+  process.env.DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS ?? "7",
+  1,
+  30,
+);
+
+export const DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_MS =
+  DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+
 export type ClanColorPreset = { id: string; label: string; hex: number };
 
 function parseClanColorPresets(raw: string): ClanColorPreset[] {

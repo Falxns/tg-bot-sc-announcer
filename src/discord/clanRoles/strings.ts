@@ -1,6 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import {
   DISCORD_CLAN_ACTIVE_MIN_MEMBERS,
+  DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS,
   DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS,
   DISCORD_CLAN_MAX_ROLES_PER_MEMBER,
   DISCORD_CLAN_ROSTER_MAX,
@@ -48,6 +49,18 @@ export const clanTxt = {
   cmdRosterNotYourClan: (clanName: string) =>
     `Вы не лидер клана **${clanName}** — можно запросить состав только своего клана.`,
   cmdRosterDmSent: "Список участников отправлен в личные сообщения.",
+  cmdColorLeaderOnly: "Сменить цвет роли могут только лидеры клана.",
+  cmdColorModNeedsClan: "Модератор: укажите клан и цвет (`!цвет Название Красный`).",
+  cmdColorNotYourClan: (clanName: string) =>
+    `Вы не лидер клана **${clanName}** — можно менять цвет только своего клана.`,
+  cmdColorInvalidFormat: (colorOptions: string) =>
+    `Неверный формат. Пример: \`!цвет Красный\` или \`!цвет Название #RRGGBB\`. Цвета: ${colorOptions} или hex.`,
+  cmdColorCooldown: (remaining: string) =>
+    `Сменить цвет клана можно раз в **${DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS}** дн. Повторите через **${remaining}**.`,
+  cmdColorAlreadySet: (label: string) => `У роли уже установлен цвет **${label}**.`,
+  cmdColorRoleNotEditable: "Бот не может изменить цвет этой роли (позиция в иерархии).",
+  cmdColorDone: (clanName: string, colorLabel: string) =>
+    `Цвет роли **${clanName}** изменён на **${colorLabel}**.`,
   rosterDmFailed:
     "Не удалось отправить ЛС. Откройте личные сообщения от участников сервера и повторите команду.",
   rosterDmTitle: (clanName: string) => `Состав клана ${clanName}`,
@@ -58,7 +71,7 @@ export const clanTxt = {
   cmdRemoveLeaderDoneTarget: (role: string, target: string) =>
     `Роль лидера снята с ${target} (клан **${role}**).`,
   clanThreadOffTopicReason:
-    "В ветке клановых команд разрешены только сообщения вида +клан, -клан, +лидер, -лидер, !состав и блок !создать.",
+    "В ветке клановых команд разрешены только сообщения вида +клан, -клан, +лидер, -лидер, !состав, !цвет и блок !создать.",
 
   createNameInvalid: (min: number, max: number) =>
     `Некорректное название. Длина ${min}–${max} символов, без @ и #.`,
@@ -163,6 +176,10 @@ export const clanTxt = {
     `[Клан] Авто-удаление: **${role}** — меньше минимального состава ${DISCORD_CLAN_ACTIVE_MIN_MEMBERS} после ${DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS} дн.`,
   auditEnforcementLeaderless: (role: string) =>
     `[Клан] Авто-удаление: **${role}** — нет лидеров ${DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS} дн.`,
+  auditColorChangeLeader: (actor: string, role: string, color: string) =>
+    `[Клан] ${actor} сменил цвет **${role}** → ${color}`,
+  auditColorChangeMod: (actor: string, role: string, color: string) =>
+    `[Клан] ${actor} (мод) сменил цвет **${role}** → ${color}`,
 
   enforcementUnderstaffedDm: (
     clanName: string,
@@ -242,6 +259,13 @@ export function buildClanRulesHelpEmbed(): EmbedBuilder {
           "Список участников с ролью клана в ЛС.\n" +
           "**Лидеры:** `!состав` (один клан) или `!состав Название` — только свой клан\n" +
           "**Модераторы:** `!состав Название` — любой клан",
+      },
+      {
+        name: "!цвет",
+        value:
+          "Сменить цвет клановой роли.\n" +
+          "**Лидеры:** `!цвет Красный` (один клан) или `!цвет Название Красный` — **1 раз в неделю** на клан\n" +
+          "**Модераторы:** `!цвет Название Красный` — любой клан, без лимита",
       },
       {
         name: "Лимиты",

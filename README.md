@@ -114,6 +114,7 @@ Edit `.env`:
 | `DISCORD_CLAN_ACTIVE_MIN_MEMBERS` | No | Min members with a clan role; below this leaders get a DM warning, then auto-purge after grace (default **10**) |
 | `DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS` | No | Days to restore roster or appoint leaders before the bot deletes the clan role (default **3**) |
 | `DISCORD_CLAN_ENFORCEMENT_CHECK_MS` | No | How often to run enforcement checks (default **86400000** = 24h) |
+| `DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS` | No | Leader `!цвет` cooldown per clan in days (default **7**; mods bypass) |
 | `DISCORD_CLAN_COLOR_PRESETS_JSON` | No | JSON array override for `!создать` color labels, e.g. `[{"id":"red","label":"Красный","hex":15158332}]`; default built-in Russian presets |
 | `LOG_LEVEL` | No | `info` (default), `debug`, or `warn` |
 | `PORT` | No | If set, starts an HTTP server on this port that responds `ok` (for health checks) |
@@ -188,6 +189,7 @@ Leader-approved clan workflows (separate from self-serve **`/rolepanel`** toggle
    - **`+клан @участник`** — leader of one clan grants to a teammate; **`+клан Название @участник`** — explicit clan (leader/mod)
    - **`-клан`** — remove your role if you have exactly one clan role; **`-клан @участник`** — leader/mod shortcuts per rules; **`-клан Название @участник`** — explicit remove (immediate)
    - **`!состав`** — DM roster of clan members (👑 = leaders). **Leaders:** own clan only (`!состав` or `!состав Название`). **Mods:** any clan via `!состав Название`
+   - **`!цвет`** — change clan role color (preset label or `#RRGGBB`). **Leaders:** own clan, **once per week per clan**. **Mods:** any clan, no cooldown
    - **`!создать`** block — line 2: clan name, line 3: color preset label (e.g. `Красный`), then `@mention` roster with 👑 for leaders (**`DISCORD_CLAN_ROSTER_MIN`–`DISCORD_CLAN_ROSTER_MAX`**) → mod review in **`DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID`** (**Принять / Отклонить**). D-rank is checked **manually** by mods.
 3. Bot replies to commands in the thread and **auto-deletes** after **`DISCORD_WARNING_MESSAGE_TTL_MS`**. Other messages in the rules thread are **deleted** and count as a **strike** (same ladder as automod).
 3. Grant approval embed shows who resolved the request (**лидер клана** or **модератор**) with a working `@mention` in the message body.

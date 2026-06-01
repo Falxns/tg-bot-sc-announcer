@@ -20,6 +20,8 @@ import {
 import {
   clanGrantRequests,
   clanLeaderMetaRequests,
+  deleteClanColorChangeCooldown,
+  deleteClanRoleEnforcement,
   saveState,
 } from "../../state";
 import type { ClanCreateRequest } from "../types";
@@ -409,6 +411,8 @@ export async function purgeClanRole(
   }
 
   purgePendingRequestsForClanRole(clanRole.id);
+  deleteClanRoleEnforcement(guild.id, clanRole.id);
+  deleteClanColorChangeCooldown(guild.id, clanRole.id);
 
   try {
     await clanRole.delete(`Clan enforcement: ${reason}`);

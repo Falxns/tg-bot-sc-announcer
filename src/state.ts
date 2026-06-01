@@ -8,6 +8,7 @@ import type {
   ClanCreateRequest,
   ClanGrantRequest,
   ClanLeaderMetaRequest,
+  ClanColorChangeCooldownState,
   ClanRoleEnforcementState,
   ClanRulesPanelState,
   DiscordRolePanelState,
@@ -86,6 +87,8 @@ export const clanCreateRequests = new Map<string, ClanCreateRequest>();
 export const clanLeaderMetaRequests = new Map<string, ClanLeaderMetaRequest>();
 /** Understaffed / leaderless grace tracking keyed by `${guildId}:${clanRoleId}`. */
 export const clanRoleEnforcement = new Map<string, ClanRoleEnforcementState>();
+/** Leader color-change cooldown keyed by `${guildId}:${clanRoleId}`. */
+export const clanColorChangeCooldown = new Map<string, ClanColorChangeCooldownState>();
 /** Last clan enforcement sweep timestamp (ms). */
 export let clanEnforcementLastRunAtMs = 0;
 
@@ -337,6 +340,55 @@ export function deleteClanRoleEnforcement(guildId: string, clanRoleId: string): 
 
 export function setClanEnforcementLastRunAtMs(ms: number): void {
   clanEnforcementLastRunAtMs = ms;
+}
+
+export function clanColorChangeCooldownKey(guildId: string, clanRoleId: string): string {
+  return `${guildId}:${clanRoleId}`;
+}
+
+export function getClanColorChangeCooldown(
+  guildId: string,
+  clanRoleId: string,
+): ClanColorChangeCooldownState | undefined {
+  return clanColorChangeCooldown.get(clanColorChangeCooldownKey(guildId, clanRoleId));
+}
+
+export function setClanColorChangeCooldown(state: ClanColorChangeCooldownState): void {
+  clanColorChangeCooldown.set(clanColorChangeCooldownKey(state.guildId, state.clanRoleId), state);
+}
+
+export function deleteClanColorChangeCooldown(guildId: string, clanRoleId: string): void {
+  clanColorChangeCooldown.delete(clanColorChangeCooldownKey(guildId, clanRoleId));
+}
+
+/** Drop stale clan timers/cooldowns for deleted roles or expired windows. */
+export function pruneClanMaintenanceState(
+  guildId: string,
+  activeRoleIds: Set<string>,
+  nowMs: number,
+  colorCooldownMs: number,
+): void {
+  for (const [key, record] of clanRoleEnforcement) {
+    if (record.guildId !== guildId) continue;
+    if (!activeRoleIds.has(record.clanRoleId)) {
+      clanRoleEnforcement.delete(key);
+      continue;
+    }
+    if (record.understaffedSinceMs === undefined && record.leaderlessSinceMs === undefined) {
+      clanRoleEnforcement.delete(key);
+    }
+  }
+
+  for (const [key, record] of clanColorChangeCooldown) {
+    if (record.guildId !== guildId) continue;
+    if (!activeRoleIds.has(record.clanRoleId)) {
+      clanColorChangeCooldown.delete(key);
+      continue;
+    }
+    if (nowMs - record.changedAtMs >= colorCooldownMs) {
+      clanColorChangeCooldown.delete(key);
+    }
+  }
 }
 
 function parseNumberMap(raw: unknown): Map<string, number> {
@@ -639,6 +691,19 @@ export async function loadState(path: string): Promise<void> {
       if (typeof obj.clanEnforcementLastRunAtMs === "number" && Number.isFinite(obj.clanEnforcementLastRunAtMs)) {
         clanEnforcementLastRunAtMs = Math.max(0, Math.floor(obj.clanEnforcementLastRunAtMs));
       }
+
+      const colorCooldownRaw = obj.clanColorChangeCooldown;
+      if (colorCooldownRaw && typeof colorCooldownRaw === "object" && !Array.isArray(colorCooldownRaw)) {
+        for (const [key, value] of Object.entries(colorCooldownRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const clanRoleId = typeof row.clanRoleId === "string" ? row.clanRoleId : "";
+          const changedAtMs = typeof row.changedAtMs === "number" ? row.changedAtMs : NaN;
+          if (!guildId || !clanRoleId || !Number.isFinite(changedAtMs)) continue;
+          clanColorChangeCooldown.set(key, { guildId, clanRoleId, changedAtMs });
+        }
+      }
     }
     if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
       console.log(
@@ -648,7 +713,8 @@ export async function loadState(path: string): Promise<void> {
           `${tempVoiceRooms.size} temp voice rooms, ${clanRulesPanels.size} clan help posts, ` +
           `${clanGrantRequests.size} clan grant requests, ` +
           `${clanLeaderMetaRequests.size} clan leader-meta requests, ` +
-          `${clanRoleEnforcement.size} clan enforcement records.`,
+          `${clanRoleEnforcement.size} clan enforcement records, ` +
+          `${clanColorChangeCooldown.size} clan color cooldowns.`,
       );
     }
   } catch (err) {
@@ -682,6 +748,7 @@ export async function saveState(path: string): Promise<boolean> {
       clanCreateRequests: Object.fromEntries(clanCreateRequests),
       clanLeaderMetaRequests: Object.fromEntries(clanLeaderMetaRequests),
       clanRoleEnforcement: Object.fromEntries(clanRoleEnforcement),
+      clanColorChangeCooldown: Object.fromEntries(clanColorChangeCooldown),
       clanEnforcementLastRunAtMs,
     };
     await store.writeState(JSON.stringify(state, null, 2));

@@ -11,6 +11,7 @@ import {
 } from "./leaderMeta";
 import { performDirectRemove, submitGrantRequest } from "./panel";
 import { sendClanRosterDm } from "./roster";
+import { changeClanRoleColor } from "./colorChange";
 import { countClanLeaders, ensureGuildMembersCached } from "./resolver";
 import { isClanCommandMessage, parseClanTextCommand } from "./textCommands";
 import { clanTxt } from "./strings";
@@ -155,6 +156,24 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       return true;
     }
     await replyInChannelAutoDelete(message, clanTxt.cmdRosterDmSent);
+    return true;
+  }
+
+  if (parsed.kind === "change_color") {
+    const result = await changeClanRoleColor(
+      message.guild,
+      member,
+      parsed.clanRole,
+      parsed.colorPreset,
+    );
+    if (!result.ok) {
+      await replyClanCommandError(message, result.error);
+      return true;
+    }
+    await replyInChannelAutoDelete(
+      message,
+      clanTxt.cmdColorDone(parsed.clanRole.name, parsed.colorPreset.label),
+    );
     return true;
   }
 

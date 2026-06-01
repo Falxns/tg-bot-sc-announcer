@@ -80,3 +80,41 @@ export function formatClanColorPresetOptions(): string {
     .map((p) => p.label)
     .join(", ");
 }
+
+/** Split optional clan name prefix and color label/hex (`!цвет Название Красный`). */
+export function splitClanQueryAndColorInput(body: string): { clanQuery: string; colorInput: string } | null {
+  const trimmed = body.trim();
+  if (!trimmed) return null;
+
+  const hexMatch = trimmed.match(/^(.+?)\s+(#?[0-9a-fA-F]{3,6})$/);
+  if (hexMatch) {
+    const colorInput = hexMatch[2].trim();
+    if (parseClanHexColor(colorInput) !== null) {
+      return { clanQuery: hexMatch[1].trim(), colorInput };
+    }
+  }
+
+  const presets = [...getClanColorPresets()].sort(
+    (a, b) => normalizeColorLabel(b.label).length - normalizeColorLabel(a.label).length,
+  );
+  const normalizedBody = normalizeColorLabel(trimmed);
+  for (const preset of presets) {
+    const normalizedLabel = normalizeColorLabel(preset.label);
+    if (normalizedBody === normalizedLabel) {
+      return { clanQuery: "", colorInput: preset.label };
+    }
+    if (normalizedBody.endsWith(` ${normalizedLabel}`)) {
+      const prefixLen = trimmed.length - preset.label.length;
+      const clanQuery = trimmed.slice(0, prefixLen).trim();
+      if (clanQuery) {
+        return { clanQuery, colorInput: preset.label };
+      }
+    }
+  }
+
+  if (resolveClanCreateColor(trimmed)) {
+    return { clanQuery: "", colorInput: trimmed };
+  }
+
+  return null;
+}

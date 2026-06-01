@@ -136,3 +136,10 @@ export type ClanRoleEnforcementState = {
   understaffedSinceMs?: number;
   leaderlessSinceMs?: number;
 };
+
+/** Active leader color-change cooldown for a clan (removed when expired or role deleted). */
+export type ClanColorChangeCooldownState = {
+  guildId: string;
+  clanRoleId: string;
+  changedAtMs: number;
+};

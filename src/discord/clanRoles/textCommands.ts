@@ -4,7 +4,7 @@ import {
   DISCORD_CLAN_ROSTER_MIN,
 } from "../../config";
 import type { ClanColorPreset } from "../../config";
-import { formatClanColorPresetOptions, resolveClanCreateColor } from "./colorPresets";
+import { formatClanColorPresetOptions, resolveClanCreateColor, splitClanQueryAndColorInput } from "./colorPresets";
 import { CLAN_NAME_MAX_LEN, CLAN_NAME_MIN_LEN, MAX_CLAN_LEADERS } from "./constants";
 import { parseLeaderIdsFromMentions, validateClanName } from "./helpers";
 import { isClanModerator } from "./permissions";
@@ -53,6 +53,12 @@ export type ParsedRosterCommand = {
   clanRole: Role;
 };
 
+export type ParsedChangeColorCommand = {
+  kind: "change_color";
+  clanRole: Role;
+  colorPreset: ClanColorPreset;
+};
+
 export type ClanTextParseError = {
   kind: "error";
   message: string;
@@ -64,7 +70,8 @@ export type ClanTextCommand =
   | ParsedGrantLeaderCommand
   | ParsedRemoveLeaderCommand
   | ParsedCreateCommand
-  | ParsedRosterCommand;
+  | ParsedRosterCommand
+  | ParsedChangeColorCommand;
 
 const GRANT_PREFIX = /^\+клан\s*:?\s*/i;
 const REMOVE_PREFIX = /^-клан\s*:?\s*/i;
@@ -72,6 +79,7 @@ const GRANT_LEADER_PREFIX = /^\+лидер\s*:?\s*/i;
 const REMOVE_LEADER_PREFIX = /^-лидер\s*:?\s*/i;
 const CREATE_HEADER = /^!создать\s*$/i;
 const ROSTER_PREFIX = /^!состав\s*:?\s*/i;
+const CHANGE_COLOR_PREFIX = /^!цвет\s*:?\s*/i;
 
 function stripMentions(text: string): string {
   return text.replace(/<@!?\d+>/g, " ").replace(/\s+/g, " ").trim();
@@ -533,6 +541,49 @@ function parseRosterCommand(
   return { kind: "roster", clanRole: resolved };
 }
 
+function parseChangeColorCommand(
+  guild: Guild,
+  member: GuildMember,
+  body: string,
+): ParsedChangeColorCommand | ClanTextParseError {
+  const colorOptions = formatClanColorPresetOptions();
+  const split = splitClanQueryAndColorInput(body);
+  if (!split) {
+    return { kind: "error", message: clanTxt.cmdColorInvalidFormat(colorOptions) };
+  }
+
+  const preset = resolveClanCreateColor(split.colorInput);
+  if (!preset) {
+    return { kind: "error", message: clanTxt.cmdCreateInvalidColor(split.colorInput, colorOptions) };
+  }
+
+  const isMod = isClanModerator(member);
+  const ledClans = listLedClanRoles(guild, member);
+  const clanQuery = split.clanQuery;
+
+  if (!clanQuery) {
+    if (ledClans.length === 0) {
+      if (isMod) {
+        return { kind: "error", message: clanTxt.cmdColorModNeedsClan };
+      }
+      return { kind: "error", message: clanTxt.cmdColorLeaderOnly };
+    }
+    if (ledClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdLeaderMultipleClans };
+    }
+    return { kind: "change_color", clanRole: ledClans[0], colorPreset: preset };
+  }
+
+  const resolved = resolveClanQuery(guild, clanQuery);
+  if (isParseError(resolved)) return resolved;
+
+  if (!isMod && !isClanLeaderFor(member, resolved.id)) {
+    return { kind: "error", message: clanTxt.cmdColorNotYourClan(resolved.name) };
+  }
+
+  return { kind: "change_color", clanRole: resolved, colorPreset: preset };
+}
+
 export function isClanCommandMessage(content: string): boolean {
   const trimmed = content.trim();
   if (!trimmed) return false;
@@ -543,7 +594,8 @@ export function isClanCommandMessage(content: string): boolean {
     GRANT_LEADER_PREFIX.test(trimmed) ||
     REMOVE_LEADER_PREFIX.test(trimmed) ||
     CREATE_HEADER.test(firstLine) ||
-    ROSTER_PREFIX.test(trimmed)
+    ROSTER_PREFIX.test(trimmed) ||
+    CHANGE_COLOR_PREFIX.test(trimmed)
   );
 }
 
@@ -583,6 +635,11 @@ export function parseClanTextCommand(
   if (ROSTER_PREFIX.test(trimmed)) {
     const body = trimmed.replace(ROSTER_PREFIX, "").trim();
     return parseRosterCommand(guild, member, body);
+  }
+
+  if (CHANGE_COLOR_PREFIX.test(trimmed)) {
+    const body = trimmed.replace(CHANGE_COLOR_PREFIX, "").trim();
+    return parseChangeColorCommand(guild, member, body);
   }
 
   return null;
