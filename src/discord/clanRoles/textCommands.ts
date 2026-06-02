@@ -346,13 +346,18 @@ function parseGrantLeaderCommand(
   }
 
   if (!clanQuery) {
-    if (!targetMentionId && listMemberClanRoles(guild, member).length === 0) {
+    const ownClans = listMemberClanRoles(guild, member);
+    if (ownClans.length === 0) {
       return { kind: "error", message: clanTxt.leaderMetaNeedsClanFirstAny };
     }
-    return {
-      kind: "error",
-      message: clanTxt.cmdInvalidFormat("+лидер Название или +лидер Название @участник"),
-    };
+    if (ownClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdClanAmbiguous };
+    }
+    const role = ownClans[0];
+    if (isClanLeaderFor(member, role.id)) {
+      return { kind: "error", message: clanTxt.alreadyClanLeader };
+    }
+    return { kind: "grant_leader", clanRole: role, targetUserId: member.id };
   }
 
   const resolved = resolveClanQuery(guild, clanQuery);
