@@ -12,11 +12,17 @@ export function newClanRequestId(): string {
   return randomUUID().slice(0, 8);
 }
 
+/** In-game clan tag: brackets or a separate token of exactly four Latin/Cyrillic capitals. */
+const CLAN_NAME_TAG_BRACKETS_RE = /[\[\](){}]/;
+const CLAN_NAME_TAG_FOUR_CAPS_RE = /(?:^|\s)(?:[A-Z]{4}|[А-ЯЁ]{4})(?:\s|$)/;
+
 export function validateClanName(name: string, minLen: number, maxLen: number): string | null {
   const trimmed = name.trim();
   if (trimmed.length < minLen || trimmed.length > maxLen) return "length";
   if (/[@#]/.test(trimmed)) return "chars";
-  if (/[\[\](){}]/.test(trimmed)) return "brackets";
+  if (CLAN_NAME_TAG_BRACKETS_RE.test(trimmed) || CLAN_NAME_TAG_FOUR_CAPS_RE.test(trimmed)) {
+    return "brackets";
+  }
   return null;
 }
 
