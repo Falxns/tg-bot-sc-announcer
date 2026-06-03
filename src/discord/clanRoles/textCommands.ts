@@ -458,6 +458,9 @@ function parseCreateCommand(
   const rosterLines = lines.slice(3).join("\n");
 
   const invalid = validateClanName(clanName, CLAN_NAME_MIN_LEN, CLAN_NAME_MAX_LEN);
+  if (invalid === "brackets") {
+    return { kind: "error", message: clanTxt.createNameContainsTag };
+  }
   if (invalid) {
     return { kind: "error", message: clanTxt.createNameInvalid(CLAN_NAME_MIN_LEN, CLAN_NAME_MAX_LEN) };
   }

@@ -73,6 +73,7 @@ export const clanTxt = {
 
   createNameInvalid: (min: number, max: number) =>
     `Некорректное название. Длина ${min}–${max} символов, без @ и #.`,
+  createNameContainsTag: "Проверьте название клана. Тэг не должен указываться",
   createNameDuplicate: "Роль с таким названием уже существует.",
   createRosterInvalid: (min: number, max: number) =>
     `Нужно **${min}–${max}** уникальных участников на сервере.`,

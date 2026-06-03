@@ -16,6 +16,7 @@ export function validateClanName(name: string, minLen: number, maxLen: number): 
   const trimmed = name.trim();
   if (trimmed.length < minLen || trimmed.length > maxLen) return "length";
   if (/[@#]/.test(trimmed)) return "chars";
+  if (/[\[\](){}]/.test(trimmed)) return "brackets";
   return null;
 }
 
