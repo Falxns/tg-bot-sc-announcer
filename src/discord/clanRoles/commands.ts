@@ -15,7 +15,7 @@ import {
 import { isClanModerator } from "./permissions";
 import { saveState, setClanRulesPanel } from "../../state";
 import { formatClansListEmbedLines } from "./actions";
-import { buildClanRulesHelpEmbed, clanTxt } from "./strings";
+import { buildClanRulesHelpContent, buildClanRulesHelpEmbeds, clanTxt } from "./strings";
 
 export const clanPanelSlashCommand = new SlashCommandBuilder()
   .setName("clanpanel")
@@ -71,7 +71,10 @@ export async function handleClanSlashCommand(interaction: ChatInputCommandIntera
     return true;
   }
 
-  const msg = await channel.send({ embeds: [buildClanRulesHelpEmbed()] });
+  const msg = await channel.send({
+    content: buildClanRulesHelpContent(),
+    embeds: buildClanRulesHelpEmbeds(),
+  });
   setClanRulesPanel({
     messageId: msg.id,
     guildId: interaction.guild.id,
