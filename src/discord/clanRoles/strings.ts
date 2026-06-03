@@ -3,9 +3,8 @@ import {
   DISCORD_CLAN_ACTIVE_MIN_MEMBERS,
   DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS,
   DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS,
+  DISCORD_CLAN_HELP_CHANNEL_ID,
   DISCORD_CLAN_MAX_ROLES_PER_MEMBER,
-  DISCORD_CLAN_ROSTER_MAX,
-  DISCORD_CLAN_ROSTER_MIN,
 } from "../../config";
 
 export const clanTxt = {
@@ -37,7 +36,7 @@ export const clanTxt = {
   createMemberClanRoleCap: (userId: string, existingClan: string) =>
     `У <@${userId}> уже есть клановая роль **${existingClan}**. Участник должен сначала снять её (\`-клан\`).`,
   cmdCreateInvalidHeader:
-    "Неверный формат. Строки по порядку: `!создать`, название, ранг, цвет и список участников.",
+    "Неверный формат. Строки по порядку: `!создать`, название, тир, цвет и список участников.",
   cmdCreateInvalidColor: (label: string, colorOptions: string) =>
     `Неизвестный цвет: **${label}**. Укажите название из списка (${colorOptions}) или hex (#RRGGBB).`,
   cmdCreateSubmitted: "Заявка на клан отправлена админам на проверку.",
@@ -74,9 +73,9 @@ export const clanTxt = {
     `Некорректное название. Длина ${min}–${max} символов, без @ и #.`,
   createNameContainsTag: "Проверьте название клана. Тэг не должен указываться",
   createNameDuplicate: "Роль с таким названием уже существует.",
-  createTierMissing: "Укажите ранг клана отдельной строкой после названия (S, A, B, C или D).",
-  createTierInvalid: "Неверный ранг клана. Допустимые значения: S, A (А), B (Б), C (Ц, С), D (Д), E (Е).",
-  createTierTooLow: "Роли создаются только для кланов ранга **D** и выше.",
+  createTierMissing: "Укажите тир клана отдельной строкой после названия (S, A, B, C или D).",
+  createTierInvalid: "Неверный тир клана. Допустимые значения: S, A (А), B (Б), C (Ц, С), D (Д), E (Е).",
+  createTierTooLow: "Роли создаются только для кланов тира **D** и выше.",
   createRosterInvalid: (min: number, max: number) =>
     `Нужно **${min}–${max}** уникальных участников на сервере.`,
   createLeadersInvalid: "Укажите **1–2** лидеров среди участников.",
@@ -206,21 +205,16 @@ export const clanTxt = {
 } as const;
 
 export function buildClanRulesHelpContent(): string {
-  return "**Клановые роли:**";
+  const header = "**Клановые роли:**";
+  if (!DISCORD_CLAN_HELP_CHANNEL_ID) return header;
+  return `${header}\nПодробнее о командах и настройке клановых ролей читайте в <#${DISCORD_CLAN_HELP_CHANNEL_ID}>`;
 }
 
 export function buildClanRulesHelpEmbeds(): EmbedBuilder[] {
-  const rosterMin = DISCORD_CLAN_ROSTER_MIN;
-  const rosterMax = DISCORD_CLAN_ROSTER_MAX;
-  const activeMin = DISCORD_CLAN_ACTIVE_MIN_MEMBERS;
-  const graceDays = DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS;
-  const colorCooldownDays = DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS;
-
   const description =
     "### Участник\n" +
     "`+клан Название` — запросить клановую роль\n" +
     "`-клан` — снять клановую роль\n" +
-    "Запрос на создание клановой роли по форме:\n" +
     "```\n" +
     "!создать\n" +
     "Название Клана (без тэга)\n" +
@@ -228,26 +222,17 @@ export function buildClanRulesHelpEmbeds(): EmbedBuilder[] {
     "Красный (желаемый цвет роли)\n" +
     "👑 @лидер\n" +
     "@участник\n" +
-    "@участник\n" +
     "...\n" +
     "```\n" +
     "**Без указания лидеров с использованием 👑, лидером станет первый участник из списка**\n" +
-    `Для отправки запроса необходимо минимум **${rosterMin}** участников на сервере и **D** тир клана в игре\n` +
     "### Лидер\n" +
-    "`+клан @` — выдать роль своего клана участнику\n" +
-    "`-клан @` — снять клановую роль\n" +
+    "`+клан @участник` — выдать роль своего клана участнику\n" +
+    "`-клан @участник` — снять клановую роль\n" +
     "`+лидер` — запросить роль лидера в своём клане\n" +
-    "`+лидер @` — запросить роль лидера для участника\n" +
+    "`+лидер @участник` — запросить роль лидера для участника\n" +
     "`-лидер` — снять с себя роль лидера\n" +
     "`!состав` — получить список участников с клановой ролью\n" +
-    "`!цвет` — сменить цвет роли своего клана\n" +
-    "### Важно\n" +
-    "- Запросы на получение ролей **требуют** одобрения лидера клана и/или администратора, снятие ролей производится **автоматически**\n" +
-    "- **2** участника с ролью лидера на клан\n" +
-    `- Смена цвета роли доступна **1** раз в **${colorCooldownDays}** дн.\n` +
-    `- Участников с клановой ролью от **${rosterMin}** до **${rosterMax}** (включая 2 лидеров)\n` +
-    `- При отсутствии лидера и/или менее **${activeMin}** участников с клановой ролью — даётся **${graceDays}** дн. ` +
-    "на получение лидера / набор людей, иначе клановая роль будет удалена";
+    "`!цвет Красный/#RRGGBB` — сменить цвет роли своего клана";
 
   const main = new EmbedBuilder()
     .setColor(0x5865f2)

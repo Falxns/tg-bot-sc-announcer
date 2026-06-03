@@ -489,6 +489,9 @@ export const DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID = (
 /** #чат-кланов (or equivalent) — new clan roles get Send Messages allow overwrite here. */
 export const DISCORD_CLAN_CHAT_CHANNEL_ID = (process.env.DISCORD_CLAN_CHAT_CHANNEL_ID ?? "").trim();
 
+/** Optional channel linked from /clanpanel header for extended clan help (plain channel mention). */
+export const DISCORD_CLAN_HELP_CHANNEL_ID = (process.env.DISCORD_CLAN_HELP_CHANNEL_ID ?? "").trim();
+
 /**
  * Role IDs excluded from clan discovery.
  * Includes `DISCORD_CLAN_ROLE_EXCLUDE_IDS` from env plus moderator, staff-summary creator, and admin role IDs.
