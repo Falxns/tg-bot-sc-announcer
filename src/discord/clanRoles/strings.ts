@@ -38,10 +38,11 @@ export const clanTxt = {
       : `У участника уже ${DISCORD_CLAN_MAX_ROLES_PER_MEMBER} клановых ролей (максимум ${DISCORD_CLAN_MAX_ROLES_PER_MEMBER}). Сначала снимите одну.`,
   createMemberClanRoleCap: (userId: string, existingClan: string) =>
     `У <@${userId}> уже есть клановая роль **${existingClan}**. Участник должен сначала снять её (\`-клан\`).`,
-  cmdCreateInvalidHeader: "Неверный формат. Первая строка: `!создать`",
+  cmdCreateInvalidHeader:
+    "Неверный формат. Строки по порядку: `!создать`, название, ранг, цвет и список участников.",
   cmdCreateInvalidColor: (label: string, colorOptions: string) =>
     `Неизвестный цвет: **${label}**. Укажите название из списка (${colorOptions}) или hex (#RRGGBB).`,
-  cmdCreateSubmitted: "Заявка на клан отправлена админам. D-ранг проверяется вручную.",
+  cmdCreateSubmitted: "Заявка на клан отправлена админам на проверку.",
   cmdRosterLeaderOnly: "Список состава доступен только лидерам клана.",
   cmdRosterModNeedsClan: "Админ: укажите название клана (`!состав Название`).",
   cmdRosterNotYourClan: (clanName: string) =>
@@ -75,6 +76,9 @@ export const clanTxt = {
     `Некорректное название. Длина ${min}–${max} символов, без @ и #.`,
   createNameContainsTag: "Проверьте название клана. Тэг не должен указываться",
   createNameDuplicate: "Роль с таким названием уже существует.",
+  createTierMissing: "Укажите ранг клана отдельной строкой после названия (S, A, B, C или D).",
+  createTierInvalid: "Неверный ранг клана. Допустимые значения: S, A (А), B (Б), C (Ц, С), D (Д), E (Е).",
+  createTierTooLow: "Роли создаются только для кланов ранга **D** и выше.",
   createRosterInvalid: (min: number, max: number) =>
     `Нужно **${min}–${max}** уникальных участников на сервере.`,
   createLeadersInvalid: "Укажите **1–2** лидеров среди участников.",
@@ -132,7 +136,7 @@ export const clanTxt = {
   targetMissing: "Участник не найден на сервере.",
 
   modCreateTitle: "Новая заявка на клан",
-  modCreateReminder: "Проверьте D-ранг и состав в игре перед принятием.",
+  modCreateReminder: "Проверьте состав в игре перед принятием.",
   modLeaderMetaTitle: "Заявка: назначить лидера клана",
   modLeaderMetaReminder: "Убедитесь, что у клана не больше двух лидеров.",
   modAccept: "Принять",
@@ -266,10 +270,11 @@ export function buildClanRulesHelpEmbeds(): EmbedBuilder[] {
         name: "🏰 Создание клановой роли",
         value:
           "Для регистрации роли отправьте сообщение следующего вида:\n\n" +
-          "```\n!создать\nНазвание\nЦвет\n👑 @лидер\n@участник\n@участник\n...\n```\n\n" +
+          "```\n!создать\nНазвание\nD\nЦвет\n👑 @лидер\n@участник\n@участник\n...\n```\n\n" +
           "**Правила создания**\n" +
           "• Все данные указываются сразу в сообщении строго по порядку.\n" +
           "• Не добавляйте тег клана в строку с названием.\n" +
+          "• Ранг клана — одна буква: S, A (А), B (Б), C (Ц, С), D (Д). Роли создаются только для **D и выше**.\n" +
           "• Максимум **2 лидера** на клан.\n" +
           "• Для назначения лидера используйте корону перед упоминанием: `👑 @участник`\n" +
           "👑 ← корона для копирования",
@@ -278,6 +283,7 @@ export function buildClanRulesHelpEmbeds(): EmbedBuilder[] {
         name: "🏰 Создание — требования",
         value:
           `• Название клана: от **${CLAN_NAME_MIN_LEN} до ${CLAN_NAME_MAX_LEN}** символов.\n` +
+          "• Ранг клана: **D и выше** (S, A, B, C, D).\n" +
           `• Минимум **${DISCORD_CLAN_ROSTER_MIN} участников** для регистрации.\n` +
           "• **Если корона не указана, лидером автоматически станет первый участник из списка.**",
       },

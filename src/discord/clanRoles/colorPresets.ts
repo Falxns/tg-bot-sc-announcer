@@ -61,7 +61,7 @@ export function getClanColorPresetByLabel(label: string): ClanColorPreset | unde
   return activePresets.find((p) => normalizeColorLabel(p.label) === q || p.id.toLowerCase() === q);
 }
 
-/** Preset by Russian label / id, or custom #hex for !создать line 3. */
+/** Preset by Russian label / id, or custom #hex for !создать color line (line 4). */
 export function resolveClanCreateColor(input: string): ClanColorPreset | undefined {
   const trimmed = input.trim();
   if (!trimmed) return undefined;

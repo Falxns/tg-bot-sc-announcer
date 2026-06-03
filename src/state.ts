@@ -602,6 +602,7 @@ export async function loadState(path: string): Promise<void> {
             threadId,
             sourceMessageId: typeof row.sourceMessageId === "string" ? row.sourceMessageId : undefined,
             clanName,
+            clanTier: typeof row.clanTier === "string" ? row.clanTier : undefined,
             colorHex: typeof row.colorHex === "number" ? row.colorHex : 0,
             colorLabel,
             memberIds: Array.isArray(row.memberIds)

@@ -114,6 +114,8 @@ export type ClanCreateRequest = {
   /** Original !создать message in the rules thread — notified on resolve. */
   sourceMessageId?: string;
   clanName: string;
+  /** In-game clan tier (S–E), validated at submit for D+ eligibility. */
+  clanTier?: string;
   colorHex: number;
   colorLabel: string;
   memberIds: string[];

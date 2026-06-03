@@ -6,3 +6,6 @@ export const CLAN_MOD_LEADER_META_PREFIX = "clan:mod:ldr:";
 export const CLAN_NAME_MIN_LEN = 3;
 export const CLAN_NAME_MAX_LEN = 16;
 export const MAX_CLAN_LEADERS = 2;
+
+/** In-game clan tier letters (S highest → E lowest). */
+export type ClanTier = "S" | "A" | "B" | "C" | "D" | "E";

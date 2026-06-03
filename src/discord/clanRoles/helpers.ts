@@ -7,6 +7,47 @@ import type {
   ThreadChannel,
 } from "discord.js";
 import { DISCORD_CLAN_RULES_MESSAGE_ID } from "../../config";
+import type { ClanTier } from "./constants";
+
+const CLAN_TIER_INPUT_MAP: Record<string, ClanTier> = {
+  S: "S",
+  s: "S",
+  A: "A",
+  a: "A",
+  А: "A",
+  а: "A",
+  B: "B",
+  b: "B",
+  Б: "B",
+  б: "B",
+  C: "C",
+  c: "C",
+  Ц: "C",
+  ц: "C",
+  С: "C",
+  с: "C",
+  D: "D",
+  d: "D",
+  Д: "D",
+  д: "D",
+  E: "E",
+  e: "E",
+  Е: "E",
+  е: "E",
+};
+
+/** Parse a single-letter clan tier from !создать line 2. Returns null if unrecognized. */
+export function parseClanTier(input: string): ClanTier | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  if (trimmed.length !== 1) return null;
+  return CLAN_TIER_INPUT_MAP[trimmed] ?? null;
+}
+
+/** Roles are created only for D tier and higher. */
+export function isClanTierEligibleForCreate(tier: ClanTier): boolean {
+  return tier !== "E";
+}
 
 export function newClanRequestId(): string {
   return randomUUID().slice(0, 8);

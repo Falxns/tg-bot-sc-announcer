@@ -6,7 +6,7 @@ import {
 import type { ClanColorPreset } from "../../config";
 import { formatClanColorPresetOptions, resolveClanCreateColor, splitClanQueryAndColorInput } from "./colorPresets";
 import { CLAN_NAME_MAX_LEN, CLAN_NAME_MIN_LEN, MAX_CLAN_LEADERS } from "./constants";
-import { parseLeaderIdsFromMentions, validateClanName } from "./helpers";
+import { isClanTierEligibleForCreate, parseClanTier, parseLeaderIdsFromMentions, validateClanName } from "./helpers";
 import { isClanModerator } from "./permissions";
 import {
   getMemberClanRoleCapConflict,
@@ -43,6 +43,7 @@ export type ParsedRemoveLeaderCommand = {
 export type ParsedCreateCommand = {
   kind: "create";
   clanName: string;
+  clanTier: string;
   colorPreset: ClanColorPreset;
   memberIds: string[];
   leaderIds: string[];
@@ -449,13 +450,14 @@ function parseCreateCommand(
   mentions: MessageMentions,
 ): ParsedCreateCommand | ClanTextParseError {
   const lines = content.split(/\r?\n/).map((l) => l.trim());
-  if (lines.length < 4 || !CREATE_HEADER.test(lines[0] ?? "")) {
+  if (lines.length < 5 || !CREATE_HEADER.test(lines[0] ?? "")) {
     return { kind: "error", message: clanTxt.cmdCreateInvalidHeader };
   }
 
   const clanName = lines[1]?.trim() ?? "";
-  const colorLabel = lines[2]?.trim() ?? "";
-  const rosterLines = lines.slice(3).join("\n");
+  const tierInput = lines[2]?.trim() ?? "";
+  const colorLabel = lines[3]?.trim() ?? "";
+  const rosterLines = lines.slice(4).join("\n");
 
   const invalid = validateClanName(clanName, CLAN_NAME_MIN_LEN, CLAN_NAME_MAX_LEN);
   if (invalid === "brackets") {
@@ -467,6 +469,17 @@ function parseCreateCommand(
   const dup = guild.roles.cache.find((r) => r.name.toLowerCase() === clanName.toLowerCase());
   if (dup) {
     return { kind: "error", message: clanTxt.createNameDuplicate };
+  }
+
+  if (!tierInput) {
+    return { kind: "error", message: clanTxt.createTierMissing };
+  }
+  const clanTier = parseClanTier(tierInput);
+  if (!clanTier) {
+    return { kind: "error", message: clanTxt.createTierInvalid };
+  }
+  if (!isClanTierEligibleForCreate(clanTier)) {
+    return { kind: "error", message: clanTxt.createTierTooLow };
   }
 
   const preset = resolveClanCreateColor(colorLabel);
@@ -511,6 +524,7 @@ function parseCreateCommand(
   return {
     kind: "create",
     clanName,
+    clanTier,
     colorPreset: preset,
     memberIds: onServer,
     leaderIds: leaders,

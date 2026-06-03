@@ -64,6 +64,7 @@ async function postCreateRequestToModQueue(
     .setDescription(
       `**Заявитель:** ${applicant ?? `<@${request.applicantId}>`}\n` +
         `**Клан:** ${request.clanName}\n` +
+        `**Ранг:** ${request.clanTier ?? "—"}\n` +
         `**Цвет:** ${request.colorLabel}\n` +
         `**Состав:** ${memberIds.length} (лидеров: ${leaderIds.length})\n` +
         `**Источник:** <#${request.threadId}>`,
@@ -102,6 +103,7 @@ export async function submitCreateRequestFromText(
     threadId: sourceChannelId,
     sourceMessageId,
     clanName: parsed.clanName,
+    clanTier: parsed.clanTier,
     colorHex: parsed.colorPreset.hex,
     colorLabel: parsed.colorPreset.label,
     memberIds: parsed.memberIds,
