@@ -307,13 +307,13 @@ export const DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST = parseDomainBlacklist(
   process.env.DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST ?? "",
 );
 
-/** Channel/thread IDs where duplicate-message (same author, consecutive) spam filter runs. Empty = disabled. */
-export const DISCORD_SPAM_FILTER_CHANNEL_IDS: ReadonlySet<string> = new Set(
-  (process.env.DISCORD_SPAM_FILTER_CHANNEL_IDS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean),
-);
+/** Channel/thread IDs from env (same-author consecutive mode when no OPTIONS entry). */
+const DISCORD_SPAM_FILTER_CHANNEL_IDS_FROM_ENV: readonly string[] = (
+  process.env.DISCORD_SPAM_FILTER_CHANNEL_IDS ?? ""
+)
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 export type SpamFilterChannelOptions = {
   crossAuthor?: boolean;
@@ -356,6 +356,15 @@ function parseSpamFilterChannelOptions(raw: string): Record<string, SpamFilterCh
 export const DISCORD_SPAM_FILTER_CHANNEL_OPTIONS = parseSpamFilterChannelOptions(
   process.env.DISCORD_SPAM_FILTER_CHANNEL_OPTIONS_JSON ?? "",
 );
+
+/**
+ * Channels where duplicate-message spam filter runs.
+ * Union of `DISCORD_SPAM_FILTER_CHANNEL_IDS` and every key in `DISCORD_SPAM_FILTER_CHANNEL_OPTIONS_JSON`.
+ */
+export const DISCORD_SPAM_FILTER_CHANNEL_IDS: ReadonlySet<string> = new Set([
+  ...DISCORD_SPAM_FILTER_CHANNEL_IDS_FROM_ENV,
+  ...Object.keys(DISCORD_SPAM_FILTER_CHANNEL_OPTIONS),
+]);
 
 export const DISCORD_SPAM_FILTER_MAX_FINGERPRINTS_PER_SCOPE = clampParseInt(
   process.env.DISCORD_SPAM_FILTER_MAX_FINGERPRINTS_PER_SCOPE ?? "200",
