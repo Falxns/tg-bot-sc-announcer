@@ -6,7 +6,7 @@ import {
   SlashCommandBuilder,
 } from "discord.js";
 import type { Guild, Message, User } from "discord.js";
-import { isDiscordModerator } from "./guildPermissions";
+import { isDiscordModerator, isModerationProtectedTarget } from "./guildPermissions";
 import {
   DISCORD_MODERATION_DECAY_MS,
   DISCORD_MODERATION_LOG_CHANNEL_ID,
@@ -66,6 +66,21 @@ import {
 
 function isDiscordSnowflake(id: string): boolean {
   return /^\d{17,20}$/.test(id.trim());
+}
+
+/** @returns true when the command may proceed */
+async function assertPunitiveTargetAllowed(
+  interaction: ChatInputCommandInteraction,
+  member: GuildMember | null,
+): Promise<boolean> {
+  if (member && isModerationProtectedTarget(member)) {
+    await interaction.reply({
+      content: modTxt.moderationProtectedAdminTarget,
+      flags: MessageFlags.Ephemeral,
+    });
+    return false;
+  }
+  return true;
 }
 
 function warningScopeChannelIdFromInteraction(interaction: ChatInputCommandInteraction): string | null {
@@ -399,6 +414,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       await interaction.reply({ content: modTxt.userNotInGuild, flags: MessageFlags.Ephemeral });
       return;
     }
+    if (!(await assertPunitiveTargetAllowed(interaction, member))) return;
     if (!member.moderatable) {
       await interaction.reply({ content: modTxt.muteNotModeratable, flags: MessageFlags.Ephemeral });
       return;
@@ -577,6 +593,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       await interaction.reply({ content: modTxt.userNotInGuild, flags: MessageFlags.Ephemeral });
       return;
     }
+    if (!(await assertPunitiveTargetAllowed(interaction, member))) return;
     if (!(await assertModeratorQuota(interaction))) return;
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -787,6 +804,7 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       return;
     }
     const member: GuildMember | null = await guild.members.fetch({ user: target.id }).catch(() => null);
+    if (!(await assertPunitiveTargetAllowed(interaction, member))) return;
     if (member && !member.bannable) {
       await interaction.reply({ content: modTxt.banNotBannable, flags: MessageFlags.Ephemeral });
       return;

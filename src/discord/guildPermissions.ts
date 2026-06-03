@@ -16,6 +16,15 @@ export function isDiscordAdmin(member: GuildMember | APIInteractionGuildMember |
 }
 
 /**
+ * Punitive moderation (`/mute`, `/strike`, `/ban`, automod) must not target these members.
+ * Unlike {@link isDiscordAdmin}, returns false when `DISCORD_ADMIN_ROLE_IDS` is empty.
+ */
+export function isModerationProtectedTarget(member: GuildMember | APIInteractionGuildMember | null): boolean {
+  if (DISCORD_ADMIN_ROLE_IDS.length === 0) return false;
+  return memberRoleIds(member).some((id) => DISCORD_ADMIN_ROLE_IDS.includes(id));
+}
+
+/**
  * Moderation slash (`/mute`, `/strike`, …).
  * Requires a role in `DISCORD_MODERATOR_ROLE_IDS` and/or `DISCORD_ADMIN_ROLE_IDS`.
  * When both lists are empty, denies everyone unless `DISCORD_DEV_MODE` is enabled.

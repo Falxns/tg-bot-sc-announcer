@@ -342,6 +342,8 @@ export const discordModerationCommands = {
   guildOnly: "Только на сервере.",
   scopeNeedTextChannel: "Укажите текстовый канал.",
   scopeChannelUnknown: "Не удалось определить канал.",
+  moderationProtectedAdminTarget:
+    "Нельзя применять модерацию к пользователям с ролью администратора.",
   muteBot: "Нельзя замутить бота.",
   badDuration: "Некорректная длительность таймаута.",
   userNotInGuild: "Пользователь не на сервере.",

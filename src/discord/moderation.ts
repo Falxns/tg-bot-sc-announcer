@@ -38,6 +38,7 @@ import {
   discordModerationLogTitles as logTitles,
 } from "./userStrings";
 import { evictMessageReviewCache } from "./messageReview";
+import { isModerationProtectedTarget } from "./guildPermissions";
 import { applyLightModerationSanction, applyMajorModerationSanction } from "./moderationSanction";
 import {
   hasCrossAuthorSpamDuplicate,
@@ -711,6 +712,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
   if (message.author.bot || message.system) return;
   const member = message.member;
   if (!(member instanceof GuildMember)) return;
+  if (isModerationProtectedTarget(member)) return;
 
   const ctx = resolvePolicyContext(message);
   const searchable = collectSearchableText(message);
