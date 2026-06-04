@@ -1,4 +1,4 @@
-import type { GuildMember } from "discord.js";
+import type { Guild, GuildMember } from "discord.js";
 import { DISCORD_ADMIN_ROLE_IDS } from "../../config";
 import { memberRoleIds } from "../guildPermissions";
 import type { ClanCreateRequest, ClanGrantRequest, ClanLeaderMetaRequest } from "../types";
@@ -58,4 +58,20 @@ export function clanApprovalOutcomeMentionIds(
     ids.push(request.requesterUserId);
   }
   return ids;
+}
+
+/** +клан grant: clan-leader requesters are never pinged — only the role recipient. */
+export async function clanGrantApprovalMentionIds(
+  guild: Guild,
+  request: { requesterUserId: string; targetUserId: string; clanRoleId: string },
+  approver: GuildMember,
+): Promise<string[]> {
+  if (request.requesterUserId === request.targetUserId) {
+    return [request.targetUserId];
+  }
+  const requester = await guild.members.fetch(request.requesterUserId).catch(() => null);
+  if (requester && isClanLeaderFor(requester, request.clanRoleId)) {
+    return [request.targetUserId];
+  }
+  return clanApprovalOutcomeMentionIds(request, approver);
 }
