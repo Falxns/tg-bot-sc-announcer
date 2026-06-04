@@ -105,6 +105,22 @@ function isParseError(value: Role | ClanTextParseError): value is ClanTextParseE
   return "kind" in value && value.kind === "error";
 }
 
+/** Leaders may `-клан` themselves or non-leaders; only admins may strip a leader's clan role. */
+function leaderRemoveClanRoleTargetBlocked(
+  guild: Guild,
+  actor: GuildMember,
+  targetUserId: string,
+  clanRoleId: string,
+): ClanTextParseError | null {
+  if (isClanModerator(actor)) return null;
+  if (targetUserId === actor.id) return null;
+  const target = guild.members.cache.get(targetUserId);
+  if (target && isClanLeaderFor(target, clanRoleId)) {
+    return { kind: "error", message: clanTxt.cmdLeaderRemoveClanRoleFromLeader };
+  }
+  return null;
+}
+
 function listLedClanRoles(guild: Guild, member: GuildMember): Role[] {
   return listMemberClanRoles(guild, member).filter((role) => isClanLeaderFor(member, role.id));
 }
@@ -223,6 +239,8 @@ function parseRemoveCommand(
       if (!target?.roles.cache.has(role.id)) {
         return { kind: "error", message: clanTxt.cmdTargetNotInClan };
       }
+      const leaderBlock = leaderRemoveClanRoleTargetBlocked(guild, member, targetMentionId, role.id);
+      if (leaderBlock) return leaderBlock;
       return { kind: "remove", clanRole: role, targetUserId: targetMentionId };
     }
     if (ledClans.length > 1) {
@@ -266,6 +284,8 @@ function parseRemoveCommand(
     if (!target?.roles.cache.has(resolved.id)) {
       return { kind: "error", message: clanTxt.cmdTargetNotInClan };
     }
+    const leaderBlock = leaderRemoveClanRoleTargetBlocked(guild, member, targetUserId, resolved.id);
+    if (leaderBlock) return leaderBlock;
   }
 
   return { kind: "remove", clanRole: resolved, targetUserId };

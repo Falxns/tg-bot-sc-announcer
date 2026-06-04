@@ -22,8 +22,13 @@ import type { ClanGrantRequest } from "../types";
 import { grantClanRoleToMember, postClanAuditLine, removeClanRoleFromMember } from "./actions";
 import { CLAN_REQ_PREFIX, MAX_CLAN_LEADERS } from "./constants";
 import { newClanRequestId, replyToClanRequestMessage, sendInClanChannel } from "./helpers";
-import { canApproveGrantRequest } from "./permissions";
-import { countClanLeaders, getMemberClanRoleCapConflict, isClanLeaderFor, listClanLeaderIds } from "./resolver";
+import { canApproveGrantRequest, isClanModerator } from "./permissions";
+import {
+  countClanLeaders,
+  getMemberClanRoleCapConflict,
+  isClanLeaderFor,
+  listClanLeaderIds,
+} from "./resolver";
 import { clanTxt } from "./strings";
 
 export function isClanGrantCustomId(customId: string): boolean {
@@ -167,6 +172,13 @@ export async function performDirectRemove(
   if (!target) return { ok: false, error: clanTxt.targetMissing };
   if (!target.roles.cache.has(role.id)) {
     return { ok: false, error: clanTxt.targetDoesNotHaveClanRole };
+  }
+  if (
+    !isClanModerator(actor) &&
+    targetUserId !== actor.id &&
+    isClanLeaderFor(target, role.id)
+  ) {
+    return { ok: false, error: clanTxt.cmdLeaderRemoveClanRoleFromLeader };
   }
   const result = await removeClanRoleFromMember(guild, target, role);
   if (!result.ok) return { ok: false, error: result.error };
