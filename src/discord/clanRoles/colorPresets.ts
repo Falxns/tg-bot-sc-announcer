@@ -51,10 +51,6 @@ export function parseClanHexColor(input: string): number | null {
   return parseInt(digits, 16);
 }
 
-export function getClanColorPresetById(id: string): ClanColorPreset | undefined {
-  return activePresets.find((p) => p.id === id);
-}
-
 export function getClanColorPresetByLabel(label: string): ClanColorPreset | undefined {
   const q = normalizeColorLabel(label);
   if (!q) return undefined;

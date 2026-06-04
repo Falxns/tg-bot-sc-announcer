@@ -10,7 +10,6 @@ import {
 export const clanTxt = {
   notConfigured: "Клановые роли не настроены на этом сервере.",
   requestUnknown: "Запрос не найден или устарел.",
-  internalError: "Произошла ошибка. Попробуйте позже.",
 
   rulesHelpFooter: "Использовать команды только в ветке под этим сообщением",
 
@@ -48,7 +47,6 @@ export const clanTxt = {
     "Неверный формат. Строки по порядку: `!создать`, название, тир, цвет и список участников.",
   cmdCreateInvalidColor: (label: string, colorOptions: string) =>
     `Неизвестный цвет: **${label}**. Укажите название из списка (${colorOptions}) или hex (#RRGGBB).`,
-  cmdCreateSubmitted: "Заявка на клан отправлена админам на проверку.",
   cmdRosterLeaderOnly: "Список состава доступен только лидерам клана.",
   cmdRosterModNeedsClan: "Админ: укажите название клана (`!состав Название`).",
   cmdRosterNotYourClan: (clanName: string) =>
@@ -72,15 +70,12 @@ export const clanTxt = {
   rosterDmCount: (members: number, leaders: number) =>
     `Участников с ролью: **${members}** · лидеров: **${leaders}**`,
   rosterDmFooter: "Лидеры отмечены 👑",
-  cmdRemoveDoneTarget: (role: string, target: string) => `Роль **${role}** снята с ${target}.`,
-  cmdRemoveLeaderDoneTarget: (role: string, target: string) =>
-    `Роль лидера снята с ${target} (клан **${role}**).`,
-  notifyRemoveClanRoleSelf: (role: string) => `С вашего аккаунта снята роль **${role}**.`,
-  notifyRemoveClanRoleTarget: (role: string) => `С вас снята роль **${role}**.`,
+  notifyRemoveClanRoleSelf: (role: string) => `С вас снята клановая роль **${role}**.`,
+  notifyRemoveClanRoleTarget: (role: string) => `С вас снята клановая роль **${role}**.`,
   notifyRemoveLeaderSelf: (role: string) => `Вы сняли с себя роль лидера (клан **${role}**).`,
   notifyRemoveLeaderTarget: (role: string) => `С вас снята роль лидера (клан **${role}**).`,
   clanThreadOffTopicReason:
-    "В ветке клановых команд разрешены только сообщения вида +клан, -клан, +лидер, -лидер, !состав, !цвет и блок !создать.",
+    "В ветке разрешены только команды вида +клан, -клан, +лидер, -лидер, !состав, !цвет и блок !создать.",
 
   createNameInvalid: (min: number, max: number) =>
     `Некорректное название. Длина ${min}–${max} символов, без @ и #.`,
@@ -94,16 +89,12 @@ export const clanTxt = {
   createLeadersInvalid: "Укажите **1–2** лидеров среди участников.",
 
   grantLeaderCap: (n: number) => `У этого клана уже ${n} лидер(ов) — максимум 2.`,
-  grantRequestSent: "Запрос отправлен. Ожидайте одобрения лидера клана или админа.",
   grantApprovedReply: (clanName: string, targetUserId: string, requesterUserId: string) =>
     requesterUserId === targetUserId
       ? `Вам выдана роль **${clanName}**.`
       : `Запрос одобрен — роль **${clanName}** выдана.`,
   grantDirectToTarget: (clanName: string) => `Вам выдана роль **${clanName}**.`,
   grantDeniedReply: (clanName: string) => `Запрос отклонён — роль **${clanName}**.`,
-  leaderMetaGrantRequestSent:
-    "Запрос на роль лидера отправлен. Действующий лидер клана должен подтвердить, затем админы.",
-  leaderMetaGrantRequestSentMod: "Запрос на роль лидера отправлен админам.",
   leaderMetaApprovalPostFailed:
     "Не удалось опубликовать запрос на подтверждение. Проверьте, что у бота есть право «Отправка сообщений в ветках» в канале правил.",
   leaderMetaSentToMod: (clanName: string) =>
@@ -131,20 +122,11 @@ export const clanTxt = {
     `Лидер клана, подтвердите назначение второго лидера: ${mentions}`,
   pendingLeaderMetaClanNote:
     "После вашего подтверждения заявка уйдёт админам на финальное одобрение.",
-  leaderMetaClanResolvedLine: (approved: boolean, userId: string) =>
-    `\n\n**Статус:** ${approved ? clanTxt.approved : clanTxt.denied} — <@${userId}> (лидер клана)`,
   approve: "Одобрить",
   deny: "Отклонить",
-  approved: "Запрос одобрен.",
-  denied: "Запрос отклонён.",
-  requestResolvedLine: (approved: boolean, userId: string, roleLabel: "лидер клана" | "админ") =>
-    `\n\n**Статус:** ${approved ? clanTxt.approved : clanTxt.denied} — <@${userId}> (${roleLabel})`,
-  resolverRoleLeader: "лидер клана" as const,
-  resolverRoleMod: "админ" as const,
   alreadyResolved: "Этот запрос уже обработан.",
   cannotApprove: "У вас нет прав одобрить этот запрос.",
   noManageRoles: "У бота нет права управлять ролями или роль бота слишком низко.",
-  roleMissing: "Клановая роль больше не существует.",
   targetMissing: "Участник не найден на сервере.",
 
   modCreateTitle: "Новая заявка на клан",
@@ -153,7 +135,6 @@ export const clanTxt = {
   modLeaderMetaReminder: "Убедитесь, что у клана не больше двух лидеров.",
   modAccept: "Принять",
   modDeny: "Отклонить",
-  modAccepted: "Заявка принята — роль создана и выдана.",
   modDenied: "Заявка отклонена.",
   modDenyModalTitle: "Отклонить заявку",
   modDenyReasonLabel: "Причина (необязательно)",
