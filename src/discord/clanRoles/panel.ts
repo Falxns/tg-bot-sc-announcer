@@ -127,7 +127,7 @@ export async function submitGrantRequest(
       guild,
       dest.id,
       sourceMessageId,
-      clanTxt.grantApprovedReply(clanRole.name, targetUserId, requesterId),
+      clanTxt.grantDirectToTarget(clanRole.name),
       await clanGrantApprovalMentionIds(
         guild,
         { requesterUserId: requesterId, targetUserId, clanRoleId: clanRole.id },

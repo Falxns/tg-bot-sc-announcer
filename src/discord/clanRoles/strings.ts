@@ -99,6 +99,7 @@ export const clanTxt = {
     requesterUserId === targetUserId
       ? `Вам выдана роль **${clanName}**.`
       : `Запрос одобрен — роль **${clanName}** выдана.`,
+  grantDirectToTarget: (clanName: string) => `Вам выдана роль **${clanName}**.`,
   grantDeniedReply: (clanName: string) => `Запрос отклонён — роль **${clanName}**.`,
   leaderMetaGrantRequestSent:
     "Запрос на роль лидера отправлен. Действующий лидер клана должен подтвердить, затем админы.",
