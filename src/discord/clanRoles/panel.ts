@@ -113,6 +113,34 @@ export async function submitGrantRequest(
       : clanTxt.clanRoleCapTarget(capConflict.name);
   }
 
+  const requester = await guild.members.fetch(requesterId).catch(() => null);
+  if (
+    !grantLeaderMeta &&
+    requester &&
+    targetUserId !== requesterId &&
+    (isClanModerator(requester) || isClanLeaderFor(requester, clanRole.id))
+  ) {
+    const result = await grantClanRoleToMember(guild, target, clanRole, false);
+    if (!result.ok) return result.error;
+
+    await notifyClanRequestOutcome(
+      guild,
+      dest.id,
+      sourceMessageId,
+      clanTxt.grantApprovedReply(clanRole.name, targetUserId, requesterId),
+      await clanGrantApprovalMentionIds(
+        guild,
+        { requesterUserId: requesterId, targetUserId, clanRoleId: clanRole.id },
+        requester,
+      ),
+    );
+    await postClanAuditLine(
+      guild,
+      clanTxt.auditGrant(requester.toString(), target.toString(), clanRole.name),
+    );
+    return null;
+  }
+
   const request: ClanGrantRequest = {
     id: newClanRequestId(),
     guildId: guild.id,

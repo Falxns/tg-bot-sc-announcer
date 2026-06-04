@@ -70,7 +70,10 @@ export async function clanGrantApprovalMentionIds(
     return [request.targetUserId];
   }
   const requester = await guild.members.fetch(request.requesterUserId).catch(() => null);
-  if (requester && isClanLeaderFor(requester, request.clanRoleId)) {
+  if (
+    requester &&
+    (isClanLeaderFor(requester, request.clanRoleId) || isClanModerator(requester))
+  ) {
     return [request.targetUserId];
   }
   return clanApprovalOutcomeMentionIds(request, approver);
