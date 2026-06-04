@@ -9,7 +9,6 @@ import {
   type Guild,
   type GuildMember,
   type GuildTextBasedChannel,
-  type Message,
   type Role,
   type TextChannel,
 } from "discord.js";
@@ -27,7 +26,12 @@ import {
   CLAN_MOD_LEADER_META_PREFIX,
   MAX_CLAN_LEADERS,
 } from "./constants";
-import { newClanRequestId, replyToClanRequestMessage, sendInClanChannel } from "./helpers";
+import { newClanRequestId, sendInClanChannel } from "./helpers";
+import {
+  clearClanPendingEmbed,
+  deleteClanThreadMessage,
+  notifyClanRequestOutcome,
+} from "./notifications";
 import {
   canApproveLeaderMetaClanStage,
   canResolveLeaderMetaModRequest,
@@ -48,26 +52,29 @@ function modDenyId(requestId: string): string {
   return `${CLAN_MOD_LEADER_META_PREFIX}deny:${requestId}`;
 }
 
-async function finalizeClanLeaderStageMessage(
-  message: Message,
-  approved: boolean,
-  resolver: GuildMember,
+async function postPendingLeaderMetaModThreadNotice(
+  guild: Guild,
+  dest: GuildTextBasedChannel,
+  request: ClanLeaderMetaRequest,
 ): Promise<void> {
-  const existing = message.embeds[0];
-  if (!existing) {
-    await message.edit({ components: [] }).catch(() => undefined);
-    return;
+  const target = await guild.members.fetch(request.targetUserId).catch(() => null);
+  const embed = new EmbedBuilder()
+    .setTitle(clanTxt.pendingLeaderMetaModThreadTitle)
+    .setDescription(
+      clanTxt.pendingLeaderMetaModThreadBody(
+        request.clanRoleName,
+        target?.id ?? request.targetUserId,
+      ),
+    )
+    .setColor(0xfee75c)
+    .setTimestamp(request.createdAt);
+
+  const msg = await sendInClanChannel(dest, { embeds: [embed] }, request.sourceMessageId);
+  if (msg) {
+    request.pendingMessageId = msg.id;
+    setClanLeaderMetaRequest(request);
+    await saveState(LAST_SEEN_STATE_FILE);
   }
-  const baseDescription = existing.description ?? "";
-  const statusLine = clanTxt.leaderMetaClanResolvedLine(approved, resolver.id);
-  const embed = EmbedBuilder.from(existing)
-    .setDescription(`${baseDescription}${statusLine}`)
-    .setColor(approved ? 0x57f287 : 0x747f8d);
-  await message.edit({
-    embeds: [embed],
-    components: [],
-    allowedMentions: { users: [resolver.id] },
-  }).catch(() => undefined);
 }
 
 async function postPendingClanLeaderApproval(
@@ -228,7 +235,10 @@ export async function submitLeaderMetaGrantRequest(
 
   setClanLeaderMetaRequest(request);
   await saveState(LAST_SEEN_STATE_FILE);
-  return postLeaderMetaToModQueue(guild, request);
+  const modErr = await postLeaderMetaToModQueue(guild, request);
+  if (modErr) return modErr;
+  await postPendingLeaderMetaModThreadNotice(guild, dest, request);
+  return null;
 }
 
 export async function performDirectLeaderMetaRemove(
@@ -281,12 +291,13 @@ export async function handleClanLeaderMetaClanButton(interaction: ButtonInteract
     request.resolvedAt = Date.now();
     request.resolvedBy = member.id;
     setClanLeaderMetaRequest(request);
-    await finalizeClanLeaderStageMessage(interaction.message, false, member);
-    await replyToClanRequestMessage(
+    await clearClanPendingEmbed(interaction.message, interaction.guild, request.channelId);
+    await notifyClanRequestOutcome(
       interaction.guild,
       request.channelId,
       request.sourceMessageId,
       clanTxt.leaderMetaClanDeniedReply(request.clanRoleName),
+      [request.requesterUserId],
     );
     await saveState(LAST_SEEN_STATE_FILE);
     setTimeout(() => deleteClanLeaderMetaRequest(requestId), 60_000);
@@ -303,7 +314,7 @@ export async function handleClanLeaderMetaClanButton(interaction: ButtonInteract
 
   request.clanLeaderApprovedBy = member.id;
   setClanLeaderMetaRequest(request);
-  await finalizeClanLeaderStageMessage(interaction.message, true, member);
+  await clearClanPendingEmbed(interaction.message, interaction.guild, request.channelId);
   await saveState(LAST_SEEN_STATE_FILE);
 
   const modErr = await postLeaderMetaToModQueue(interaction.guild, request);
@@ -312,11 +323,21 @@ export async function handleClanLeaderMetaClanButton(interaction: ButtonInteract
     return true;
   }
 
-  await replyToClanRequestMessage(
+  const dest = await interaction.guild.channels.fetch(request.channelId).catch(() => null);
+  if (dest?.isTextBased()) {
+    await postPendingLeaderMetaModThreadNotice(
+      interaction.guild,
+      dest as GuildTextBasedChannel,
+      request,
+    );
+  }
+
+  await notifyClanRequestOutcome(
     interaction.guild,
     request.channelId,
     request.sourceMessageId,
     clanTxt.leaderMetaSentToMod,
+    [request.requesterUserId],
   );
 
   return true;
@@ -356,13 +377,19 @@ export async function handleClanLeaderMetaModButton(interaction: ButtonInteracti
     request.resolvedBy = member.id;
     setClanLeaderMetaRequest(request);
     await interaction.message.edit({ components: [] }).catch(() => undefined);
+    await deleteClanThreadMessage(
+      interaction.guild,
+      request.channelId,
+      request.pendingMessageId,
+    );
     await saveState(LAST_SEEN_STATE_FILE);
 
-    await replyToClanRequestMessage(
+    await notifyClanRequestOutcome(
       interaction.guild,
       request.channelId,
       request.sourceMessageId,
       clanTxt.leaderMetaDeniedApplicant(),
+      [request.requesterUserId],
     );
     await postClanAuditLine(
       interaction.guild,
@@ -392,14 +419,19 @@ export async function handleClanLeaderMetaModButton(interaction: ButtonInteracti
   request.resolvedBy = member.id;
   setClanLeaderMetaRequest(request);
   await interaction.message.edit({ components: [] }).catch(() => undefined);
+  await deleteClanThreadMessage(
+    interaction.guild,
+    request.channelId,
+    request.pendingMessageId,
+  );
   await saveState(LAST_SEEN_STATE_FILE);
 
-  await replyToClanRequestMessage(
+  await notifyClanRequestOutcome(
     interaction.guild,
     request.channelId,
     request.sourceMessageId,
     clanTxt.leaderMetaApprovedApplicant(request.clanRoleName, target.id),
-    [target.id],
+    [request.targetUserId, request.requesterUserId],
   );
 
   await postClanAuditLine(

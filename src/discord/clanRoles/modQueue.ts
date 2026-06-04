@@ -10,6 +10,7 @@ import {
   TextInputStyle,
   type ButtonInteraction,
   type Guild,
+  type GuildTextBasedChannel,
   type ModalSubmitInteraction,
   type TextChannel,
 } from "discord.js";
@@ -21,7 +22,8 @@ import { getClanCreateRequest, saveState, setClanCreateRequest } from "../../sta
 import type { ClanCreateRequest } from "../types";
 import { executeCreateRequest, postClanAuditLine } from "./actions";
 import { CLAN_MOD_PREFIX } from "./constants";
-import { formatUserList, newClanRequestId, replyToClanRequestMessage } from "./helpers";
+import { formatUserList, newClanRequestId, sendInClanChannel } from "./helpers";
+import { deleteClanThreadMessage, notifyClanRequestOutcome } from "./notifications";
 import { handleClanLeaderMetaModButton } from "./leaderMeta";
 import { canResolveCreateRequest } from "./permissions";
 import { clanTxt } from "./strings";
@@ -89,6 +91,31 @@ async function postCreateRequestToModQueue(
   return null;
 }
 
+async function postCreatePendingThreadNotice(
+  guild: Guild,
+  request: ClanCreateRequest,
+): Promise<void> {
+  const thread = await guild.channels.fetch(request.threadId).catch(() => null);
+  if (!thread?.isTextBased()) return;
+
+  const embed = new EmbedBuilder()
+    .setTitle(clanTxt.pendingCreateThreadTitle)
+    .setDescription(clanTxt.pendingCreateThreadBody(request.clanName))
+    .setColor(request.colorHex)
+    .setTimestamp(request.createdAt);
+
+  const msg = await sendInClanChannel(
+    thread as GuildTextBasedChannel,
+    { embeds: [embed] },
+    request.sourceMessageId,
+  );
+  if (msg) {
+    request.threadPendingMessageId = msg.id;
+    setClanCreateRequest(request);
+    await saveState(LAST_SEEN_STATE_FILE);
+  }
+}
+
 export async function submitCreateRequestFromText(
   guild: Guild,
   applicantId: string,
@@ -111,7 +138,11 @@ export async function submitCreateRequestFromText(
     status: "pending",
     createdAt: Date.now(),
   };
-  return postCreateRequestToModQueue(guild, request, parsed.memberIds, parsed.leaderIds);
+  setClanCreateRequest(request);
+  const err = await postCreateRequestToModQueue(guild, request, parsed.memberIds, parsed.leaderIds);
+  if (err) return err;
+  await postCreatePendingThreadNotice(guild, request);
+  return null;
 }
 
 export async function handleClanModButton(interaction: ButtonInteraction): Promise<boolean> {
@@ -179,13 +210,19 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
   request.resolvedBy = interaction.user.id;
   setClanCreateRequest(request);
   await interaction.message.edit({ components: [] }).catch(() => undefined);
+  await deleteClanThreadMessage(
+    interaction.guild,
+    request.threadId,
+    request.threadPendingMessageId,
+  );
   await saveState(LAST_SEEN_STATE_FILE);
 
-  await replyToClanRequestMessage(
+  await notifyClanRequestOutcome(
     interaction.guild,
     request.threadId,
     request.sourceMessageId,
     clanTxt.createSuccess(request.clanName),
+    [request.applicantId],
   );
 
   await postClanAuditLine(
@@ -219,11 +256,18 @@ export async function handleClanModModal(interaction: ModalSubmitInteraction): P
   setClanCreateRequest(request);
   await saveState(LAST_SEEN_STATE_FILE);
 
-  await replyToClanRequestMessage(
+  await deleteClanThreadMessage(
+    interaction.guild,
+    request.threadId,
+    request.threadPendingMessageId,
+  );
+
+  await notifyClanRequestOutcome(
     interaction.guild,
     request.threadId,
     request.sourceMessageId,
     clanTxt.createDeniedApplicant(reason),
+    [request.applicantId],
   );
 
   await postClanAuditLine(

@@ -614,6 +614,8 @@ export async function loadState(path: string): Promise<void> {
             status: row.status,
             reviewMessageId: typeof row.reviewMessageId === "string" ? row.reviewMessageId : undefined,
             reviewChannelId: typeof row.reviewChannelId === "string" ? row.reviewChannelId : undefined,
+            threadPendingMessageId:
+              typeof row.threadPendingMessageId === "string" ? row.threadPendingMessageId : undefined,
             createdRoleId: typeof row.createdRoleId === "string" ? row.createdRoleId : undefined,
             createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
             resolvedAt: typeof row.resolvedAt === "number" ? row.resolvedAt : undefined,

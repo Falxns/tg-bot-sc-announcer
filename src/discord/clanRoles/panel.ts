@@ -8,7 +8,6 @@ import {
   type Guild,
   type GuildMember,
   type GuildTextBasedChannel,
-  type Message,
   type Role,
 } from "discord.js";
 import { LAST_SEEN_STATE_FILE } from "../../config";
@@ -21,7 +20,8 @@ import {
 import type { ClanGrantRequest } from "../types";
 import { grantClanRoleToMember, postClanAuditLine, removeClanRoleFromMember } from "./actions";
 import { CLAN_REQ_PREFIX, MAX_CLAN_LEADERS } from "./constants";
-import { newClanRequestId, replyToClanRequestMessage, sendInClanChannel } from "./helpers";
+import { newClanRequestId, sendInClanChannel } from "./helpers";
+import { clearClanPendingEmbed, notifyClanRequestOutcome } from "./notifications";
 import { canApproveGrantRequest, isClanModerator } from "./permissions";
 import {
   countClanLeaders,
@@ -33,35 +33,6 @@ import { clanTxt } from "./strings";
 
 export function isClanGrantCustomId(customId: string): boolean {
   return customId.startsWith(CLAN_REQ_PREFIX);
-}
-
-function resolverRoleLabel(resolver: GuildMember, clanRoleId: string): "лидер клана" | "админ" {
-  if (isClanLeaderFor(resolver, clanRoleId)) return clanTxt.resolverRoleLeader;
-  return clanTxt.resolverRoleMod;
-}
-
-export async function finalizeGrantRequestMessage(
-  message: Message,
-  approved: boolean,
-  resolver: GuildMember,
-  clanRoleId: string,
-): Promise<void> {
-  const existing = message.embeds[0];
-  if (!existing) {
-    await message.edit({ components: [] }).catch(() => undefined);
-    return;
-  }
-  const roleLabel = resolverRoleLabel(resolver, clanRoleId);
-  const baseDescription = existing.description ?? "";
-  const statusLine = clanTxt.requestResolvedLine(approved, resolver.id, roleLabel);
-  const embed = EmbedBuilder.from(existing)
-    .setDescription(`${baseDescription}${statusLine}`)
-    .setColor(approved ? 0x57f287 : 0x747f8d);
-  await message.edit({
-    embeds: [embed],
-    components: [],
-    allowedMentions: { users: [resolver.id] },
-  }).catch(() => undefined);
 }
 
 export async function postPendingGrantRequest(
@@ -214,12 +185,13 @@ export async function handleClanGrantButton(interaction: ButtonInteraction): Pro
   if (action === "deny") {
     request.status = "denied";
     setClanGrantRequest(request);
-    await finalizeGrantRequestMessage(interaction.message, false, member, request.clanRoleId);
-    await replyToClanRequestMessage(
+    await clearClanPendingEmbed(interaction.message, interaction.guild, request.channelId);
+    await notifyClanRequestOutcome(
       interaction.guild,
       request.channelId,
       request.sourceMessageId,
       clanTxt.grantDeniedReply(request.clanRoleName),
+      [request.requesterUserId],
     );
     await saveState(LAST_SEEN_STATE_FILE);
     return true;
@@ -245,13 +217,17 @@ export async function handleClanGrantButton(interaction: ButtonInteraction): Pro
 
   request.status = "approved";
   setClanGrantRequest(request);
-  await finalizeGrantRequestMessage(interaction.message, true, member, request.clanRoleId);
-  await replyToClanRequestMessage(
+  await clearClanPendingEmbed(interaction.message, interaction.guild, request.channelId);
+  const notifyIds =
+    request.requesterUserId === request.targetUserId
+      ? [request.targetUserId]
+      : [request.targetUserId, request.requesterUserId];
+  await notifyClanRequestOutcome(
     interaction.guild,
     request.channelId,
     request.sourceMessageId,
     clanTxt.grantApprovedReply(request.clanRoleName, request.targetUserId, request.requesterUserId),
-    request.requesterUserId === request.targetUserId ? undefined : [request.targetUserId],
+    notifyIds,
   );
   await saveState(LAST_SEEN_STATE_FILE);
 

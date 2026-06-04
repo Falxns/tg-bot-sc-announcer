@@ -14,6 +14,13 @@ export const clanTxt = {
 
   rulesHelpFooter: "Использовать команды только в ветке под этим сообщением",
 
+  pendingCreateThreadTitle: "Заявка на создание клана",
+  pendingCreateThreadBody: (clanName: string) =>
+    `Клан **${clanName}** отправлен админам на проверку. Результат придёт в канал уведомлений.`,
+  pendingLeaderMetaModThreadTitle: "Запрос: роль лидера",
+  pendingLeaderMetaModThreadBody: (clanName: string, targetUserId: string) =>
+    `Клан **${clanName}** · кандидат <@${targetUserId}> — ожидает одобрения админов.`,
+
   cmdInvalidFormat: (example: string) => `Неверный формат. Пример: ${example}`,
   cmdClanNotFound: (query: string) => `Клан не найден: **${query}**`,
   cmdClanAmbiguous: "Найдено несколько кланов — уточните полное название.",
@@ -52,7 +59,7 @@ export const clanTxt = {
   cmdColorNotYourClan: (clanName: string) =>
     `Вы не лидер клана **${clanName}** — можно менять цвет только своего клана.`,
   cmdColorInvalidFormat: (colorOptions: string) =>
-    `Неверный формат. Пример: \`!цвет Красный\` или \`!цвет Название #RRGGBB\`. Цвета: ${colorOptions} или hex.`,
+    `Неверный формат. Пример: \`!цвет Красный\` или \`!цвет #RRGGBB\`. Цвета: ${colorOptions} или hex.`,
   cmdColorCooldown: (remaining: string) =>
     `Сменить цвет клана можно раз в **${DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS}** дн. Повторите через **${remaining}**.`,
   cmdColorAlreadySet: (label: string) => `У роли уже установлен цвет **${label}**.`,

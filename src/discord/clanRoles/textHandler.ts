@@ -12,7 +12,7 @@ import {
 import { performDirectRemove, submitGrantRequest } from "./panel";
 import { sendClanRosterDm } from "./roster";
 import { changeClanRoleColor } from "./colorChange";
-import { countClanLeaders, ensureGuildMembersCached } from "./resolver";
+import { ensureGuildMembersCached } from "./resolver";
 import { isClanCommandMessage, parseClanTextCommand } from "./textCommands";
 import { clanTxt } from "./strings";
 
@@ -69,7 +69,6 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       await replyClanCommandError(message, err);
       return true;
     }
-    await replyInChannelAutoDelete(message, clanTxt.grantRequestSent);
     return true;
   }
 
@@ -105,7 +104,6 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       await replyClanCommandError(message, err);
       return true;
     }
-    await replyInChannelAutoDelete(message, clanTxt.cmdCreateSubmitted);
     return true;
   }
 
@@ -122,10 +120,6 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       await replyClanCommandError(message, err);
       return true;
     }
-    const leaderCount = await countClanLeaders(message.guild, parsed.clanRole.id);
-    const reply =
-      leaderCount === 1 ? clanTxt.leaderMetaGrantRequestSent : clanTxt.leaderMetaGrantRequestSentMod;
-    await replyInChannelAutoDelete(message, reply);
     return true;
   }
 

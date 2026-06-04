@@ -123,6 +123,8 @@ export type ClanCreateRequest = {
   status: "pending" | "approved" | "denied";
   reviewMessageId?: string;
   reviewChannelId?: string;
+  /** Informational embed in the rules thread while admins review (no buttons). */
+  threadPendingMessageId?: string;
   createdRoleId?: string;
   createdAt: number;
   resolvedAt?: number;
