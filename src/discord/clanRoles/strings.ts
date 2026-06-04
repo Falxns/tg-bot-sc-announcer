@@ -68,7 +68,7 @@ export const clanTxt = {
     "Не удалось отправить ЛС. Откройте личные сообщения от участников сервера и повторите команду.",
   rosterDmTitle: (clanName: string) => `Состав клана ${clanName}`,
   rosterDmCount: (members: number, leaders: number) =>
-    `Участников с ролью: **${members}** · лидеров: **${leaders}**`,
+    `Участников с клановой ролью: **${members}** · лидеров: **${leaders}**`,
   rosterDmFooter: "Лидеры отмечены 👑",
   notifyRemoveClanRoleSelf: (role: string) => `С вас снята клановая роль **${role}**.`,
   notifyRemoveClanRoleTarget: (role: string) => `С вас снята клановая роль **${role}**.`,
@@ -80,7 +80,7 @@ export const clanTxt = {
   createNameInvalid: (min: number, max: number) =>
     `Некорректное название. Длина ${min}–${max} символов, без @ и #.`,
   createNameContainsTag: "Проверьте название клана. Тэг не должен указываться",
-  createNameDuplicate: "Роль с таким названием уже существует.",
+  createNameDuplicate: "Клановая роль с таким названием уже существует.",
   createTierMissing: "Укажите тир клана отдельной строкой после названия (S, A, B, C или D).",
   createTierInvalid: "Неверный тир клана. Допустимые значения: S, A (А), B (Б), C (Ц, С), D (Д), E (Е).",
   createTierTooLow: "Роли создаются только для кланов тира **D** и выше.",
@@ -91,10 +91,10 @@ export const clanTxt = {
   grantLeaderCap: (n: number) => `У этого клана уже ${n} лидер(ов) — максимум 2.`,
   grantApprovedReply: (clanName: string, targetUserId: string, requesterUserId: string) =>
     requesterUserId === targetUserId
-      ? `Вам выдана роль **${clanName}**.`
-      : `Запрос одобрен — роль **${clanName}** выдана.`,
-  grantDirectToTarget: (clanName: string) => `Вам выдана роль **${clanName}**.`,
-  grantDeniedReply: (clanName: string) => `Запрос отклонён — роль **${clanName}**.`,
+      ? `Вам выдана клановая роль **${clanName}**.`
+      : `Запрос одобрен — клановая роль **${clanName}** выдана.`,
+  grantDirectToTarget: (clanName: string) => `Вам выдана клановая роль **${clanName}**.`,
+  grantDeniedReply: (clanName: string) => `Запрос отклонён — клановая роль **${clanName}**.`,
   leaderMetaApprovalPostFailed:
     "Не удалось опубликовать запрос на подтверждение. Проверьте, что у бота есть право «Отправка сообщений в ветках» в канале правил.",
   leaderMetaSentToMod: (clanName: string) =>
@@ -105,15 +105,15 @@ export const clanTxt = {
   notClanLeader: "Участник не является лидером указанного клана.",
   leaderMetaNotConfigured: "Роль лидера клана не настроена на сервере.",
   leaderMetaNeedsClanFirstSelf: (clanName: string) =>
-    `Роль лидера доступна только участникам клана. Сначала запросите роль: \`+клан ${clanName}\`.`,
+    `Роль лидера доступна только участникам клана. Сначала запросите роль командой: \`+клан ${clanName}\`.`,
   leaderMetaNeedsClanFirstTarget: (clanName: string) =>
-    `У участника нет роли **${clanName}**. Сначала выдайте роль клана: \`+клан ${clanName} @участник\`.`,
+    `У участника нет клановой роли **${clanName}**. Сначала выдайте роль командой: \`+клан ${clanName} @участник\`.`,
   leaderMetaNeedsClanFirstAny:
     "Роль лидера доступна только участникам клана. Сначала запросите роль командой `+клан Название`.",
   removeNotYourClanRole: "Вы можете снять только свою клановую роль.",
   targetDoesNotHaveClanRole: "Участник больше не состоит в выбранном клане.",
 
-  pendingGrantTitle: "Запрос: выдать роль",
+  pendingGrantTitle: "Запрос: выдать клановую роль",
   pendingGrantLeaderPing: (mentions: string) =>
     `Лидеры клана, проверьте запрос: ${mentions}`,
   pendingGrantLeaderNote: "Запрошена также роль «Лидер клана».",
