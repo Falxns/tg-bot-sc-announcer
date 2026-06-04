@@ -11,11 +11,10 @@ import {
 } from "discord.js";
 import {
   DISCORD_CLAN_CHAT_CHANNEL_ID,
-  DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID,
   DISCORD_CLAN_LEADER_ROLE_ID,
   DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID,
   DISCORD_CLAN_STAFF_LOG_CHANNEL_ID,
-  DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID,
+  DISCORD_MODERATION_LOG_CHANNEL_ID,
 } from "../../config";
 import {
   clanGrantRequests,
@@ -343,10 +342,7 @@ export async function executeCreateRequest(
 }
 
 export async function postClanAuditLine(guild: Guild, line: string): Promise<void> {
-  const channelId =
-    DISCORD_CLAN_STAFF_LOG_CHANNEL_ID ||
-    DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID ||
-    DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID;
+  const channelId = DISCORD_CLAN_STAFF_LOG_CHANNEL_ID || DISCORD_MODERATION_LOG_CHANNEL_ID;
   if (!channelId) return;
   const ch = await guild.channels.fetch(channelId).catch(() => null);
   if (!ch || (ch.type !== ChannelType.GuildText && ch.type !== ChannelType.GuildAnnouncement)) return;
