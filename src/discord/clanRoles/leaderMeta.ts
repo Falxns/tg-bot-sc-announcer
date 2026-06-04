@@ -35,6 +35,7 @@ import {
 import {
   canApproveLeaderMetaClanStage,
   canResolveLeaderMetaModRequest,
+  clanApprovalOutcomeMentionIds,
   isClanModerator,
 } from "./permissions";
 import { countClanLeaders, ensureGuildMembersCached, isClanLeaderFor, listClanLeaderIds } from "./resolver";
@@ -337,7 +338,7 @@ export async function handleClanLeaderMetaClanButton(interaction: ButtonInteract
     request.channelId,
     request.sourceMessageId,
     clanTxt.leaderMetaSentToMod,
-    [request.requesterUserId],
+    member.id === request.requesterUserId ? [] : [request.requesterUserId],
   );
 
   return true;
@@ -430,8 +431,12 @@ export async function handleClanLeaderMetaModButton(interaction: ButtonInteracti
     interaction.guild,
     request.channelId,
     request.sourceMessageId,
-    clanTxt.leaderMetaApprovedApplicant(request.clanRoleName, target.id),
-    [request.targetUserId, request.requesterUserId],
+    clanTxt.leaderMetaApprovedApplicant(
+      request.clanRoleName,
+      request.targetUserId,
+      request.requesterUserId,
+    ),
+    clanApprovalOutcomeMentionIds(request, member),
   );
 
   await postClanAuditLine(

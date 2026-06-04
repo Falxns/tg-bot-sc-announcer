@@ -75,6 +75,10 @@ export const clanTxt = {
   cmdRemoveDoneTarget: (role: string, target: string) => `Роль **${role}** снята с ${target}.`,
   cmdRemoveLeaderDoneTarget: (role: string, target: string) =>
     `Роль лидера снята с ${target} (клан **${role}**).`,
+  notifyRemoveClanRoleSelf: (role: string) => `С вашего аккаунта снята роль **${role}**.`,
+  notifyRemoveClanRoleTarget: (role: string) => `С вас снята роль **${role}**.`,
+  notifyRemoveLeaderSelf: (role: string) => `Вы сняли с себя роль лидера (клан **${role}**).`,
+  notifyRemoveLeaderTarget: (role: string) => `С вас снята роль лидера (клан **${role}**).`,
   clanThreadOffTopicReason:
     "В ветке клановых команд разрешены только сообщения вида +клан, -клан, +лидер, -лидер, !состав, !цвет и блок !создать.",
 
@@ -93,8 +97,8 @@ export const clanTxt = {
   grantRequestSent: "Запрос отправлен. Ожидайте одобрения лидера клана или админа.",
   grantApprovedReply: (clanName: string, targetUserId: string, requesterUserId: string) =>
     requesterUserId === targetUserId
-      ? `Запрос одобрен — роль **${clanName}** выдана вам.`
-      : `Запрос одобрен — роль **${clanName}** выдана <@${targetUserId}>.`,
+      ? `Вам выдана роль **${clanName}**.`
+      : `Запрос одобрен — роль **${clanName}** выдана.`,
   grantDeniedReply: (clanName: string) => `Запрос отклонён — роль **${clanName}**.`,
   leaderMetaGrantRequestSent:
     "Запрос на роль лидера отправлен. Действующий лидер клана должен подтвердить, затем админы.",
@@ -160,8 +164,10 @@ export const clanTxt = {
       ? `Заявка отклонена админами.\n**Причина:** ${reason.trim()}`
       : "Заявка отклонена админами.",
   leaderMetaDeniedApplicant: () => "Заявка на роль лидера отклонена админами.",
-  leaderMetaApprovedApplicant: (clanName: string, targetUserId: string) =>
-    `Роль лидера в клане **${clanName}** выдана <@${targetUserId}>.`,
+  leaderMetaApprovedApplicant: (clanName: string, targetUserId: string, requesterUserId: string) =>
+    requesterUserId === targetUserId
+      ? `Вам выдана роль лидера в клане **${clanName}**.`
+      : `Запрос одобрен — роль лидера в клане **${clanName}** выдана.`,
 
   clanslistTitle: "Клановые роли",
   clanslistEmpty: "Клановые роли не найдены.",

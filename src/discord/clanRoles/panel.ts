@@ -22,7 +22,7 @@ import { grantClanRoleToMember, postClanAuditLine, removeClanRoleFromMember } fr
 import { CLAN_REQ_PREFIX, MAX_CLAN_LEADERS } from "./constants";
 import { newClanRequestId, sendInClanChannel } from "./helpers";
 import { clearClanPendingEmbed, notifyClanRequestOutcome } from "./notifications";
-import { canApproveGrantRequest, isClanModerator } from "./permissions";
+import { canApproveGrantRequest, clanApprovalOutcomeMentionIds, isClanModerator } from "./permissions";
 import {
   countClanLeaders,
   getMemberClanRoleCapConflict,
@@ -218,16 +218,12 @@ export async function handleClanGrantButton(interaction: ButtonInteraction): Pro
   request.status = "approved";
   setClanGrantRequest(request);
   await clearClanPendingEmbed(interaction.message, interaction.guild, request.channelId);
-  const notifyIds =
-    request.requesterUserId === request.targetUserId
-      ? [request.targetUserId]
-      : [request.targetUserId, request.requesterUserId];
   await notifyClanRequestOutcome(
     interaction.guild,
     request.channelId,
     request.sourceMessageId,
     clanTxt.grantApprovedReply(request.clanRoleName, request.targetUserId, request.requesterUserId),
-    notifyIds,
+    clanApprovalOutcomeMentionIds(request, member),
   );
   await saveState(LAST_SEEN_STATE_FILE);
 

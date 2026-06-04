@@ -14,6 +14,7 @@ import { sendClanRosterDm } from "./roster";
 import { changeClanRoleColor } from "./colorChange";
 import { ensureGuildMembersCached } from "./resolver";
 import { isClanCommandMessage, parseClanTextCommand } from "./textCommands";
+import { notifyClanRequestOutcome } from "./notifications";
 import { clanTxt } from "./strings";
 
 async function replyClanCommandError(message: Message, content: string): Promise<void> {
@@ -83,11 +84,15 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       await replyClanCommandError(message, removed.error);
       return true;
     }
-    const targetLabel =
-      parsed.targetUserId === message.author.id ? "вас" : removed.target.toString();
-    await replyInChannelAutoDelete(
-      message,
-      clanTxt.cmdRemoveDoneTarget(parsed.clanRole.name, targetLabel),
+    const isSelf = parsed.targetUserId === message.author.id;
+    await notifyClanRequestOutcome(
+      message.guild,
+      message.channel.id,
+      message.id,
+      isSelf
+        ? clanTxt.notifyRemoveClanRoleSelf(parsed.clanRole.name)
+        : clanTxt.notifyRemoveClanRoleTarget(parsed.clanRole.name),
+      [parsed.targetUserId],
     );
     return true;
   }
@@ -134,11 +139,15 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
       await replyClanCommandError(message, removed.error);
       return true;
     }
-    const targetLabel =
-      parsed.targetUserId === message.author.id ? "вас" : removed.target.toString();
-    await replyInChannelAutoDelete(
-      message,
-      clanTxt.cmdRemoveLeaderDoneTarget(parsed.clanRole.name, targetLabel),
+    const isSelf = parsed.targetUserId === message.author.id;
+    await notifyClanRequestOutcome(
+      message.guild,
+      message.channel.id,
+      message.id,
+      isSelf
+        ? clanTxt.notifyRemoveLeaderSelf(parsed.clanRole.name)
+        : clanTxt.notifyRemoveLeaderTarget(parsed.clanRole.name),
+      [parsed.targetUserId],
     );
     return true;
   }

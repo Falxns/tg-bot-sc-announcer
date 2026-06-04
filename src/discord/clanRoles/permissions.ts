@@ -43,3 +43,19 @@ export function canResolveLeaderMetaModRequest(
   if (request.status !== "pending_mod") return false;
   return canApproveCreateRequest(member);
 }
+
+/** Ping target on approval; ping requester too unless they approved their own request as clan leader. */
+export function clanApprovalOutcomeMentionIds(
+  request: { requesterUserId: string; targetUserId: string },
+  approver: GuildMember,
+): string[] {
+  if (request.requesterUserId === request.targetUserId) {
+    return [request.targetUserId];
+  }
+  const ids = [request.targetUserId];
+  const approverIsRequester = approver.id === request.requesterUserId;
+  if (!approverIsRequester || isClanModerator(approver)) {
+    ids.push(request.requesterUserId);
+  }
+  return ids;
+}
