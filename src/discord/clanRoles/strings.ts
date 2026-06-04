@@ -105,7 +105,8 @@ export const clanTxt = {
   leaderMetaGrantRequestSentMod: "Запрос на роль лидера отправлен админам.",
   leaderMetaApprovalPostFailed:
     "Не удалось опубликовать запрос на подтверждение. Проверьте, что у бота есть право «Отправка сообщений в ветках» в канале правил.",
-  leaderMetaSentToMod: "Лидер клана подтвердил запрос — заявка отправлена админам.",
+  leaderMetaSentToMod: (clanName: string) =>
+    `Клан **${clanName}** — лидер клана подтвердил запрос на роль лидера. Заявка отправлена админам.`,
   leaderMetaClanDeniedReply: (clanName: string) =>
     `Запрос на роль лидера в **${clanName}** отклонён лидером клана.`,
   alreadyClanLeader: "У участника уже есть роль лидера в этом клане.",

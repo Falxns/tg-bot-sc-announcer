@@ -337,8 +337,8 @@ export async function handleClanLeaderMetaClanButton(interaction: ButtonInteract
     interaction.guild,
     request.channelId,
     request.sourceMessageId,
-    clanTxt.leaderMetaSentToMod,
-    member.id === request.requesterUserId ? [] : [request.requesterUserId],
+    clanTxt.leaderMetaSentToMod(request.clanRoleName),
+    member.id === request.requesterUserId ? [request.targetUserId] : [request.requesterUserId],
   );
 
   return true;
