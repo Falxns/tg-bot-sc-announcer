@@ -1,8 +1,7 @@
 import type { Message } from "discord.js";
 import { clanRolesConfigured } from "../../config";
 import { isClanModerator } from "./permissions";
-import { applyLightStrikeForMessage, replyInChannelAutoDelete } from "../moderation";
-import { discordModerationLogTitles as logTitles } from "../userStrings";
+import { replyInChannelAutoDelete } from "../moderation";
 import { isClanRulesThread } from "./helpers";
 import { submitCreateRequestFromText } from "./modQueue";
 import {
@@ -32,12 +31,9 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
 
   if (!isClanCommandMessage(message.content)) {
     if (isClanModerator(member)) return true;
-    await applyLightStrikeForMessage(
-      message,
-      member,
-      clanTxt.clanThreadOffTopicReason,
-      logTitles.minorWarnOnly,
-    );
+    await replyInChannelAutoDelete(message, clanTxt.clanThreadOffTopicReason, {
+      deleteUserMessage: true,
+    });
     return true;
   }
 

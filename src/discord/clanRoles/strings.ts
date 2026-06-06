@@ -1,10 +1,12 @@
 import { EmbedBuilder } from "discord.js";
 import {
   DISCORD_CLAN_ACTIVE_MIN_MEMBERS,
+  DISCORD_CLAN_CHAT_CHANNEL_ID,
   DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS,
   DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS,
   DISCORD_CLAN_HELP_CHANNEL_ID,
   DISCORD_CLAN_MAX_ROLES_PER_MEMBER,
+  DISCORD_CLAN_RECRUIT_CHANNEL_ID,
 } from "../../config";
 
 export const clanTxt = {
@@ -203,9 +205,30 @@ export const clanTxt = {
 } as const;
 
 export function buildClanRulesHelpContent(): string {
-  const header = "**Клановые роли:**";
-  if (!DISCORD_CLAN_HELP_CHANNEL_ID) return header;
-  return `${header}\nПодробнее о командах и настройке клановых ролей читайте в <#${DISCORD_CLAN_HELP_CHANNEL_ID}>`;
+  const lines = ["**Клановые роли:**"];
+
+  const accessChannels: string[] = [];
+  if (DISCORD_CLAN_RECRUIT_CHANNEL_ID) {
+    accessChannels.push(`<#${DISCORD_CLAN_RECRUIT_CHANNEL_ID}>`);
+  }
+  if (DISCORD_CLAN_CHAT_CHANNEL_ID) {
+    accessChannels.push(`<#${DISCORD_CLAN_CHAT_CHANNEL_ID}>`);
+  }
+  if (accessChannels.length > 0) {
+    const joined =
+      accessChannels.length === 2
+        ? `${accessChannels[0]} и ${accessChannels[1]}`
+        : accessChannels[0];
+    lines.push(`Получение клановых ролей для набора участников и общения в каналах ${joined}`);
+  }
+
+  if (DISCORD_CLAN_HELP_CHANNEL_ID) {
+    lines.push(
+      `Подробнее о командах и настройке клановых ролей читайте в <#${DISCORD_CLAN_HELP_CHANNEL_ID}>`,
+    );
+  }
+
+  return lines.join("\n");
 }
 
 export function buildClanRulesHelpEmbeds(): EmbedBuilder[] {

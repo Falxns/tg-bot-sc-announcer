@@ -16,7 +16,7 @@ const CELLS = [
   ["voice-emoji-region.png", "РЕГИОН"],
   ["voice-emoji-invite.png", "ПРИГЛАСИТЬ"],
   ["voice-emoji-kick.png", "ВЫГНАТЬ"],
-  ["voice-emoji-transfer.png", "ПЕРЕДАЧА"],
+  ["voice-emoji-transfer.png", ["СМЕНА", "ВЛАДЕЛЬЦА"]],
   ["voice-emoji-delete.png", "УДАЛИТЬ"],
 ];
 
@@ -31,12 +31,25 @@ const WIDTH = COLS * CELL_W;
 const HEIGHT = ROWS * ROW_H + PAD_Y;
 const BG = { r: 43, g: 45, b: 49, alpha: 1 };
 
-function labelSvg(text) {
-  return Buffer.from(
-    `<svg width="${CELL_W}" height="${LABEL_H}" xmlns="http://www.w3.org/2000/svg">
+function labelSvg(label) {
+  const lines = Array.isArray(label) ? label : [label];
+  if (lines.length === 1) {
+    return Buffer.from(
+      `<svg width="${CELL_W}" height="${LABEL_H}" xmlns="http://www.w3.org/2000/svg">
       <text x="${CELL_W / 2}" y="19" text-anchor="middle"
         fill="#dcddde" font-family="Arial, Helvetica, sans-serif"
-        font-size="12" font-weight="600" letter-spacing="0.5">${text}</text>
+        font-size="12" font-weight="600" letter-spacing="0.5">${lines[0]}</text>
+    </svg>`,
+    );
+  }
+  return Buffer.from(
+    `<svg width="${CELL_W}" height="${LABEL_H}" xmlns="http://www.w3.org/2000/svg">
+      <text x="${CELL_W / 2}" y="13" text-anchor="middle"
+        fill="#dcddde" font-family="Arial, Helvetica, sans-serif"
+        font-size="12" font-weight="600" letter-spacing="0.5">${lines[0]}</text>
+      <text x="${CELL_W / 2}" y="25" text-anchor="middle"
+        fill="#dcddde" font-family="Arial, Helvetica, sans-serif"
+        font-size="12" font-weight="600" letter-spacing="0.5">${lines[1]}</text>
     </svg>`,
   );
 }
