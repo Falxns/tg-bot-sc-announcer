@@ -20,7 +20,16 @@ export type ClanAdValidationError =
 
 type ParsedSection = { number: number; value: string };
 
-const SECTION_HEADER_RE = /(?:^|\n)\s*(\d+)\s*[).:]\s*/g;
+/** Line-start headers only; `.` must not start a decimal (e.g. K/D line `1.2`). */
+const SECTION_HEADER_RE = /(?:^|\n)\s*(\d{1,2})\s*(?:\)|\.(?!\d)|:|[-–—])\s*/g;
+
+function normalizeAdContent(content: string): string {
+  return content
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\uFF09/g, ")")
+    .replace(/\uFF08/g, "(");
+}
 
 const FRACTION_VALUES = new Set(["заря", "наемники", "завет", "рубеж"]);
 
@@ -44,7 +53,7 @@ function isEmptyPlaceholder(raw: string): boolean {
 }
 
 export function parseNumberedSections(content: string): ParsedSection[] {
-  const normalized = content.replace(/\r\n/g, "\n");
+  const normalized = normalizeAdContent(content);
   const headers: Array<{ number: number; valueStart: number; matchStart: number }> = [];
 
   SECTION_HEADER_RE.lastIndex = 0;
