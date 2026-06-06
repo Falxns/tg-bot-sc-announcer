@@ -118,6 +118,22 @@ function validateNaborBlock(block: Map<number, string>, blockIndex: number, erro
       continue;
     }
     const value = block.get(section) ?? "";
+    if (section === 9) {
+      if (!value.trim()) {
+        errors.push({ code: "empty_required", section, blockIndex });
+      } else if (!isValidNaborField9(value)) {
+        errors.push({ code: "invalid_enum", section, blockIndex });
+      }
+      continue;
+    }
+    if (section === 10) {
+      if (!value.trim()) {
+        errors.push({ code: "empty_required", section, blockIndex });
+      } else if (!isValidNaborField10(value)) {
+        errors.push({ code: "invalid_enum", section, blockIndex });
+      }
+      continue;
+    }
     if (isEmptyPlaceholder(value)) {
       errors.push({ code: "empty_required", section, blockIndex });
       continue;
@@ -129,14 +145,6 @@ function validateNaborBlock(block: Map<number, string>, blockIndex: number, erro
       }
     } else if (section === 2) {
       if (!isValidFraction(value)) {
-        errors.push({ code: "invalid_enum", section, blockIndex });
-      }
-    } else if (section === 9) {
-      if (!isValidNaborField9(value)) {
-        errors.push({ code: "invalid_enum", section, blockIndex });
-      }
-    } else if (section === 10) {
-      if (!isValidNaborField10(value)) {
         errors.push({ code: "invalid_enum", section, blockIndex });
       }
     }
@@ -213,7 +221,7 @@ export function validateClanAdMessage(
   return errors.length === 0 ? { ok: true } : { ok: false, errors };
 }
 
-function errorHint(error: ClanAdValidationError): string {
+function errorHint(error: ClanAdValidationError, formatId: ClanAdFormatId): string {
   switch (error.code) {
     case "missing_section":
       return fmtTxt.hintMissingSection(error.section);
@@ -228,13 +236,16 @@ function errorHint(error: ClanAdValidationError): string {
       }
       return fmtTxt.hintClanNameTag;
     case "invalid_enum":
-      if (error.section === 2 || error.section === 10) {
+      if (error.section === 2) {
         return fmtTxt.hintFraction(error.section);
       }
       if (error.section === 9) {
         return fmtTxt.hintNaborField9;
       }
-      return fmtTxt.hintNaborField10;
+      if (error.section === 10) {
+        return formatId === "nabor_klany" ? fmtTxt.hintNaborField10 : fmtTxt.hintFraction(error.section);
+      }
+      return fmtTxt.hintGeneric;
     case "invalid_block_count":
       return error.expected === "1-3"
         ? fmtTxt.hintBlockCountNabor(error.got)
@@ -261,7 +272,7 @@ export function formatClanAdValidationErrors(
   const fieldErrors = errors.filter((e) => e.code !== "invalid_block_count" && e.code !== "missing_attachment");
 
   for (const err of messageLevel) {
-    lines.push(`• ${errorHint(err)}`);
+    lines.push(`• ${errorHint(err, formatId)}`);
   }
 
   if (formatId === "nabor_klany") {
@@ -281,12 +292,12 @@ export function formatClanAdValidationErrors(
         lines.push(fmtTxt.formHeader(blockIndex + 1));
       }
       for (const err of blockErrs) {
-        lines.push(`• ${errorHint(err)}`);
+        lines.push(`• ${errorHint(err, formatId)}`);
       }
     }
   } else {
     for (const err of fieldErrors) {
-      lines.push(`• ${errorHint(err)}`);
+      lines.push(`• ${errorHint(err, formatId)}`);
     }
   }
 
