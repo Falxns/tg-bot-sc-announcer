@@ -13,7 +13,7 @@ export const clanTxt = {
   notConfigured: "Клановые роли не настроены на этом сервере.",
   requestUnknown: "Запрос не найден или устарел.",
 
-  rulesHelpFooter: "Использовать команды только в ветке под этим сообщением",
+  rulesHelpFooter: "Использовать команды можно только в ветке под этим сообщением",
 
   pendingCreateThreadTitle: "Запрос: создание клановой роли",
   pendingCreateThreadBody: (clanName: string) =>
@@ -233,7 +233,7 @@ export function buildClanRulesHelpContent(): string {
 
 export function buildClanRulesHelpEmbeds(): EmbedBuilder[] {
   const description =
-    "### Участник\n" +
+    "### Команды участника\n" +
     "`+клан Название` — запросить клановую роль\n" +
     "`-клан` — снять клановую роль\n" +
     "```\n" +
@@ -246,7 +246,7 @@ export function buildClanRulesHelpEmbeds(): EmbedBuilder[] {
     "...\n" +
     "```\n" +
     "**Без указания лидеров с использованием 👑, лидером станет первый участник из списка**\n" +
-    "### Лидер\n" +
+    "### Команды лидера\n" +
     "`+клан @участник` — выдать роль своего клана участнику\n" +
     "`-клан @участник` — снять клановую роль\n" +
     "`+лидер` — запросить роль лидера в своём клане\n" +
