@@ -20,8 +20,8 @@ export type ClanAdValidationError =
 
 type ParsedSection = { number: number; value: string };
 
-/** Line-start headers only; `.` must not start a decimal (e.g. K/D line `1.2`). */
-const SECTION_HEADER_RE = /(?:^|\n)\s*(\d{1,2})\s*(?:\)|\.(?!\d)|:|[-–—])\s*/g;
+/** Line-start headers only; `.` must not start a decimal (e.g. K/D line `1.2`). Trailing ws after delimiter must not swallow the next line. */
+const SECTION_HEADER_RE = /(?:^|\n)\s*(\d{1,2})\s*(?:\)|\.(?!\d)|:|[-–—])[^\S\n]*/g;
 
 function normalizeAdContent(content: string): string {
   return content
