@@ -10,6 +10,7 @@ import {
 import { handleModerationAutocomplete } from "./moderationCommands";
 import { handleMessageReviewCreate, handleMessageReviewDelete } from "./messageReview";
 import { handleModerationMessage } from "./moderation";
+import { handleClanAdFormatMessage } from "./clanAdFormat";
 import { handleRoleButtonInteraction } from "./roles";
 import {
   handleTempVoiceButton,
@@ -159,9 +160,18 @@ export async function startDiscordBot(): Promise<void> {
       }
 
       if (!clanHandled) {
-        void handleModerationMessage(message).catch((err) => {
-          console.error("Discord moderation handler failed:", err);
-        });
+        let formatHandled = false;
+        try {
+          formatHandled = await handleClanAdFormatMessage(message);
+        } catch (err) {
+          console.error("Discord clan ad format handler failed:", err);
+        }
+
+        if (!formatHandled) {
+          void handleModerationMessage(message).catch((err) => {
+            console.error("Discord moderation handler failed:", err);
+          });
+        }
       }
 
       void handleStaffSummaryCreatorMessage(message).catch((err) => {

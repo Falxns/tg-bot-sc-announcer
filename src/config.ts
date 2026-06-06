@@ -647,3 +647,58 @@ export function clanRolesConfigured(): boolean {
 export const DISCORD_CLAN_COLOR_PRESETS_FROM_ENV = parseClanColorPresets(
   process.env.DISCORD_CLAN_COLOR_PRESETS_JSON ?? "",
 );
+
+export type ClanAdFormatId = "nabor_klany" | "poisk_klanov";
+
+const CLAN_AD_FORMAT_IDS: ReadonlySet<ClanAdFormatId> = new Set(["nabor_klany", "poisk_klanov"]);
+
+function parseClanAdFormatChannels(raw: string): Record<string, ClanAdFormatId> {
+  if (!raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, ClanAdFormatId> = {};
+    for (const [channelId, formatId] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!/^\d{17,20}$/.test(channelId.trim())) continue;
+      if (typeof formatId !== "string") continue;
+      const id = formatId.trim() as ClanAdFormatId;
+      if (CLAN_AD_FORMAT_IDS.has(id)) {
+        out[channelId.trim()] = id;
+      }
+    }
+    return out;
+  } catch {
+    console.warn("Invalid DISCORD_CLAN_AD_FORMAT_CHANNELS_JSON, using empty map.");
+    return {};
+  }
+}
+
+function parseClanAdFormatPinUrls(raw: string): Partial<Record<ClanAdFormatId, string>> {
+  if (!raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Partial<Record<ClanAdFormatId, string>> = {};
+    for (const [formatId, url] of Object.entries(parsed as Record<string, unknown>)) {
+      const id = formatId.trim() as ClanAdFormatId;
+      if (!CLAN_AD_FORMAT_IDS.has(id)) continue;
+      if (typeof url === "string" && url.trim().length > 0) {
+        out[id] = url.trim();
+      }
+    }
+    return out;
+  } catch {
+    console.warn("Invalid DISCORD_CLAN_AD_FORMAT_PIN_URLS_JSON, using empty map.");
+    return {};
+  }
+}
+
+/** Channel snowflake → clan ad format preset id (`nabor_klany` | `poisk_klanov`). */
+export const DISCORD_CLAN_AD_FORMAT_CHANNELS = parseClanAdFormatChannels(
+  process.env.DISCORD_CLAN_AD_FORMAT_CHANNELS_JSON ?? "",
+);
+
+/** Optional pinned-template URLs per format id. */
+export const DISCORD_CLAN_AD_FORMAT_PIN_URLS = parseClanAdFormatPinUrls(
+  process.env.DISCORD_CLAN_AD_FORMAT_PIN_URLS_JSON ?? "",
+);

@@ -469,6 +469,36 @@ export const discordAutoMod = {
     "**Таймаут:** не применён — бот не может замутить этого пользователя (проверьте настройки ролей).",
 } as const;
 
+/** Clan recruitment ad format validation (#набор-в-кланы / #поиск-кланов). */
+export const discordClanAdFormat = {
+  logTitleNabor: "[Клан] Неверный формат объявления (#набор-в-кланы)",
+  logTitlePoisk: "[Клан] Неверный формат объявления (#поиск-кланов)",
+  intro: "Сообщение удалено — исправьте формат объявления:",
+  pinLine: (url: string) => `Шаблон: ${url}`,
+  formHeader: (n: number) => `**Форма ${n}:**`,
+  hintMissingSection: (section: number) => `Пункт ${section}): отсутствует — добавьте строку по шаблону`,
+  hintEmptyRequired: (section: number) => `Пункт ${section}): заполните поле (не оставляйте пустым, «-» или «нет»)`,
+  hintClanNameLength: (min: number, max: number) =>
+    `Пункт 1): название клана — ${min}–${max} символов, без @ и #`,
+  hintClanNameChars: "Пункт 1): название клана не должно содержать @ или #",
+  hintClanNameTag: "Пункт 1): в названии клана не указывайте тэг (скобки или отдельный токен из 4 заглавных букв)",
+  hintFraction: (section: number) =>
+    `Пункт ${section}): укажите фракцию — Заря, Наемники, Завет или Рубеж`,
+  hintNaborField9: "Пункт 9): допустимо — Да, Нет, + или -",
+  hintNaborField10: "Пункт 10): допустимо — Да, Нет, +, - или «Онли кувалды»",
+  hintBlockCountNabor: (got: number) =>
+    got === 0
+      ? "В сообщении не найдено объявление по шаблону (начните с пункта 1))"
+      : `В сообщении более 3 форм (найдено ${got}) — допускается до 3`,
+  hintBlockCountPoisk: (got: number) =>
+    got === 0
+      ? "В сообщении не найдено объявление по шаблону (начните с пункта 1))"
+      : `В сообщении более одной формы (найдено ${got}) — допускается только одна`,
+  hintMissingAttachment: "Пункт 8): приложите скриншот (вложение к сообщению)",
+  hintGeneric: "Проверьте формат объявления по закреплённому шаблону",
+  errorsTruncated: (n: number) => `…и ещё ${n} ошибок`,
+} as const;
+
 /** Human-readable duration for automod user embeds (Russian). */
 export function discordFormatDurationRu(ms: number): string {
   const totalMin = Math.round(ms / 60_000);
