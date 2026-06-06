@@ -10,6 +10,7 @@ export { handleClanModButton, handleClanModModal, isClanModCustomId } from "./mo
 export { handleClanSlashCommand, clanPanelSlashCommand, clanslistSlashCommand } from "./commands";
 export { handleClanRulesMessage } from "./textHandler";
 export { startClanEnforcementScheduler, stopClanEnforcementScheduler } from "./enforcement";
+export { startClanThreadCleanupScheduler, stopClanThreadCleanupScheduler } from "./threadCleanup";
 
 export function initClanRolesModule(): void {
   setClanColorPresetsFromEnv(DISCORD_CLAN_COLOR_PRESETS_FROM_ENV);

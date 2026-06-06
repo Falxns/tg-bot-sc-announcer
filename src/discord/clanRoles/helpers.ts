@@ -1,11 +1,5 @@
 import { randomUUID } from "crypto";
-import type {
-  Guild,
-  GuildTextBasedChannel,
-  Message,
-  MessageCreateOptions,
-  ThreadChannel,
-} from "discord.js";
+import { ChannelType, type Guild, type GuildTextBasedChannel, type Message, type MessageCreateOptions, type ThreadChannel } from "discord.js";
 import { DISCORD_CLAN_RULES_MESSAGE_ID } from "../../config";
 import type { ClanTier } from "./constants";
 
@@ -83,6 +77,35 @@ export async function isClanRulesThread(guild: Guild, thread: ThreadChannel): Pr
   if (!ch?.isTextBased()) return false;
   const msg = await ch.messages.fetch(rulesMsgId).catch(() => null);
   return msg?.thread?.id === thread.id;
+}
+
+/** Locate the configured clan rules command thread (active or archived). */
+export async function resolveClanRulesThread(guild: Guild): Promise<ThreadChannel | null> {
+  if (!DISCORD_CLAN_RULES_MESSAGE_ID) return null;
+
+  const active = await guild.channels.fetchActiveThreads().catch(() => null);
+  if (active) {
+    for (const thread of active.threads.values()) {
+      if (await isClanRulesThread(guild, thread)) return thread;
+    }
+  }
+
+  for (const channel of guild.channels.cache.values()) {
+    if (
+      channel.type !== ChannelType.GuildText &&
+      channel.type !== ChannelType.GuildAnnouncement
+    ) {
+      continue;
+    }
+    const textChannel = channel as GuildTextBasedChannel;
+    const msg = await textChannel.messages.fetch(DISCORD_CLAN_RULES_MESSAGE_ID).catch(() => null);
+    const thread = msg?.thread;
+    if (thread && (await isClanRulesThread(guild, thread))) {
+      return thread;
+    }
+  }
+
+  return null;
 }
 
 export function formatUserList(guild: Guild, userIds: string[], leaderIds: Set<string>): string {

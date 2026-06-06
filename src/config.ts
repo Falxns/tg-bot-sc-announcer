@@ -574,6 +574,30 @@ export const DISCORD_CLAN_ENFORCEMENT_CHECK_MS = clampParseInt(
 
 export const DISCORD_CLAN_ENFORCEMENT_GRACE_MS = DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS * 24 * 60 * 60 * 1000;
 
+/** Prune inactive members from the clan rules thread when count ≥ threshold (default 750). 0 = disabled. */
+export const DISCORD_CLAN_THREAD_CLEANUP_THRESHOLD = clampParseInt(
+  process.env.DISCORD_CLAN_THREAD_CLEANUP_THRESHOLD ?? "750",
+  0,
+  1000,
+);
+
+/** Keep thread members who posted within this many days (default 3). */
+export const DISCORD_CLAN_THREAD_CLEANUP_ACTIVE_DAYS = clampParseInt(
+  process.env.DISCORD_CLAN_THREAD_CLEANUP_ACTIVE_DAYS ?? "3",
+  1,
+  30,
+);
+
+export const DISCORD_CLAN_THREAD_CLEANUP_ACTIVE_MS =
+  DISCORD_CLAN_THREAD_CLEANUP_ACTIVE_DAYS * 24 * 60 * 60 * 1000;
+
+/** How often to run clan rules thread member cleanup (default 24h). */
+export const DISCORD_CLAN_THREAD_CLEANUP_INTERVAL_MS = clampParseInt(
+  process.env.DISCORD_CLAN_THREAD_CLEANUP_INTERVAL_MS ?? String(24 * 60 * 60 * 1000),
+  60_000,
+  7 * 24 * 60 * 60 * 1000,
+);
+
 /** Leader-initiated clan color change cooldown per clan (default 7 days). Mods bypass. */
 export const DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS = clampParseInt(
   process.env.DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS ?? "7",

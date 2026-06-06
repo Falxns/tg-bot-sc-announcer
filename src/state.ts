@@ -91,6 +91,8 @@ export const clanRoleEnforcement = new Map<string, ClanRoleEnforcementState>();
 export const clanColorChangeCooldown = new Map<string, ClanColorChangeCooldownState>();
 /** Last clan enforcement sweep timestamp (ms). */
 export let clanEnforcementLastRunAtMs = 0;
+/** Last clan rules thread cleanup sweep timestamp (ms). */
+export let clanThreadCleanupLastRunAtMs = 0;
 
 /** Server-wide warn count: `${guildId}:${userId}`. */
 export const discordGlobalWarns = new Map<string, number>();
@@ -340,6 +342,10 @@ export function deleteClanRoleEnforcement(guildId: string, clanRoleId: string): 
 
 export function setClanEnforcementLastRunAtMs(ms: number): void {
   clanEnforcementLastRunAtMs = ms;
+}
+
+export function setClanThreadCleanupLastRunAtMs(ms: number): void {
+  clanThreadCleanupLastRunAtMs = ms;
 }
 
 export function clanColorChangeCooldownKey(guildId: string, clanRoleId: string): string {
@@ -694,6 +700,12 @@ export async function loadState(path: string): Promise<void> {
       if (typeof obj.clanEnforcementLastRunAtMs === "number" && Number.isFinite(obj.clanEnforcementLastRunAtMs)) {
         clanEnforcementLastRunAtMs = Math.max(0, Math.floor(obj.clanEnforcementLastRunAtMs));
       }
+      if (
+        typeof obj.clanThreadCleanupLastRunAtMs === "number" &&
+        Number.isFinite(obj.clanThreadCleanupLastRunAtMs)
+      ) {
+        clanThreadCleanupLastRunAtMs = Math.max(0, Math.floor(obj.clanThreadCleanupLastRunAtMs));
+      }
 
       const colorCooldownRaw = obj.clanColorChangeCooldown;
       if (colorCooldownRaw && typeof colorCooldownRaw === "object" && !Array.isArray(colorCooldownRaw)) {
@@ -753,6 +765,7 @@ export async function saveState(path: string): Promise<boolean> {
       clanRoleEnforcement: Object.fromEntries(clanRoleEnforcement),
       clanColorChangeCooldown: Object.fromEntries(clanColorChangeCooldown),
       clanEnforcementLastRunAtMs,
+      clanThreadCleanupLastRunAtMs,
     };
     await store.writeState(JSON.stringify(state, null, 2));
     return true;

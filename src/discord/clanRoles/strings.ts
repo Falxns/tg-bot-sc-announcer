@@ -176,6 +176,8 @@ export const clanTxt = {
     `[Клан] Авто-удаление: **${role}** — меньше минимального состава ${DISCORD_CLAN_ACTIVE_MIN_MEMBERS} после ${DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS} дн.`,
   auditEnforcementLeaderless: (role: string) =>
     `[Клан] Авто-удаление: **${role}** — нет лидеров ${DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS} дн.`,
+  auditThreadCleanup: (threadId: string, before: number, after: number, removed: number) =>
+    `[Клан] Очистка ветки <#${threadId}>: снято **${removed}** неактивных участников (было **${before}**, стало **${after}**).`,
   auditColorChangeLeader: (actor: string, role: string, color: string) =>
     `[Клан] ${actor} сменил цвет **${role}** → ${color}`,
   auditColorChangeMod: (actor: string, role: string, color: string) =>

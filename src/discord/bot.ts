@@ -28,7 +28,9 @@ import {
   initClanRolesModule,
   isClanRolesInteractionCustomId,
   startClanEnforcementScheduler,
+  startClanThreadCleanupScheduler,
   stopClanEnforcementScheduler,
+  stopClanThreadCleanupScheduler,
 } from "./clanRoles";
 import {
   handleStaffSummaryCreatorMessage,
@@ -69,6 +71,7 @@ export async function startDiscordBot(): Promise<void> {
         await sweepTempVoiceOnReady(guild);
         if (clanRolesConfigured()) {
           startClanEnforcementScheduler(guild);
+          startClanThreadCleanupScheduler(guild);
         }
         if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
           console.log(`Discord bot ready as ${client.user?.tag ?? "unknown"} in guild ${guild.id}.`);
@@ -204,6 +207,7 @@ export async function stopDiscordBot(): Promise<void> {
 
   if (!discordClient) return;
   stopClanEnforcementScheduler();
+  stopClanThreadCleanupScheduler();
   discordClient.destroy();
   discordClient = null;
 }
