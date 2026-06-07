@@ -10,6 +10,7 @@ export type ModerationRulePreset = {
 };
 
 export const MODERATION_RULE_PRESETS: readonly ModerationRulePreset[] = [
+  { id: "rule_russian_language", point: "1.9", choiceLabel: "п. 1.9 — Русский язык на сервере", shortTitle: "Русский язык на сервере", body: "На сервере разрешён только русский язык для общения." },
   { id: "rule_spam", point: "2.1", choiceLabel: "п. 2.1 — Спам", shortTitle: "Спам", body: "Спам и однотипные сообщения." },
   { id: "rule_media_flood", point: "2.2", choiceLabel: "п. 2.2 — Спам медиа", shortTitle: "Спам медиа", body: "Несколько медиа подряд без необходимости." },
   { id: "rule_offtopic", point: "2.3", choiceLabel: "п. 2.3 — Оффтоп", shortTitle: "Оффтоп", body: "Сообщения вне темы канала." },
