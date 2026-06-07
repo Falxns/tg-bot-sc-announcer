@@ -12,6 +12,7 @@ Telegram + Discord bot service that polls the [Exbo forum](https://forum.exbo.ru
   - admin slash commands `/post` and `/edit` (post or edit bot messages in a target channel)
   - role assignment message buttons via `/rolepanel`
   - channel-aware moderation (light/major severity, **server-wide strikes**, unified timeout ladder, decay, DM + channel fallback, optional log + staff-summary channels, staff `/mute` `/unmute` `/strike` `/unstrike` `/ban` `/unban` `/modstatus`, optional external-link domain blacklist)
+  - optional **clan role automation**: plain-text commands in the rules thread (`+клан` / `-клан` / `!создать` / `!состав`), leader-approved grants, mod review for new clans (`/clanpanel`, `/clanslist`)
 - Optional HTTP health-check server (e.g. for PaaS readiness probes)
 
 ## Stack
@@ -86,7 +87,7 @@ Edit `.env`:
 | `DISCORD_SPAM_FILTER_CHANNEL_IDS` | No | Comma-separated channel/thread IDs where **consecutive near-duplicate text** from the **same user** (vs previous message in channel via API) counts as **minor** spam: strict normalized equality, or same **letter/digit skeleton** with similar length, or (for long text only) high **Levenshtein similarity**; empty disables. Bot needs **Read Message History** there. |
 | `DISCORD_SPAM_FILTER_CHANNEL_OPTIONS_JSON` | No | Per-channel overrides, e.g. `{"channelId":{"crossAuthor":true,"cooldownMs":21600000}}` — **any author**, same duplicate matcher, one similar post per scope within the cooldown (threads share parent scope). Fingerprints are stored in memory and **saved only when `saveState` already runs** (shutdown, mod actions, Exbo updates, etc.), not on every message. |
 | `DISCORD_SPAM_FILTER_MAX_FINGERPRINTS_PER_SCOPE` | No | Max stored fingerprints per scope after TTL prune (default **200**) |
-| `DISCORD_WARNING_MESSAGE_TTL_MS` | No | Auto-delete delay for ephemeral-style channel notices (default: 12000) |
+| `DISCORD_WARNING_MESSAGE_TTL_MS` | No | Auto-delete delay for ephemeral-style channel notices (default: 30000) |
 | `DISCORD_CHANNEL_POLICIES_JSON` | No | Per-channel policies: `blockInviteLinks`, `allowDiscordInvites`, `inviteViolationSeverity`, `blockVideos` / `blockImages` / `blockText`, `mediaViolationSeverity`, `blockedKeywords`, `keywordViolationSeverity`, `allowInviteRoleIds`, `channelPresetId` (channel-purpose text for automod media/text hits), `rulePresetId` (optional server rule line in automod DMs for that channel) |
 | `DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS_JSON` | No | JSON map **channel preset id → channel snowflake** (e.g. `"vidos":"123…"`) for clickable `#channel` links in channel preset text |
 | `DISCORD_VOICE_ENABLED` | No | `1` enables join-to-create temp voice; default off |
@@ -98,10 +99,31 @@ Edit `.env`:
 | `DISCORD_VOICE_EMPTY_DELETE_MS` | No | Delay before deleting empty rooms (default **60000**) |
 | `DISCORD_VOICE_MAX_CHANNELS_PER_USER` | No | Max owned rooms per user (default **1**) |
 | `DISCORD_VOICE_INVITE_MAX_AGE_SEC` | No | Invite link TTL from panel (default **86400** = 24 h) |
+| `DISCORD_CLAN_ENABLED` | No | `1` enables clan role commands + mod review; default off |
+| `DISCORD_CLAN_LEADER_ROLE_ID` | Yes* | Snowflake of the shared **«Лидер клана»** meta-role (one role for all clans) |
+| `DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID` | No | Anchor role snowflake — each new clan role is placed **above** this role in the hierarchy (bot’s top role must still be higher) |
+| `DISCORD_CLAN_CHAT_CHANNEL_ID` | No | Clan chat channel (e.g. #чат-кланов) — on create, role gets a channel overwrite with **Send Messages** allowed; bot needs **Manage Roles** («Управление правами») and its top role above the new clan role |
+| `DISCORD_CLAN_RULES_MESSAGE_ID` | No | Parent rules post snowflake; only the **thread under this post** accepts plain-text clan commands; grant pending messages are posted in that same thread |
+| `DISCORD_CLAN_ROLE_EXCLUDE_IDS` | No | Extra role IDs excluded from clan role discovery; always also excludes `DISCORD_MODERATOR_ROLE_IDS`, `DISCORD_ADMIN_ROLE_IDS`, and `DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS` |
+| `DISCORD_CLAN_ROLE_NAME_PATTERN` | No | Optional regex (case-insensitive) to filter which guild roles count as clans |
+| `DISCORD_CLAN_ROSTER_MIN` | No | Min roster size for `!создать` (default **15**) |
+| `DISCORD_CLAN_ROSTER_MAX` | No | Max roster size for `!создать` (default **35**) |
+| `DISCORD_CLAN_MAX_ROLES_PER_MEMBER` | No | Max clan roles one member may hold (default **1**; **0** = unlimited). Shared leader meta-role does not count |
+| `DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID` | Yes* | Staff channel for new-clan **Принять / Отклонить** review messages |
+| `DISCORD_CLAN_STAFF_LOG_CHANNEL_ID` | No | Optional one-line audit for clan actions; falls back to **`DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID`** |
+| `DISCORD_CLAN_ACTIVE_MIN_MEMBERS` | No | Min members with a clan role; below this leaders get a DM warning, then auto-purge after grace (default **10**) |
+| `DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS` | No | Days to restore roster or appoint leaders before the bot deletes the clan role (default **3**) |
+| `DISCORD_CLAN_ENFORCEMENT_CHECK_MS` | No | How often to run enforcement checks (default **86400000** = 24h) |
+| `DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS` | No | Leader `!цвет` cooldown per clan in days (default **7**; admins bypass) |
+| `DISCORD_CLAN_COLOR_PRESETS_JSON` | No | JSON array override for `!создать` color labels, e.g. `[{"id":"red","label":"Красный","hex":15158332}]`; default built-in Russian presets |
+| `DISCORD_CLAN_AD_FORMAT_CHANNELS_JSON` | No | Channel snowflake → format id map: `nabor_klany` (#набор-в-кланы, 1–3 forms per message) or `poisk_klanov` (#поиск-кланов, exactly 1 form). Invalid posts: delete + light strike + DM with all errors |
+| `DISCORD_CLAN_AD_FORMAT_PIN_URLS_JSON` | No | Optional pinned-template URLs per format id (shown in validation notice) |
+| `LOG_LEVEL` | No | `info` (default), `debug`, or `warn` |
 | `PORT` | No | If set, starts an HTTP server on this port that responds `ok` (for health checks) |
 
+\* Required when `DISCORD_CLAN_ENABLED=1`.
+
 \* Required when `DISCORD_VOICE_ENABLED=1`. Setup: [docs/DISCORD_VOICE_SETUP.md](docs/DISCORD_VOICE_SETUP.md) (category, hub, panel, bot permissions, **Guild Voice States** intent).
-| `LOG_LEVEL` | No | `info` (default), `debug`, or `warn` |
 
 See `.env.example` for more optional variables.
 
@@ -137,6 +159,8 @@ Author list and “last seen” state are saved to the state file and restored o
 - `/editrolepanel channel:<channel> message_id:<snowflake> [role1…role6] [label1…label6] [single_role] [embed_*] [image]` — edit an existing **role panel** message; **per-slot merge**: set only **`roleN`** / **`labelN`** for the button you want to change (others stay); omit all role/label options to keep buttons; modal edits body text (max **2000** chars). Same **`embed_*`** and **`image`** as `/edit` except no **`embed_footer_icon_url`** / **`embed_author_icon_url`** (Discord 25-option cap with six role slots)
 - `/editlinkpanel channel:<channel> message_id:<snowflake> [url1…url5] [label1…label5] [embed_*] [image]` — edit an existing **link button** message; **per-slot merge**: set only **`urlN`** / **`labelN`** for the slot to change; full **`embed_*`** and **`image`** like `/edit`
 - `/voicepanel [channel]` — publish the **temporary voice** control panel (requires `DISCORD_VOICE_ENABLED=1`; see [docs/DISCORD_VOICE_SETUP.md](docs/DISCORD_VOICE_SETUP.md))
+- `/clanpanel [channel]` — publish **clan role command help** embed in the rules channel; requires `DISCORD_CLAN_ENABLED=1` and **`DISCORD_CLAN_LEADER_ROLE_ID`**
+- `/clanslist` — admin-only (`DISCORD_ADMIN_ROLE_IDS`) list of clan roles with live leader/member counts (requires clan roles enabled)
 - `/mute user:<user> duration:<choice> [channel_preset] [rule_preset] [reason] [screenshot] [message_id]` — manual timeout at the chosen duration (not `DISCORD_TIMEOUT_LADDER_MS[tier]`); caps server-wide strikes at **`DISCORD_WARNINGS_BEFORE_TIMEOUT`** and advances the unified ladder tier on success; **`duration`**: 1h, 6h, 12h, 1d, 3d, 7d, 14d, 28d; **`channel_preset`** / **`rule_preset`** autocomplete (empty `channel_preset` → auto channel text from policy); **`reason`** overrides both; optional **`screenshot`** and **`message_id`**
 - `/unmute user:<user>` — clears Discord timeout
 - `/strike user:<user> [amount] [channel_preset] [rule_preset] [reason] [screenshot] [message_id]` — same light path as automod: +**global** strike(s); warn-only below **`DISCORD_WARNINGS_BEFORE_TIMEOUT`**, else timeout at **`DISCORD_TIMEOUT_LADDER_MS`** current tier; DM title **«Предупреждение»** or **«Наказание»** when timed out; user DM may show **«Нарушение в канале»** and **«Правило сервера (п. X)»** separately
@@ -155,7 +179,63 @@ Author list and “last seen” state are saved to the state file and restored o
 
 **Message review (`DISCORD_MESSAGE_REVIEW_CHANNEL_ID` + `DISCORD_MESSAGE_REVIEW_SOURCE_CHANNEL_IDS`):** bot caches posts with media or links in RAM (~1 h). If the author **deletes their own message**, a copy is posted to the review channel for moderator follow-up (`/strike`, `/mute`). Automod-deleted messages are not posted here. Cache is cleared on bot restart.
 
-Role-panel definitions and moderation state (**`discordGlobalWarns`**, **`discordMuteTier`**, **`discordModerationLastViolationAt`**, creator-summary cooldown timestamps) are saved in shared bot state (`file` or Upstash) and restored on restart. Old per-channel warning / dual-tier keys are **not** loaded after deploy (one-time reset).
+Role-panel definitions, moderation state (**`discordGlobalWarns`**, **`discordMuteTier`**, **`discordModerationLastViolationAt`**, creator-summary cooldown timestamps), temp voice rooms, and **clan role state** (help message IDs, pending grant/create requests) are saved in shared bot state (`file` or Upstash) and restored on restart. Old per-channel warning / dual-tier keys are **not** loaded after deploy (one-time reset).
+
+### Clan roles (`DISCORD_CLAN_ENABLED=1`)
+
+Leader-approved clan workflows (separate from self-serve **`/rolepanel`** toggles):
+
+1. Run **`/clanpanel`** in the rules channel (or pass **`channel`**). Set **`DISCORD_CLAN_RULES_MESSAGE_ID`** to the parent rules post so requests land in its thread.
+2. In the **rules thread**, users post plain-text commands:
+   - **`+клан Название`** — request a clan role for yourself (pending; leaders/admins click **Одобрить / Отклонить** on the bot message)
+   - **`+клан @участник`** — leader of one clan grants to a teammate; **`+клан Название @участник`** — explicit clan (leader/admin)
+   - **`-клан`** — remove your role if you have exactly one clan role; **`-клан @участник`** — leader/admin shortcuts per rules; **`-клан Название @участник`** — explicit remove (immediate)
+   - **`!состав`** — DM roster of clan members (👑 = leaders). **Leaders:** own clan only (`!состав` or `!состав Название`). **Admins:** any clan via `!состав Название`
+   - **`!цвет`** — change clan role color (preset label or `#RRGGBB`). **Leaders:** own clan, **once per week per clan**. **Admins:** any clan, no cooldown
+   - **`!создать`** block — line 2: clan name, line 3: color preset label (e.g. `Красный`), then `@mention` roster with 👑 for leaders (**`DISCORD_CLAN_ROSTER_MIN`–`DISCORD_CLAN_ROSTER_MAX`**) → admin review in **`DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID`** (**Принять / Отклонить**). D-rank is checked **manually** by admins.
+3. Bot replies to commands in the thread and **auto-deletes** after **`DISCORD_WARNING_MESSAGE_TTL_MS`**. Other messages in the rules thread are **deleted** and count as a **strike** (same ladder as automod).
+3. Grant approval embed shows who resolved the request (**лидер клана** or **модератор**) with a working `@mention` in the message body.
+
+**Leader model:** one shared **«Лидер клана»** role; max **2** leaders per clan (live count). Removing a member’s last clan role also strips the leader meta-role if they no longer lead any clan.
+
+**Clan staff:** approvals, `!создать` review, overrides, and `/clanslist` require **`DISCORD_ADMIN_ROLE_IDS`** only — **`DISCORD_MODERATOR_ROLE_IDS`** do not grant clan privileges (moderators use clan commands as regular users/leaders).
+
+**Auto-enforcement (daily check):** if a clan role has fewer than **`DISCORD_CLAN_ACTIVE_MIN_MEMBERS`** (default **10**) members, leaders get a **DM** reminder each day to recruit via `+клан`. If still understaffed after **`DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS`** (default **3**), the bot strips leader meta-roles and **deletes** the clan role. If a clan has **no leaders** for the same grace period, the role is deleted (no leader DMs). Grace timers reset when the roster or leadership is restored. Audit lines go to **`DISCORD_CLAN_STAFF_LOG_CHANNEL_ID`**.
+
+**Recruitment ad format (`DISCORD_CLAN_AD_FORMAT_CHANNELS_JSON`):** when set, posts in mapped channels are checked against the pinned numbered template. Staff bypass. Invalid posts are **deleted**, count as a **light strike** (same warn ladder as automod), and the user gets one notice listing **all** validation errors.
+
+- **`nabor_klany`** (#набор-в-кланы): **1–3** consecutive forms per message, each numbered **1–11** with the same field rules (clan name via `!создать` rules, fraction on field 2, fields 3–6 and 8–11 required, field 7 optional, enums on 9–10).
+- **`poisk_klanov`** (#поиск-кланов): **exactly one** form numbered **1–10**; fields 1, 5, 6, 10 required; 2–4, 7, 9 optional; field **8** must be present and the message must include **≥1 attachment** (screenshot).
+
+Example valid **`nabor_klany`** (one form):
+
+```text
+1) Мой Клан
+2) Заря
+3) Описание клана
+4) Требования
+5) K/D 1.5
+6) Время игры
+7) Discord сервер (необяз.)
+8) Контакт @user
+9) Да
+10) Нет
+11) Комментарий
+```
+
+Two or three forms: repeat blocks **1–11** back-to-back (each block starts again at `1)`). Fraction spellings are flexible (`наемники` / `наёмники`, any case).
+
+Example valid **`poisk_klanov`** (attach a screenshot file to the message):
+
+```text
+1) Ник игрока
+5) K/D 1.2
+6) Время 18–22 МСК
+8) Скриншот ниже
+10) Рубеж
+```
+
+**Bot needs:** **Manage Roles** (role position above clan roles), **Message Content** intent (command parsing and roster `@mention` in the rules thread).
 
 ### Discord AutoMod (recommended)
 

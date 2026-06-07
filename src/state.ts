@@ -4,7 +4,17 @@ import {
   pruneSpamFilterFingerprintsForSave,
   serializeSpamFilterFingerprintsForState,
 } from "./discord/spamFilterCache";
-import type { DiscordRolePanelState, TempVoicePanelState, TempVoiceRoomState } from "./discord/types";
+import type {
+  ClanCreateRequest,
+  ClanGrantRequest,
+  ClanLeaderMetaRequest,
+  ClanColorChangeCooldownState,
+  ClanRoleEnforcementState,
+  ClanRulesPanelState,
+  DiscordRolePanelState,
+  TempVoicePanelState,
+  TempVoiceRoomState,
+} from "./discord/types";
 import { createStateStore } from "./stateStore";
 
 export const DEFAULT_EXBO_AUTHORS = [
@@ -66,6 +76,23 @@ export const discordRolePanels = new Map<string, DiscordRolePanelState>();
 export const tempVoiceRooms = new Map<string, TempVoiceRoomState>();
 /** Temp voice control panel message (optional, for rehydrate). */
 export const tempVoicePanel = new Map<string, TempVoicePanelState>();
+
+/** Clan help message + rules thread config keyed by bot message id. */
+export const clanRulesPanels = new Map<string, ClanRulesPanelState>();
+/** Pending grant requests keyed by request id. */
+export const clanGrantRequests = new Map<string, ClanGrantRequest>();
+/** Pending mod-reviewed create requests keyed by request id. */
+export const clanCreateRequests = new Map<string, ClanCreateRequest>();
+/** Pending leader-meta grant requests keyed by request id. */
+export const clanLeaderMetaRequests = new Map<string, ClanLeaderMetaRequest>();
+/** Understaffed / leaderless grace tracking keyed by `${guildId}:${clanRoleId}`. */
+export const clanRoleEnforcement = new Map<string, ClanRoleEnforcementState>();
+/** Leader color-change cooldown keyed by `${guildId}:${clanRoleId}`. */
+export const clanColorChangeCooldown = new Map<string, ClanColorChangeCooldownState>();
+/** Last clan enforcement sweep timestamp (ms). */
+export let clanEnforcementLastRunAtMs = 0;
+/** Last clan rules thread cleanup sweep timestamp (ms). */
+export let clanThreadCleanupLastRunAtMs = 0;
 
 /** Server-wide warn count: `${guildId}:${userId}`. */
 export const discordGlobalWarns = new Map<string, number>();
@@ -257,6 +284,119 @@ export function getTempVoicePanel(messageId: string): TempVoicePanelState | unde
   return tempVoicePanel.get(messageId);
 }
 
+export function setClanRulesPanel(panel: ClanRulesPanelState): void {
+  clanRulesPanels.set(panel.messageId, panel);
+}
+
+export function getClanRulesPanel(messageId: string): ClanRulesPanelState | undefined {
+  return clanRulesPanels.get(messageId);
+}
+
+export function setClanGrantRequest(req: ClanGrantRequest): void {
+  clanGrantRequests.set(req.id, req);
+}
+
+export function getClanGrantRequest(id: string): ClanGrantRequest | undefined {
+  return clanGrantRequests.get(id);
+}
+
+export function deleteClanGrantRequest(id: string): void {
+  clanGrantRequests.delete(id);
+}
+
+export function setClanCreateRequest(req: ClanCreateRequest): void {
+  clanCreateRequests.set(req.id, req);
+}
+
+export function getClanCreateRequest(id: string): ClanCreateRequest | undefined {
+  return clanCreateRequests.get(id);
+}
+
+export function setClanLeaderMetaRequest(req: ClanLeaderMetaRequest): void {
+  clanLeaderMetaRequests.set(req.id, req);
+}
+
+export function getClanLeaderMetaRequest(id: string): ClanLeaderMetaRequest | undefined {
+  return clanLeaderMetaRequests.get(id);
+}
+
+export function deleteClanLeaderMetaRequest(id: string): void {
+  clanLeaderMetaRequests.delete(id);
+}
+
+export function clanRoleEnforcementKey(guildId: string, clanRoleId: string): string {
+  return `${guildId}:${clanRoleId}`;
+}
+
+export function getClanRoleEnforcement(guildId: string, clanRoleId: string): ClanRoleEnforcementState | undefined {
+  return clanRoleEnforcement.get(clanRoleEnforcementKey(guildId, clanRoleId));
+}
+
+export function setClanRoleEnforcement(state: ClanRoleEnforcementState): void {
+  clanRoleEnforcement.set(clanRoleEnforcementKey(state.guildId, state.clanRoleId), state);
+}
+
+export function deleteClanRoleEnforcement(guildId: string, clanRoleId: string): void {
+  clanRoleEnforcement.delete(clanRoleEnforcementKey(guildId, clanRoleId));
+}
+
+export function setClanEnforcementLastRunAtMs(ms: number): void {
+  clanEnforcementLastRunAtMs = ms;
+}
+
+export function setClanThreadCleanupLastRunAtMs(ms: number): void {
+  clanThreadCleanupLastRunAtMs = ms;
+}
+
+export function clanColorChangeCooldownKey(guildId: string, clanRoleId: string): string {
+  return `${guildId}:${clanRoleId}`;
+}
+
+export function getClanColorChangeCooldown(
+  guildId: string,
+  clanRoleId: string,
+): ClanColorChangeCooldownState | undefined {
+  return clanColorChangeCooldown.get(clanColorChangeCooldownKey(guildId, clanRoleId));
+}
+
+export function setClanColorChangeCooldown(state: ClanColorChangeCooldownState): void {
+  clanColorChangeCooldown.set(clanColorChangeCooldownKey(state.guildId, state.clanRoleId), state);
+}
+
+export function deleteClanColorChangeCooldown(guildId: string, clanRoleId: string): void {
+  clanColorChangeCooldown.delete(clanColorChangeCooldownKey(guildId, clanRoleId));
+}
+
+/** Drop stale clan timers/cooldowns for deleted roles or expired windows. */
+export function pruneClanMaintenanceState(
+  guildId: string,
+  activeRoleIds: Set<string>,
+  nowMs: number,
+  colorCooldownMs: number,
+): void {
+  for (const [key, record] of clanRoleEnforcement) {
+    if (record.guildId !== guildId) continue;
+    if (!activeRoleIds.has(record.clanRoleId)) {
+      clanRoleEnforcement.delete(key);
+      continue;
+    }
+    if (record.understaffedSinceMs === undefined && record.leaderlessSinceMs === undefined) {
+      clanRoleEnforcement.delete(key);
+    }
+  }
+
+  for (const [key, record] of clanColorChangeCooldown) {
+    if (record.guildId !== guildId) continue;
+    if (!activeRoleIds.has(record.clanRoleId)) {
+      clanColorChangeCooldown.delete(key);
+      continue;
+    }
+    if (nowMs - record.changedAtMs >= colorCooldownMs) {
+      clanColorChangeCooldown.delete(key);
+    }
+  }
+}
+
 function parseNumberMap(raw: unknown): Map<string, number> {
   const out = new Map<string, number>();
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
@@ -396,13 +536,200 @@ export async function loadState(path: string): Promise<void> {
           tempVoicePanel.set(messageId, { guildId, channelId, messageId });
         }
       }
+
+      const clanPanelsRaw = obj.clanRulesPanels;
+      if (clanPanelsRaw && typeof clanPanelsRaw === "object" && !Array.isArray(clanPanelsRaw)) {
+        for (const [messageId, value] of Object.entries(clanPanelsRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const channelId = typeof row.channelId === "string" ? row.channelId : "";
+          if (!guildId || !channelId) continue;
+          clanRulesPanels.set(messageId, {
+            messageId,
+            guildId,
+            channelId,
+            rulesParentMessageId:
+              typeof row.rulesParentMessageId === "string" ? row.rulesParentMessageId : undefined,
+          });
+        }
+      }
+
+      const grantReqRaw = obj.clanGrantRequests;
+      if (grantReqRaw && typeof grantReqRaw === "object" && !Array.isArray(grantReqRaw)) {
+        for (const [id, value] of Object.entries(grantReqRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          if (row.status !== "pending" && row.status !== "approved" && row.status !== "denied") continue;
+          const type = row.type === "grant" || row.type === "remove" ? row.type : null;
+          if (!type) continue;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const channelId = typeof row.channelId === "string" ? row.channelId : "";
+          const clanRoleId = typeof row.clanRoleId === "string" ? row.clanRoleId : "";
+          const clanRoleName = typeof row.clanRoleName === "string" ? row.clanRoleName : "";
+          const targetUserId = typeof row.targetUserId === "string" ? row.targetUserId : "";
+          const requesterUserId = typeof row.requesterUserId === "string" ? row.requesterUserId : "";
+          if (!guildId || !clanRoleId || !targetUserId || !channelId || !requesterUserId) continue;
+          clanGrantRequests.set(id, {
+            id,
+            guildId,
+            channelId,
+            threadId: typeof row.threadId === "string" ? row.threadId : undefined,
+            clanRoleId,
+            clanRoleName,
+            targetUserId,
+            requesterUserId,
+            type,
+            grantLeaderMeta: row.grantLeaderMeta === true,
+            status: row.status,
+            pendingMessageId: typeof row.pendingMessageId === "string" ? row.pendingMessageId : undefined,
+            sourceMessageId: typeof row.sourceMessageId === "string" ? row.sourceMessageId : undefined,
+            createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
+          });
+        }
+      }
+
+      const createReqRaw = obj.clanCreateRequests;
+      if (createReqRaw && typeof createReqRaw === "object" && !Array.isArray(createReqRaw)) {
+        for (const [id, value] of Object.entries(createReqRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          if (row.status !== "pending" && row.status !== "approved" && row.status !== "denied") continue;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const applicantId = typeof row.applicantId === "string" ? row.applicantId : "";
+          const threadId = typeof row.threadId === "string" ? row.threadId : "";
+          const clanName = typeof row.clanName === "string" ? row.clanName : "";
+          const colorLabel = typeof row.colorLabel === "string" ? row.colorLabel : "";
+          if (!guildId || !clanName) continue;
+          clanCreateRequests.set(id, {
+            id,
+            guildId,
+            applicantId,
+            threadId,
+            sourceMessageId: typeof row.sourceMessageId === "string" ? row.sourceMessageId : undefined,
+            clanName,
+            clanTier: typeof row.clanTier === "string" ? row.clanTier : undefined,
+            colorHex: typeof row.colorHex === "number" ? row.colorHex : 0,
+            colorLabel,
+            memberIds: Array.isArray(row.memberIds)
+              ? row.memberIds.filter((x): x is string => typeof x === "string")
+              : [],
+            leaderIds: Array.isArray(row.leaderIds)
+              ? row.leaderIds.filter((x): x is string => typeof x === "string")
+              : [],
+            status: row.status,
+            reviewMessageId: typeof row.reviewMessageId === "string" ? row.reviewMessageId : undefined,
+            reviewChannelId: typeof row.reviewChannelId === "string" ? row.reviewChannelId : undefined,
+            threadPendingMessageId:
+              typeof row.threadPendingMessageId === "string" ? row.threadPendingMessageId : undefined,
+            createdRoleId: typeof row.createdRoleId === "string" ? row.createdRoleId : undefined,
+            createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
+            resolvedAt: typeof row.resolvedAt === "number" ? row.resolvedAt : undefined,
+            resolvedBy: typeof row.resolvedBy === "string" ? row.resolvedBy : undefined,
+            denyReason: typeof row.denyReason === "string" ? row.denyReason : undefined,
+          });
+        }
+      }
+
+      const leaderMetaReqRaw = obj.clanLeaderMetaRequests;
+      if (leaderMetaReqRaw && typeof leaderMetaReqRaw === "object" && !Array.isArray(leaderMetaReqRaw)) {
+        for (const [id, value] of Object.entries(leaderMetaReqRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          const status = row.status;
+          if (
+            status !== "pending_clan_leader" &&
+            status !== "pending_mod" &&
+            status !== "approved" &&
+            status !== "denied"
+          ) {
+            continue;
+          }
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const clanRoleId = typeof row.clanRoleId === "string" ? row.clanRoleId : "";
+          const clanRoleName = typeof row.clanRoleName === "string" ? row.clanRoleName : "";
+          const targetUserId = typeof row.targetUserId === "string" ? row.targetUserId : "";
+          const requesterUserId = typeof row.requesterUserId === "string" ? row.requesterUserId : "";
+          const threadId = typeof row.threadId === "string" ? row.threadId : "";
+          const channelId = typeof row.channelId === "string" ? row.channelId : "";
+          if (!guildId || !clanRoleId || !targetUserId || !threadId) continue;
+          clanLeaderMetaRequests.set(id, {
+            id,
+            guildId,
+            clanRoleId,
+            clanRoleName,
+            targetUserId,
+            requesterUserId,
+            status,
+            threadId,
+            channelId,
+            pendingMessageId: typeof row.pendingMessageId === "string" ? row.pendingMessageId : undefined,
+            sourceMessageId: typeof row.sourceMessageId === "string" ? row.sourceMessageId : undefined,
+            clanLeaderApprovedBy: typeof row.clanLeaderApprovedBy === "string" ? row.clanLeaderApprovedBy : undefined,
+            reviewMessageId: typeof row.reviewMessageId === "string" ? row.reviewMessageId : undefined,
+            reviewChannelId: typeof row.reviewChannelId === "string" ? row.reviewChannelId : undefined,
+            denyReason: typeof row.denyReason === "string" ? row.denyReason : undefined,
+            createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
+            resolvedAt: typeof row.resolvedAt === "number" ? row.resolvedAt : undefined,
+            resolvedBy: typeof row.resolvedBy === "string" ? row.resolvedBy : undefined,
+          });
+        }
+      }
+
+      const enforcementRaw = obj.clanRoleEnforcement;
+      if (enforcementRaw && typeof enforcementRaw === "object" && !Array.isArray(enforcementRaw)) {
+        for (const [key, value] of Object.entries(enforcementRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const clanRoleId = typeof row.clanRoleId === "string" ? row.clanRoleId : "";
+          const clanRoleName = typeof row.clanRoleName === "string" ? row.clanRoleName : "";
+          if (!guildId || !clanRoleId) continue;
+          clanRoleEnforcement.set(key, {
+            guildId,
+            clanRoleId,
+            clanRoleName,
+            understaffedSinceMs:
+              typeof row.understaffedSinceMs === "number" ? row.understaffedSinceMs : undefined,
+            leaderlessSinceMs:
+              typeof row.leaderlessSinceMs === "number" ? row.leaderlessSinceMs : undefined,
+          });
+        }
+      }
+
+      if (typeof obj.clanEnforcementLastRunAtMs === "number" && Number.isFinite(obj.clanEnforcementLastRunAtMs)) {
+        clanEnforcementLastRunAtMs = Math.max(0, Math.floor(obj.clanEnforcementLastRunAtMs));
+      }
+      if (
+        typeof obj.clanThreadCleanupLastRunAtMs === "number" &&
+        Number.isFinite(obj.clanThreadCleanupLastRunAtMs)
+      ) {
+        clanThreadCleanupLastRunAtMs = Math.max(0, Math.floor(obj.clanThreadCleanupLastRunAtMs));
+      }
+
+      const colorCooldownRaw = obj.clanColorChangeCooldown;
+      if (colorCooldownRaw && typeof colorCooldownRaw === "object" && !Array.isArray(colorCooldownRaw)) {
+        for (const [key, value] of Object.entries(colorCooldownRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const clanRoleId = typeof row.clanRoleId === "string" ? row.clanRoleId : "";
+          const changedAtMs = typeof row.changedAtMs === "number" ? row.changedAtMs : NaN;
+          if (!guildId || !clanRoleId || !Number.isFinite(changedAtMs)) continue;
+          clanColorChangeCooldown.set(key, { guildId, clanRoleId, changedAtMs });
+        }
+      }
     }
     if (LOG_LEVEL === "info" || LOG_LEVEL === "debug" || LOG_LEVEL === "warn") {
       console.log(
         `State loaded (${STATE_BACKEND}): ${exboAuthors.length} authors, ` +
           `${lastSeenByAuthor.size} lastSeen, ${discordRolePanels.size} role panels, ` +
           `${discordGlobalWarns.size} global warns, ${discordMuteTier.size} mute tiers, ` +
-          `${tempVoiceRooms.size} temp voice rooms.`,
+          `${tempVoiceRooms.size} temp voice rooms, ${clanRulesPanels.size} clan help posts, ` +
+          `${clanGrantRequests.size} clan grant requests, ` +
+          `${clanLeaderMetaRequests.size} clan leader-meta requests, ` +
+          `${clanRoleEnforcement.size} clan enforcement records, ` +
+          `${clanColorChangeCooldown.size} clan color cooldowns.`,
       );
     }
   } catch (err) {
@@ -431,6 +758,14 @@ export async function saveState(path: string): Promise<boolean> {
       discordSpamFilterFingerprints: serializeSpamFilterFingerprintsForState(),
       tempVoiceRooms: Object.fromEntries(tempVoiceRooms),
       tempVoicePanel: Object.fromEntries(tempVoicePanel),
+      clanRulesPanels: Object.fromEntries(clanRulesPanels),
+      clanGrantRequests: Object.fromEntries(clanGrantRequests),
+      clanCreateRequests: Object.fromEntries(clanCreateRequests),
+      clanLeaderMetaRequests: Object.fromEntries(clanLeaderMetaRequests),
+      clanRoleEnforcement: Object.fromEntries(clanRoleEnforcement),
+      clanColorChangeCooldown: Object.fromEntries(clanColorChangeCooldown),
+      clanEnforcementLastRunAtMs,
+      clanThreadCleanupLastRunAtMs,
     };
     await store.writeState(JSON.stringify(state, null, 2));
     return true;

@@ -72,7 +72,7 @@ export const DISCORD_WARNINGS_BEFORE_TIMEOUT = clampParseInt(
   20,
 );
 export const DISCORD_WARNING_MESSAGE_TTL_MS = clampParseInt(
-  process.env.DISCORD_WARNING_MESSAGE_TTL_MS ?? "12000",
+  process.env.DISCORD_WARNING_MESSAGE_TTL_MS ?? "30000",
   1000,
   600_000,
 );
@@ -307,13 +307,13 @@ export const DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST = parseDomainBlacklist(
   process.env.DISCORD_EXTERNAL_LINK_DOMAIN_BLACKLIST ?? "",
 );
 
-/** Channel/thread IDs where duplicate-message (same author, consecutive) spam filter runs. Empty = disabled. */
-export const DISCORD_SPAM_FILTER_CHANNEL_IDS: ReadonlySet<string> = new Set(
-  (process.env.DISCORD_SPAM_FILTER_CHANNEL_IDS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean),
-);
+/** Channel/thread IDs from env (same-author consecutive mode when no OPTIONS entry). */
+const DISCORD_SPAM_FILTER_CHANNEL_IDS_FROM_ENV: readonly string[] = (
+  process.env.DISCORD_SPAM_FILTER_CHANNEL_IDS ?? ""
+)
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 export type SpamFilterChannelOptions = {
   crossAuthor?: boolean;
@@ -356,6 +356,15 @@ function parseSpamFilterChannelOptions(raw: string): Record<string, SpamFilterCh
 export const DISCORD_SPAM_FILTER_CHANNEL_OPTIONS = parseSpamFilterChannelOptions(
   process.env.DISCORD_SPAM_FILTER_CHANNEL_OPTIONS_JSON ?? "",
 );
+
+/**
+ * Channels where duplicate-message spam filter runs.
+ * Union of `DISCORD_SPAM_FILTER_CHANNEL_IDS` and every key in `DISCORD_SPAM_FILTER_CHANNEL_OPTIONS_JSON`.
+ */
+export const DISCORD_SPAM_FILTER_CHANNEL_IDS: ReadonlySet<string> = new Set([
+  ...DISCORD_SPAM_FILTER_CHANNEL_IDS_FROM_ENV,
+  ...Object.keys(DISCORD_SPAM_FILTER_CHANNEL_OPTIONS),
+]);
 
 export const DISCORD_SPAM_FILTER_MAX_FINGERPRINTS_PER_SCOPE = clampParseInt(
   process.env.DISCORD_SPAM_FILTER_MAX_FINGERPRINTS_PER_SCOPE ?? "200",
@@ -468,3 +477,228 @@ export function tempVoiceConfigured(): boolean {
     DISCORD_VOICE_TEMP_CATEGORY_ID.length > 0
   );
 }
+
+/** When false, clan role command handlers no-op. */
+export const DISCORD_CLAN_ENABLED = !/^0|false$/i.test((process.env.DISCORD_CLAN_ENABLED ?? "0").trim());
+
+/** Parent rules post — public thread under it receives plain-text clan commands and grant pending requests. */
+export const DISCORD_CLAN_RULES_MESSAGE_ID = (process.env.DISCORD_CLAN_RULES_MESSAGE_ID ?? "").trim();
+
+/** Shared «Лидер клана» meta-role snowflake. */
+export const DISCORD_CLAN_LEADER_ROLE_ID = (process.env.DISCORD_CLAN_LEADER_ROLE_ID ?? "").trim();
+
+/**
+ * Anchor role snowflake — new clan roles are placed directly above this role in the hierarchy.
+ * Bot's highest role must still be above the new clan role.
+ */
+export const DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID = (
+  process.env.DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID ?? ""
+).trim();
+
+/** #чат-кланов (or equivalent) — new clan roles get Send Messages allow overwrite here. */
+export const DISCORD_CLAN_CHAT_CHANNEL_ID = (process.env.DISCORD_CLAN_CHAT_CHANNEL_ID ?? "").trim();
+
+/** #набор-в-кланы (or equivalent) — linked from /clanpanel header. */
+export const DISCORD_CLAN_RECRUIT_CHANNEL_ID = (process.env.DISCORD_CLAN_RECRUIT_CHANNEL_ID ?? "").trim();
+
+/** Optional channel linked from /clanpanel header for extended clan help (plain channel mention). */
+export const DISCORD_CLAN_HELP_CHANNEL_ID = (process.env.DISCORD_CLAN_HELP_CHANNEL_ID ?? "").trim();
+
+/** User-facing clan outcome notifications (#bot-notifications). Falls back to thread reply when unset. */
+export const DISCORD_CLAN_NOTIFICATIONS_CHANNEL_ID = (
+  process.env.DISCORD_CLAN_NOTIFICATIONS_CHANNEL_ID ?? ""
+).trim();
+
+/**
+ * Role IDs excluded from clan discovery.
+ * Includes `DISCORD_CLAN_ROLE_EXCLUDE_IDS` from env plus moderator, staff-summary creator, and admin role IDs.
+ */
+export const DISCORD_CLAN_ROLE_EXCLUDE_IDS = [
+  ...new Set([
+    ...parseCommaSeparatedIds(process.env.DISCORD_CLAN_ROLE_EXCLUDE_IDS),
+    ...DISCORD_MODERATOR_ROLE_IDS,
+    ...DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS,
+    ...DISCORD_ADMIN_ROLE_IDS,
+  ]),
+];
+
+/** Optional regex (case-insensitive) — extra filter on role display names. */
+export const DISCORD_CLAN_ROLE_NAME_PATTERN = (() => {
+  const raw = (process.env.DISCORD_CLAN_ROLE_NAME_PATTERN ?? "").trim();
+  if (!raw) return null;
+  try {
+    return new RegExp(raw, "i");
+  } catch {
+    console.warn("Invalid DISCORD_CLAN_ROLE_NAME_PATTERN, ignoring.");
+    return null;
+  }
+})();
+
+export const DISCORD_CLAN_ROSTER_MIN = clampParseInt(process.env.DISCORD_CLAN_ROSTER_MIN ?? "15", 1, 100);
+export const DISCORD_CLAN_ROSTER_MAX = clampParseInt(process.env.DISCORD_CLAN_ROSTER_MAX ?? "35", 1, 100);
+/** Max clan roles per member (0 = unlimited). Default 1 — leader meta-role is separate. */
+export const DISCORD_CLAN_MAX_ROLES_PER_MEMBER = clampParseInt(
+  process.env.DISCORD_CLAN_MAX_ROLES_PER_MEMBER ?? "1",
+  0,
+  20,
+);
+
+/** Mod queue channel for new clan create requests. */
+export const DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID = (
+  process.env.DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID ?? ""
+).trim();
+
+/** Optional audit channel for clan actions (falls back to staff summary channel). */
+export const DISCORD_CLAN_STAFF_LOG_CHANNEL_ID = (process.env.DISCORD_CLAN_STAFF_LOG_CHANNEL_ID ?? "").trim();
+
+/** Min members with a clan role before auto-purge grace applies (default 10). */
+export const DISCORD_CLAN_ACTIVE_MIN_MEMBERS = clampParseInt(
+  process.env.DISCORD_CLAN_ACTIVE_MIN_MEMBERS ?? "10",
+  1,
+  100,
+);
+
+/** Days to restore roster or appoint leaders before the bot purges the clan role (default 3). */
+export const DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS = clampParseInt(
+  process.env.DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS ?? "3",
+  1,
+  30,
+);
+
+/** How often to run clan enforcement checks (default 24h). */
+export const DISCORD_CLAN_ENFORCEMENT_CHECK_MS = clampParseInt(
+  process.env.DISCORD_CLAN_ENFORCEMENT_CHECK_MS ?? String(24 * 60 * 60 * 1000),
+  60_000,
+  7 * 24 * 60 * 60 * 1000,
+);
+
+export const DISCORD_CLAN_ENFORCEMENT_GRACE_MS = DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS * 24 * 60 * 60 * 1000;
+
+/** Prune inactive members from the clan rules thread when count ≥ threshold (default 750). 0 = disabled. */
+export const DISCORD_CLAN_THREAD_CLEANUP_THRESHOLD = clampParseInt(
+  process.env.DISCORD_CLAN_THREAD_CLEANUP_THRESHOLD ?? "750",
+  0,
+  1000,
+);
+
+/** Keep thread members who posted within this many days (default 3). */
+export const DISCORD_CLAN_THREAD_CLEANUP_ACTIVE_DAYS = clampParseInt(
+  process.env.DISCORD_CLAN_THREAD_CLEANUP_ACTIVE_DAYS ?? "3",
+  1,
+  30,
+);
+
+export const DISCORD_CLAN_THREAD_CLEANUP_ACTIVE_MS =
+  DISCORD_CLAN_THREAD_CLEANUP_ACTIVE_DAYS * 24 * 60 * 60 * 1000;
+
+/** How often to run clan rules thread member cleanup (default 24h). */
+export const DISCORD_CLAN_THREAD_CLEANUP_INTERVAL_MS = clampParseInt(
+  process.env.DISCORD_CLAN_THREAD_CLEANUP_INTERVAL_MS ?? String(24 * 60 * 60 * 1000),
+  60_000,
+  7 * 24 * 60 * 60 * 1000,
+);
+
+/** Leader-initiated clan color change cooldown per clan (default 7 days). Mods bypass. */
+export const DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS = clampParseInt(
+  process.env.DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS ?? "7",
+  1,
+  30,
+);
+
+export const DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_MS =
+  DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+
+export type ClanColorPreset = { id: string; label: string; hex: number };
+
+function parseClanColorPresets(raw: string): ClanColorPreset[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const out: ClanColorPreset[] = [];
+    for (const row of parsed) {
+      if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+      const id = typeof (row as { id?: unknown }).id === "string" ? (row as { id: string }).id.trim() : "";
+      const label =
+        typeof (row as { label?: unknown }).label === "string" ? (row as { label: string }).label.trim() : "";
+      const hexRaw = (row as { hex?: unknown }).hex;
+      let hex = 0;
+      if (typeof hexRaw === "number" && Number.isFinite(hexRaw)) {
+        hex = Math.max(0, Math.min(0xffffff, Math.floor(hexRaw)));
+      } else if (typeof hexRaw === "string") {
+        const s = hexRaw.trim().replace(/^#/, "");
+        const n = parseInt(s, 16);
+        if (Number.isFinite(n)) hex = Math.max(0, Math.min(0xffffff, n));
+      }
+      if (id && label) out.push({ id, label, hex });
+    }
+    return out;
+  } catch {
+    console.warn("Invalid DISCORD_CLAN_COLOR_PRESETS_JSON, using built-in presets.");
+    return [];
+  }
+}
+
+export function clanRolesConfigured(): boolean {
+  return DISCORD_CLAN_ENABLED && DISCORD_CLAN_LEADER_ROLE_ID.length > 0;
+}
+
+export const DISCORD_CLAN_COLOR_PRESETS_FROM_ENV = parseClanColorPresets(
+  process.env.DISCORD_CLAN_COLOR_PRESETS_JSON ?? "",
+);
+
+export type ClanAdFormatId = "nabor_klany" | "poisk_klanov";
+
+const CLAN_AD_FORMAT_IDS: ReadonlySet<ClanAdFormatId> = new Set(["nabor_klany", "poisk_klanov"]);
+
+function parseClanAdFormatChannels(raw: string): Record<string, ClanAdFormatId> {
+  if (!raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, ClanAdFormatId> = {};
+    for (const [channelId, formatId] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!/^\d{17,20}$/.test(channelId.trim())) continue;
+      if (typeof formatId !== "string") continue;
+      const id = formatId.trim() as ClanAdFormatId;
+      if (CLAN_AD_FORMAT_IDS.has(id)) {
+        out[channelId.trim()] = id;
+      }
+    }
+    return out;
+  } catch {
+    console.warn("Invalid DISCORD_CLAN_AD_FORMAT_CHANNELS_JSON, using empty map.");
+    return {};
+  }
+}
+
+function parseClanAdFormatPinUrls(raw: string): Partial<Record<ClanAdFormatId, string>> {
+  if (!raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Partial<Record<ClanAdFormatId, string>> = {};
+    for (const [formatId, url] of Object.entries(parsed as Record<string, unknown>)) {
+      const id = formatId.trim() as ClanAdFormatId;
+      if (!CLAN_AD_FORMAT_IDS.has(id)) continue;
+      if (typeof url === "string" && url.trim().length > 0) {
+        out[id] = url.trim();
+      }
+    }
+    return out;
+  } catch {
+    console.warn("Invalid DISCORD_CLAN_AD_FORMAT_PIN_URLS_JSON, using empty map.");
+    return {};
+  }
+}
+
+/** Channel snowflake → clan ad format preset id (`nabor_klany` | `poisk_klanov`). */
+export const DISCORD_CLAN_AD_FORMAT_CHANNELS = parseClanAdFormatChannels(
+  process.env.DISCORD_CLAN_AD_FORMAT_CHANNELS_JSON ?? "",
+);
+
+/** Optional pinned-template URLs per format id. */
+export const DISCORD_CLAN_AD_FORMAT_PIN_URLS = parseClanAdFormatPinUrls(
+  process.env.DISCORD_CLAN_AD_FORMAT_PIN_URLS_JSON ?? "",
+);

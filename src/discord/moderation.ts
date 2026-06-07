@@ -38,6 +38,7 @@ import {
   discordModerationLogTitles as logTitles,
 } from "./userStrings";
 import { evictMessageReviewCache } from "./messageReview";
+import { isModerationProtectedTarget } from "./guildPermissions";
 import { applyLightModerationSanction, applyMajorModerationSanction } from "./moderationSanction";
 import {
   hasCrossAuthorSpamDuplicate,
@@ -398,6 +399,86 @@ async function deleteLater(message: Message, delayMs: number): Promise<void> {
   }, delayMs);
 }
 
+/** Light automod strike: delete source message, +1 warn, optional ladder timeout, DM + mod log. */
+export async function applyLightStrikeForMessage(
+  message: Message,
+  member: GuildMember,
+  reason: string,
+  logTitle: string,
+): Promise<void> {
+  const guild = message.guild;
+  if (!guild) return;
+
+  const guildId = guild.id;
+  const userId = message.author.id;
+  const now = Date.now();
+  const excerpt = message.content.slice(0, 400);
+  const ctx = resolvePolicyContext(message);
+
+  applyModerationDecayIfNeeded(guildId, userId, now, DISCORD_MODERATION_DECAY_MS);
+
+  try {
+    evictMessageReviewCache(message.id);
+    await message.delete();
+  } catch (err) {
+    console.error("Light strike failed to delete message:", err);
+    return;
+  }
+
+  touchModerationViolation(guildId, userId, now);
+
+  const userNotice = resolveModerationNotice({
+    custom: reason,
+    defaultReason: reason,
+    scopeChannelId: ctx.warningScopeChannelId,
+    channelPresetId: ctx.policy?.channelPresetId,
+    rulePresetId: ctx.policy?.rulePresetId,
+  });
+
+  const light = await applyLightModerationSanction({
+    guildId,
+    userId,
+    member,
+    reason: userNotice.combinedReason,
+  });
+  const timeoutMs = light.timeoutApplied ? light.timeoutMs : undefined;
+
+  await saveState(LAST_SEEN_STATE_FILE);
+
+  const minorEmbed = await buildModerationUserNoticeEmbed(message, member, {
+    kind: "minor",
+    resolved: userNotice,
+    timeoutMs,
+  });
+  await notifyUserModerationEmbed(message, member, minorEmbed);
+
+  await logModerationEvent(guild, {
+    title: logTitle,
+    color: timeoutMs !== undefined ? 0xcc8833 : 0x3388cc,
+    targetUserId: userId,
+    channelId: ctx.sourceChannelId,
+    parentChannelId: ctx.parentChannelId,
+    reason: userNotice.combinedReason,
+    minorWarningsInChannel: light.warnCount,
+    timeoutMs,
+    messageExcerpt: excerpt,
+  });
+}
+
+/** Reply in channel/thread, then delete the bot message after TTL. */
+export async function replyInChannelAutoDelete(
+  message: Message,
+  content: string,
+  options?: { deleteUserMessage?: boolean },
+): Promise<void> {
+  const reply = await message.reply({ content, allowedMentions: { parse: [] } }).catch(() => null);
+  if (reply) await deleteLater(reply, DISCORD_WARNING_MESSAGE_TTL_MS);
+  if (options?.deleteUserMessage) {
+    evictMessageReviewCache(message.id);
+    await deleteLater(message, DISCORD_WARNING_MESSAGE_TTL_MS);
+  }
+}
+
 /** Prefer human-readable channel/thread name; fetch if missing from cache. */
 async function resolveModerationChannelName(message: Message): Promise<string> {
   const ch = message.channel;
@@ -633,6 +714,7 @@ export async function handleModerationMessage(message: Message): Promise<void> {
   if (message.author.bot || message.system) return;
   const member = message.member;
   if (!(member instanceof GuildMember)) return;
+  if (isModerationProtectedTarget(member)) return;
 
   const ctx = resolvePolicyContext(message);
   const searchable = collectSearchableText(message);

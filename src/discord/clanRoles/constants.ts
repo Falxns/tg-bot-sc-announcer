@@ -1,0 +1,11 @@
+export const CLAN_REQ_PREFIX = "clan:req:";
+export const CLAN_MOD_PREFIX = "clan:mod:";
+export const CLAN_LEADER_META_PREFIX = "clan:ldr:";
+export const CLAN_MOD_LEADER_META_PREFIX = "clan:mod:ldr:";
+
+export const CLAN_NAME_MIN_LEN = 3;
+export const CLAN_NAME_MAX_LEN = 16;
+export const MAX_CLAN_LEADERS = 2;
+
+/** In-game clan tier letters (S highest → E lowest). */
+export type ClanTier = "S" | "A" | "B" | "C" | "D" | "E";

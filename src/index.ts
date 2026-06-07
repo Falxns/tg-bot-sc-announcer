@@ -48,7 +48,7 @@ async function shutdown(signal: string): Promise<void> {
   if (pollIntervalId !== undefined) clearInterval(pollIntervalId);
 
   // Discord dev cleanup needs a live gateway; run before slow Telegram/state I/O.
-  await stopDiscordBot();
+  await stopDiscordBot({ clearSlashCommands: signal === "stdin-q" });
 
   await flushTelegramSendQueue();
   await saveState(LAST_SEEN_STATE_FILE);
@@ -71,7 +71,7 @@ function onShutdownSignal(signal: string): void {
 function setupDevModeShutdownTriggers(): void {
   if (!DISCORD_DEV_MODE) return;
 
-  console.log("Dev: q + Enter to stop (clears slash commands).");
+  console.log("Dev: q + Enter to stop and clear dev slash commands (Ctrl+C keeps commands registered).");
 
   if (process.stdin.isTTY) {
     process.stdin.resume();
