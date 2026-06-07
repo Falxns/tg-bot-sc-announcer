@@ -155,9 +155,10 @@ export async function submitGrantRequest(
     sourceMessageId,
     createdAt: Date.now(),
   };
-  setClanGrantRequest(request);
   await postPendingGrantRequest(guild, dest, request);
-  await saveState(LAST_SEEN_STATE_FILE);
+  if (!request.pendingMessageId) {
+    return clanTxt.leaderMetaApprovalPostFailed;
+  }
   return null;
 }
 

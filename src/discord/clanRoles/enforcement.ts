@@ -30,6 +30,7 @@ import {
 import { clanTxt } from "./strings";
 
 let enforcementIntervalId: ReturnType<typeof setInterval> | undefined;
+let isClanEnforcementRunning = false;
 
 function graceDeadline(fromMs: number): number {
   return fromMs + DISCORD_CLAN_ENFORCEMENT_GRACE_MS;
@@ -175,18 +176,24 @@ export async function runClanEnforcementCheck(guild: Guild): Promise<void> {
 
 export async function runClanEnforcementSweep(guild: Guild): Promise<void> {
   if (!clanRolesConfigured()) return;
+  if (isClanEnforcementRunning) return;
 
   const nowMs = Date.now();
   if (nowMs - clanEnforcementLastRunAtMs < DISCORD_CLAN_ENFORCEMENT_CHECK_MS - 60_000) {
     return;
   }
 
-  setClanEnforcementLastRunAtMs(nowMs);
-  await runClanEnforcementCheck(guild);
-  await saveState(LAST_SEEN_STATE_FILE);
+  isClanEnforcementRunning = true;
+  try {
+    await runClanEnforcementCheck(guild);
+    await saveState(LAST_SEEN_STATE_FILE);
+    setClanEnforcementLastRunAtMs(nowMs);
 
-  if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
-    console.log("Clan enforcement daily check completed.");
+    if (LOG_LEVEL === "info" || LOG_LEVEL === "debug") {
+      console.log("Clan enforcement daily check completed.");
+    }
+  } finally {
+    isClanEnforcementRunning = false;
   }
 }
 

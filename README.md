@@ -209,7 +209,7 @@ Leader-approved clan workflows (separate from self-serve **`/rolepanel`** toggle
 
 Example valid **`nabor_klany`** (one form):
 
-```
+```text
 1) Мой Клан
 2) Заря
 3) Описание клана
@@ -227,7 +227,7 @@ Two or three forms: repeat blocks **1–11** back-to-back (each block starts aga
 
 Example valid **`poisk_klanov`** (attach a screenshot file to the message):
 
-```
+```text
 1) Ник игрока
 5) K/D 1.2
 6) Время 18–22 МСК

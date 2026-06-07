@@ -569,7 +569,7 @@ export async function loadState(path: string): Promise<void> {
           const clanRoleName = typeof row.clanRoleName === "string" ? row.clanRoleName : "";
           const targetUserId = typeof row.targetUserId === "string" ? row.targetUserId : "";
           const requesterUserId = typeof row.requesterUserId === "string" ? row.requesterUserId : "";
-          if (!guildId || !clanRoleId || !targetUserId) continue;
+          if (!guildId || !clanRoleId || !targetUserId || !channelId || !requesterUserId) continue;
           clanGrantRequests.set(id, {
             id,
             guildId,

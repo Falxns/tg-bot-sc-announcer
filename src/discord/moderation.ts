@@ -418,6 +418,7 @@ export async function applyLightStrikeForMessage(
   applyModerationDecayIfNeeded(guildId, userId, now, DISCORD_MODERATION_DECAY_MS);
 
   try {
+    evictMessageReviewCache(message.id);
     await message.delete();
   } catch (err) {
     console.error("Light strike failed to delete message:", err);
@@ -473,6 +474,7 @@ export async function replyInChannelAutoDelete(
   const reply = await message.reply({ content, allowedMentions: { parse: [] } }).catch(() => null);
   if (reply) await deleteLater(reply, DISCORD_WARNING_MESSAGE_TTL_MS);
   if (options?.deleteUserMessage) {
+    evictMessageReviewCache(message.id);
     await deleteLater(message, DISCORD_WARNING_MESSAGE_TTL_MS);
   }
 }

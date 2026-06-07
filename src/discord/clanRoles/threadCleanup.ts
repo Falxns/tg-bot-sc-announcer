@@ -24,6 +24,7 @@ import { clanTxt } from "./strings";
 const REMOVE_DELAY_MS = 150;
 
 let cleanupIntervalId: ReturnType<typeof setInterval> | undefined;
+let isClanThreadCleanupRunning = false;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -122,7 +123,11 @@ export async function runClanThreadCleanup(guild: Guild): Promise<{ removed: num
     return { removed: 0, skipped: true };
   }
 
-  const memberCount = thread.memberCount ?? 0;
+  const memberCount =
+    (await thread.members.fetch().catch(() => null))?.size ??
+    thread.members.cache.size ??
+    thread.memberCount ??
+    0;
   if (memberCount < DISCORD_CLAN_THREAD_CLEANUP_THRESHOLD) {
     if (LOG_LEVEL === "debug") {
       console.debug(
@@ -185,15 +190,21 @@ export async function runClanThreadCleanup(guild: Guild): Promise<{ removed: num
 
 export async function runClanThreadCleanupSweep(guild: Guild): Promise<void> {
   if (!clanRolesConfigured() || DISCORD_CLAN_THREAD_CLEANUP_THRESHOLD <= 0) return;
+  if (isClanThreadCleanupRunning) return;
 
   const nowMs = Date.now();
   if (nowMs - clanThreadCleanupLastRunAtMs < DISCORD_CLAN_THREAD_CLEANUP_INTERVAL_MS - 60_000) {
     return;
   }
 
-  setClanThreadCleanupLastRunAtMs(nowMs);
-  await runClanThreadCleanup(guild);
-  await saveState(LAST_SEEN_STATE_FILE);
+  isClanThreadCleanupRunning = true;
+  try {
+    await runClanThreadCleanup(guild);
+    await saveState(LAST_SEEN_STATE_FILE);
+    setClanThreadCleanupLastRunAtMs(nowMs);
+  } finally {
+    isClanThreadCleanupRunning = false;
+  }
 }
 
 export function startClanThreadCleanupScheduler(guild: Guild): void {

@@ -14,7 +14,7 @@ import {
   DISCORD_CLAN_LEADER_ROLE_ID,
   DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID,
   DISCORD_CLAN_STAFF_LOG_CHANNEL_ID,
-  DISCORD_MODERATION_LOG_CHANNEL_ID,
+  DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID,
 } from "../../config";
 import {
   clanGrantRequests,
@@ -263,8 +263,9 @@ export async function removeClanRoleFromMember(
         if (remainingClanRoles.length === 0 || !stillLeadsAnotherClan) {
           const leaderMeta = guild.roles.cache.get(DISCORD_CLAN_LEADER_ROLE_ID);
           if (leaderMeta && !leaderMeta.editable) {
-            console.warn(`Cannot remove leader meta-role ${DISCORD_CLAN_LEADER_ROLE_ID}: bot role too low.`);
-          } else {
+            return { ok: false, error: clanTxt.noManageRoles };
+          }
+          if (leaderMeta) {
             await updated.roles.remove(DISCORD_CLAN_LEADER_ROLE_ID);
           }
         }
@@ -290,9 +291,10 @@ export async function executeCreateRequest(
   if (existing) return { ok: false, error: clanTxt.createNameDuplicate };
 
   await ensureGuildMembersCached(guild);
-  for (const userId of request.memberIds) {
+  const validateIds = [...new Set([...request.memberIds, ...request.leaderIds])];
+  for (const userId of validateIds) {
     const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
-    if (!member) continue;
+    if (!member) return { ok: false, error: clanTxt.targetMissing };
     const conflict = getMemberClanRoleCapConflict(guild, member);
     if (conflict) {
       return { ok: false, error: clanTxt.createMemberClanRoleCap(userId, conflict.name) };
@@ -316,33 +318,44 @@ export async function executeCreateRequest(
   const leaderMetaId = DISCORD_CLAN_LEADER_ROLE_ID;
   const leaderSet = new Set(request.leaderIds);
 
-  for (const userId of request.memberIds) {
-    const member = await guild.members.fetch(userId).catch(() => null);
-    if (!member) continue;
-    const grantLeader = leaderSet.has(userId);
-    const result = await grantClanRoleToMember(guild, member, role, grantLeader);
-    if (!result.ok && grantLeader) {
-      await grantClanRoleToMember(guild, member, role, false);
+  try {
+    for (const userId of request.memberIds) {
+      const member = await guild.members.fetch(userId);
+      const grantLeader = leaderSet.has(userId);
+      let result = await grantClanRoleToMember(guild, member, role, grantLeader);
+      if (!result.ok && grantLeader) {
+        result = await grantClanRoleToMember(guild, member, role, false);
+      }
+      if (!result.ok) throw new Error(result.error);
     }
-  }
 
-  if (leaderMetaId) {
-    for (const userId of request.leaderIds) {
-      if ((await countClanLeaders(guild, role.id)) >= 2) break;
-      const member = await guild.members.fetch(userId).catch(() => null);
-      if (!member) continue;
-      if (!member.roles.cache.has(role.id)) continue;
-      if (!member.roles.cache.has(leaderMetaId)) {
-        await member.roles.add(leaderMetaId).catch(() => undefined);
+    if (leaderMetaId) {
+      for (const userId of request.leaderIds) {
+        if ((await countClanLeaders(guild, role.id)) >= 2) break;
+        const member = await guild.members.fetch(userId);
+        if (!member.roles.cache.has(role.id)) continue;
+        if (!member.roles.cache.has(leaderMetaId)) {
+          await member.roles.add(leaderMetaId);
+        }
       }
     }
-  }
 
-  return { ok: true, role };
+    return { ok: true, role };
+  } catch (err) {
+    for (const userId of request.memberIds) {
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (member?.roles.cache.has(role.id)) {
+        await removeClanRoleFromMember(guild, member, role);
+      }
+    }
+    await role.delete(`Clan create rollback ${request.id}`).catch(() => undefined);
+    const msg = err instanceof Error ? err.message : clanTxt.noManageRoles;
+    return { ok: false, error: msg };
+  }
 }
 
 export async function postClanAuditLine(guild: Guild, line: string): Promise<void> {
-  const channelId = DISCORD_CLAN_STAFF_LOG_CHANNEL_ID || DISCORD_MODERATION_LOG_CHANNEL_ID;
+  const channelId = DISCORD_CLAN_STAFF_LOG_CHANNEL_ID || DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID;
   if (!channelId) return;
   const ch = await guild.channels.fetch(channelId).catch(() => null);
   if (!ch || (ch.type !== ChannelType.GuildText && ch.type !== ChannelType.GuildAnnouncement)) return;
@@ -403,7 +416,8 @@ export async function purgeClanRole(
   for (const userId of memberIds) {
     const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
     if (!member) continue;
-    await removeClanRoleFromMember(guild, member, clanRole);
+    const result = await removeClanRoleFromMember(guild, member, clanRole);
+    if (!result.ok) return result;
   }
 
   purgePendingRequestsForClanRole(clanRole.id);
