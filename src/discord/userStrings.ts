@@ -484,7 +484,7 @@ export const discordClanAdFormat = {
   pinLine: (url: string) => `Шаблон: ${url}`,
   formHeader: (n: number) => `Форма ${n}:`,
   hintMissingSection: (section: number) => `Пункт ${section}): отсутствует — добавьте строку ${section}) в список`,
-  hintEmptyRequired: (section: number) => `Пункт ${section}): заполните поле (не оставляйте пустым, не используйте «-» или «нет»)`,
+  hintEmptyRequired: (section: number) => `Пункт ${section}): заполните поле (не оставляйте пустым, не используйте «-»)`,
   hintFraction: (section: number) => `Пункт ${section}): укажите фракцию — Заря, Наемники, Завет или Рубеж`,
   hintBlockCountNabor: (got: number) =>
     got === 0

@@ -316,6 +316,10 @@ async function postClanAdChannelNotice(channelMessage: Message, content: string)
   }
 }
 
+async function notifyClanAdUserDmOnly(member: GuildMember, content: string): Promise<void> {
+  await member.send({ content: content.slice(0, 2000) }).catch(() => undefined);
+}
+
 async function notifyClanAdUser(
   member: GuildMember,
   channelMessage: Message,
@@ -365,7 +369,7 @@ async function deleteExpiredPendingMessage(message: Message, pending: ClanAdPend
   const member = message.member ?? (await message.guild?.members.fetch(pending.authorId).catch(() => null) ?? null);
   await message.delete().catch(() => undefined);
   if (member) {
-    await notifyClanAdUser(member, message, fmtTxt.expiredDeleted);
+    await notifyClanAdUserDmOnly(member, fmtTxt.expiredDeleted);
   }
 }
 
