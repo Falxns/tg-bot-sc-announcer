@@ -314,6 +314,15 @@ async function resolveMessageMember(message: Message): Promise<GuildMember | nul
   return message.guild.members.fetch(message.author.id).catch(() => null);
 }
 
+async function postClanAdChannelNotice(channelMessage: Message, content: string): Promise<void> {
+  const ch = channelMessage.channel;
+  if (!ch.isTextBased() || !("send" in ch)) return;
+  const notice = await ch.send({ content: content.slice(0, 2000) }).catch(() => null);
+  if (notice) {
+    void deleteChannelNoticeLater(notice, DISCORD_WARNING_MESSAGE_TTL_MS);
+  }
+}
+
 async function notifyClanAdUser(
   member: GuildMember,
   channelMessage: Message,
@@ -501,7 +510,7 @@ export async function handleClanAdFormatMessageUpdate(
   const evaluation = evaluateClanAdMessage(message);
   if (evaluation.ok) {
     removePending(messageId);
-    await notifyClanAdUser(member, message, fmtTxt.approved);
+    await postClanAdChannelNotice(message, fmtTxt.approvedChannel(member.id));
     return true;
   }
 
