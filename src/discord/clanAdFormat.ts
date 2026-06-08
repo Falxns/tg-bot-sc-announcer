@@ -58,7 +58,7 @@ function isEmptyPlaceholder(raw: string): boolean {
   const trimmed = raw.trim();
   if (!trimmed) return true;
   const lower = trimmed.toLowerCase();
-  return lower === "-" || lower === "—" || lower === "нет";
+  return lower === "-" || lower === "—";
 }
 
 export function parseNumberedSections(content: string): ParsedSection[] {
@@ -118,14 +118,7 @@ function validateNaborBlock(block: Map<number, string>, blockIndex: number, erro
       errors.push({ code: "missing_section", section, blockIndex });
       continue;
     }
-    if (section === 1) continue;
     const value = block.get(section) ?? "";
-    if (section === 9 || section === 10) {
-      if (!value.trim()) {
-        errors.push({ code: "empty_required", section, blockIndex });
-      }
-      continue;
-    }
     if (isEmptyPlaceholder(value)) {
       errors.push({ code: "empty_required", section, blockIndex });
       continue;

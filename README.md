@@ -205,7 +205,7 @@ Leader-approved clan workflows (separate from self-serve **`/rolepanel`** toggle
 
 **Recruitment ad format (`DISCORD_CLAN_AD_FORMAT_CHANNELS_JSON`):** when set, posts in mapped channels are checked against the pinned numbered template. Staff bypass. Invalid posts stay visible briefly: the user gets a **DM** (or short channel notice) listing **all** validation errors and must **edit the same message** to fix it. If not fixed within **`DISCORD_CLAN_AD_FORMAT_GRACE_MS`** (default **5 min**), the post is **deleted** — no strike/warn.
 
-- **`nabor_klany`** (#набор-в-кланы): **1–3** consecutive forms per message, each numbered **1–11** (fields **3–6**, **8–11** required; **7** optional; fraction on field **2**; field **1** — any text; fields **9–10** — any non-empty text).
+- **`nabor_klany`** (#набор-в-кланы): **1–3** consecutive forms per message, each numbered **1–11** (fields **1**, **3–6**, **8–11** required; **7** optional; fraction on field **2**; field **1** — any non-empty text, no format rules).
 - **`poisk_klanov`** (#поиск-кланов): **exactly one** form numbered **1–10**; fields **1**, **5**, **6**, **10** required; **2–4**, **7**, **9** optional; field **8** must be present and the message must include **≥1 attachment** (screenshot).
 
 Example valid **`nabor_klany`** (one form):
