@@ -472,6 +472,8 @@ export const discordAutoMod = {
 /** Clan recruitment ad format validation (#набор-в-кланы / #поиск-кланов). */
 export const discordClanAdFormat = {
   introInvalid: "Объявление не прошло проверку формата. Исправьте его редактированием того же сообщения:",
+  channelCheckDm: (userId: string) =>
+    `<@${userId}> Проверьте личные сообщения — объявление нужно исправить.`,
   approved: "Объявление прошло проверку формата — всё в порядке.",
   expiredDeleted: "Объявление удалено: оно не было исправлено в отведённое время.",
   editGraceHint: (graceMs: number) => {

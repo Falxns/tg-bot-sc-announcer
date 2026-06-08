@@ -3,7 +3,9 @@ import {
   DISCORD_CLAN_AD_FORMAT_CHANNELS,
   DISCORD_CLAN_AD_FORMAT_GRACE_MS,
   DISCORD_CLAN_AD_FORMAT_PIN_URLS,
+  DISCORD_DEV_MODE,
   DISCORD_WARNING_MESSAGE_TTL_MS,
+  LOG_LEVEL,
   type ClanAdFormatId,
 } from "../config";
 import { isDiscordAdmin, isDiscordModerator, isModerationProtectedTarget } from "./guildPermissions";
@@ -306,22 +308,34 @@ async function deleteChannelNoticeLater(message: Message, delayMs: number): Prom
   await message.delete().catch(() => undefined);
 }
 
+async function resolveMessageMember(message: Message): Promise<GuildMember | null> {
+  if (message.member instanceof GuildMember) return message.member;
+  if (!message.guild) return null;
+  return message.guild.members.fetch(message.author.id).catch(() => null);
+}
+
 async function notifyClanAdUser(
   member: GuildMember,
   channelMessage: Message,
   content: string,
 ): Promise<void> {
+  let dmSent = false;
   try {
     await member.send({ content: content.slice(0, 2000) });
-    return;
+    dmSent = true;
   } catch {
-    const ch = channelMessage.channel;
-    if (ch.isTextBased() && "send" in ch) {
-      const notice = await ch.send({ content: content.slice(0, 2000) }).catch(() => null);
-      if (notice) {
-        void deleteChannelNoticeLater(notice, DISCORD_WARNING_MESSAGE_TTL_MS);
-      }
-    }
+    dmSent = false;
+  }
+
+  const ch = channelMessage.channel;
+  if (!ch.isTextBased() || !("send" in ch)) return;
+
+  const channelContent = dmSent
+    ? fmtTxt.channelCheckDm(member.id)
+    : content.slice(0, 2000);
+  const notice = await ch.send({ content: channelContent }).catch(() => null);
+  if (notice) {
+    void deleteChannelNoticeLater(notice, DISCORD_WARNING_MESSAGE_TTL_MS);
   }
 }
 
@@ -373,7 +387,12 @@ function schedulePendingExpiry(pending: ClanAdPendingReview, fallbackMessage: Me
   pending.timeoutId = setTimeout(run, delay);
 }
 
-function startPendingReview(message: Message, formatId: ClanAdFormatId, errorsText: string): void {
+function startPendingReview(
+  message: Message,
+  member: GuildMember,
+  formatId: ClanAdFormatId,
+  errorsText: string,
+): void {
   const messageId = message.id;
   removePending(messageId);
 
@@ -388,7 +407,7 @@ function startPendingReview(message: Message, formatId: ClanAdFormatId, errorsTe
   pendingClanAds.set(messageId, pending);
   schedulePendingExpiry(pending, message);
 
-  void notifyClanAdUser(message.member!, message, errorsText);
+  void notifyClanAdUser(member, message, errorsText);
 }
 
 function resetPendingDeadline(pending: ClanAdPendingReview, message: Message): void {
@@ -427,14 +446,27 @@ export async function handleClanAdFormatMessage(message: Message): Promise<boole
   const formatId = clanAdFormatForMessage(message);
   if (!formatId) return false;
 
-  const member = message.member;
-  if (!(member instanceof GuildMember)) return false;
-  if (shouldBypassClanAdCheck(member)) return false;
+  const member = await resolveMessageMember(message);
+  if (!member) {
+    if (LOG_LEVEL === "debug") {
+      console.debug(`Clan ad format: could not resolve member for message ${message.id}`);
+    }
+    return false;
+  }
+  if (!DISCORD_DEV_MODE && shouldBypassClanAdCheck(member)) {
+    if (LOG_LEVEL === "debug") {
+      console.debug(`Clan ad format: staff bypass for message ${message.id}`);
+    }
+    return false;
+  }
 
   const evaluation = evaluateClanAdMessage(message);
   if (evaluation.ok) return false;
 
-  startPendingReview(message, formatId, evaluation.errorsText);
+  if (LOG_LEVEL === "debug") {
+    console.debug(`Clan ad format: pending review for message ${message.id} (${formatId})`);
+  }
+  startPendingReview(message, member, formatId, evaluation.errorsText);
   return true;
 }
 
@@ -460,8 +492,8 @@ export async function handleClanAdFormatMessageUpdate(
   const message = await fetchFullMessage(newMessage);
   if (!message) return false;
 
-  const member = message.member ?? (await message.guild?.members.fetch(pending.authorId).catch(() => null) ?? null);
-  if (!member || shouldBypassClanAdCheck(member)) {
+  const member = message.member ?? (await resolveMessageMember(message));
+  if (!member || (!DISCORD_DEV_MODE && shouldBypassClanAdCheck(member))) {
     removePending(messageId);
     return true;
   }
