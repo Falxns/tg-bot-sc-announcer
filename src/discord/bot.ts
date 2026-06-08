@@ -11,7 +11,7 @@ import {
 import { handleModerationAutocomplete } from "./moderationCommands";
 import { handleMessageReviewCreate, handleMessageReviewDelete } from "./messageReview";
 import { handleModerationMessage } from "./moderation";
-import { handleClanAdFormatMessage } from "./clanAdFormat";
+import { handleClanAdFormatMessage, handleClanAdFormatMessageUpdate, clearClanAdPendingOnDelete } from "./clanAdFormat";
 import { handleRoleButtonInteraction } from "./roles";
 import {
   handleTempVoiceButton,
@@ -207,9 +207,20 @@ export async function startDiscordBot(): Promise<void> {
   });
 
   client.on("messageDelete", (message) => {
+    clearClanAdPendingOnDelete(message.id);
     void handleMessageReviewDelete(message).catch((err) => {
       console.error("Discord message review delete handler failed:", err);
     });
+  });
+
+  client.on("messageUpdate", (oldMessage, newMessage) => {
+    void (async () => {
+      try {
+        await handleClanAdFormatMessageUpdate(oldMessage, newMessage);
+      } catch (err) {
+        console.error("Discord clan ad format update handler failed:", err);
+      }
+    })();
   });
 
   client.on("voiceStateUpdate", (oldState, newState) => {

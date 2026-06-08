@@ -1,24 +1,34 @@
-import { GuildMember, Message } from "discord.js";
+import { GuildMember, Message, PartialMessage } from "discord.js";
 import {
   DISCORD_CLAN_AD_FORMAT_CHANNELS,
+  DISCORD_CLAN_AD_FORMAT_GRACE_MS,
   DISCORD_CLAN_AD_FORMAT_PIN_URLS,
+  DISCORD_WARNING_MESSAGE_TTL_MS,
   type ClanAdFormatId,
 } from "../config";
-import { CLAN_NAME_MAX_LEN, CLAN_NAME_MIN_LEN } from "./clanRoles/constants";
-import { validateClanName } from "./clanRoles/helpers";
 import { isDiscordAdmin, isDiscordModerator, isModerationProtectedTarget } from "./guildPermissions";
-import { applyLightStrikeForMessage } from "./moderation";
 import { discordClanAdFormat as fmtTxt } from "./userStrings";
 
 export type ClanAdValidationError =
   | { code: "missing_section"; section: number; blockIndex?: number }
   | { code: "empty_required"; section: number; blockIndex?: number }
-  | { code: "invalid_clan_name"; reason: "length" | "chars" | "brackets"; blockIndex?: number }
   | { code: "invalid_enum"; section: number; blockIndex?: number }
   | { code: "invalid_block_count"; expected: "1-3" | "1"; got: number }
   | { code: "missing_attachment" };
 
 type ParsedSection = { number: number; value: string };
+
+type ClanAdPendingReview = {
+  messageId: string;
+  guildId: string;
+  channelId: string;
+  authorId: string;
+  formatId: ClanAdFormatId;
+  deadlineMs: number;
+  timeoutId?: ReturnType<typeof setTimeout>;
+};
+
+const pendingClanAds = new Map<string, ClanAdPendingReview>();
 
 /** Line-start headers only; `.` must not start a decimal (e.g. K/D line `1.2`). Trailing ws after delimiter must not swallow the next line. */
 const SECTION_HEADER_RE = /(?:^|\n)\s*(\d{1,2})\s*(?:\)|\.(?!\d)|:|[-–—])[^\S\n]*/g;
@@ -32,9 +42,6 @@ function normalizeAdContent(content: string): string {
 }
 
 const FRACTION_VALUES = new Set(["заря", "наемники", "завет", "рубеж"]);
-
-const NABOR_FIELD_9_VALUES = new Set(["да", "нет", "+", "-"]);
-const NABOR_FIELD_10_VALUES = new Set(["да", "нет", "+", "-", "онли кувалды"]);
 
 const NABOR_REQUIRED_SECTIONS = [1, 2, 3, 4, 5, 6, 8, 9, 10, 11] as const;
 const POISK_REQUIRED_SECTIONS = [1, 5, 6, 8, 10] as const;
@@ -103,34 +110,17 @@ function isValidFraction(value: string): boolean {
   return FRACTION_VALUES.has(normalizeEnumValue(value));
 }
 
-function isValidNaborField9(value: string): boolean {
-  return NABOR_FIELD_9_VALUES.has(normalizeEnumValue(value));
-}
-
-function isValidNaborField10(value: string): boolean {
-  return NABOR_FIELD_10_VALUES.has(normalizeEnumValue(value));
-}
-
 function validateNaborBlock(block: Map<number, string>, blockIndex: number, errors: ClanAdValidationError[]): void {
   for (const section of NABOR_REQUIRED_SECTIONS) {
     if (!block.has(section)) {
       errors.push({ code: "missing_section", section, blockIndex });
       continue;
     }
+    if (section === 1) continue;
     const value = block.get(section) ?? "";
-    if (section === 9) {
+    if (section === 9 || section === 10) {
       if (!value.trim()) {
         errors.push({ code: "empty_required", section, blockIndex });
-      } else if (!isValidNaborField9(value)) {
-        errors.push({ code: "invalid_enum", section, blockIndex });
-      }
-      continue;
-    }
-    if (section === 10) {
-      if (!value.trim()) {
-        errors.push({ code: "empty_required", section, blockIndex });
-      } else if (!isValidNaborField10(value)) {
-        errors.push({ code: "invalid_enum", section, blockIndex });
       }
       continue;
     }
@@ -138,15 +128,8 @@ function validateNaborBlock(block: Map<number, string>, blockIndex: number, erro
       errors.push({ code: "empty_required", section, blockIndex });
       continue;
     }
-    if (section === 1) {
-      const nameErr = validateClanName(value, CLAN_NAME_MIN_LEN, CLAN_NAME_MAX_LEN);
-      if (nameErr === "length" || nameErr === "chars" || nameErr === "brackets") {
-        errors.push({ code: "invalid_clan_name", reason: nameErr, blockIndex });
-      }
-    } else if (section === 2) {
-      if (!isValidFraction(value)) {
-        errors.push({ code: "invalid_enum", section, blockIndex });
-      }
+    if (section === 2 && !isValidFraction(value)) {
+      errors.push({ code: "invalid_enum", section, blockIndex });
     }
   }
 }
@@ -161,10 +144,6 @@ function validatePoiskBlock(block: Map<number, string>, blockIndex: number, erro
     if (section === 8) continue;
     if (isEmptyPlaceholder(value)) {
       errors.push({ code: "empty_required", section, blockIndex });
-      continue;
-    }
-    if (section === 10 && !isValidFraction(value)) {
-      errors.push({ code: "invalid_enum", section, blockIndex });
     }
   }
 }
@@ -222,30 +201,14 @@ export function validateClanAdMessage(
 }
 
 function errorHint(error: ClanAdValidationError, formatId: ClanAdFormatId): string {
+  void formatId;
   switch (error.code) {
     case "missing_section":
       return fmtTxt.hintMissingSection(error.section);
     case "empty_required":
       return fmtTxt.hintEmptyRequired(error.section);
-    case "invalid_clan_name":
-      if (error.reason === "length") {
-        return fmtTxt.hintClanNameLength(CLAN_NAME_MIN_LEN, CLAN_NAME_MAX_LEN);
-      }
-      if (error.reason === "chars") {
-        return fmtTxt.hintClanNameChars;
-      }
-      return fmtTxt.hintClanNameTag;
     case "invalid_enum":
-      if (error.section === 2) {
-        return fmtTxt.hintFraction(error.section);
-      }
-      if (error.section === 9) {
-        return fmtTxt.hintNaborField9;
-      }
-      if (error.section === 10) {
-        return formatId === "nabor_klany" ? fmtTxt.hintNaborField10 : fmtTxt.hintFraction(error.section);
-      }
-      return fmtTxt.hintGeneric;
+      return fmtTxt.hintFraction(error.section);
     case "invalid_block_count":
       return error.expected === "1-3"
         ? fmtTxt.hintBlockCountNabor(error.got)
@@ -262,10 +225,11 @@ export function formatClanAdValidationErrors(
   formatId: ClanAdFormatId,
   pinUrl?: string,
 ): string {
-  const lines: string[] = [fmtTxt.intro];
+  const lines: string[] = [fmtTxt.introInvalid];
   if (pinUrl) {
     lines.push(fmtTxt.pinLine(pinUrl));
   }
+  lines.push(fmtTxt.editGraceHint(DISCORD_CLAN_AD_FORMAT_GRACE_MS));
   lines.push("");
 
   const messageLevel = errors.filter((e) => e.code === "invalid_block_count" || e.code === "missing_attachment");
@@ -323,28 +287,201 @@ export function formatClanAdValidationErrors(
   return text;
 }
 
-function logTitleForFormat(formatId: ClanAdFormatId): string {
-  return formatId === "nabor_klany" ? fmtTxt.logTitleNabor : fmtTxt.logTitlePoisk;
+function clearPendingTimer(pending: ClanAdPendingReview): void {
+  if (pending.timeoutId !== undefined) {
+    clearTimeout(pending.timeoutId);
+    pending.timeoutId = undefined;
+  }
 }
 
-/** Returns true when the message was handled (deleted + light strike). */
+function removePending(messageId: string): void {
+  const pending = pendingClanAds.get(messageId);
+  if (!pending) return;
+  clearPendingTimer(pending);
+  pendingClanAds.delete(messageId);
+}
+
+async function deleteChannelNoticeLater(message: Message, delayMs: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+  await message.delete().catch(() => undefined);
+}
+
+async function notifyClanAdUser(
+  member: GuildMember,
+  channelMessage: Message,
+  content: string,
+): Promise<void> {
+  try {
+    await member.send({ content: content.slice(0, 2000) });
+    return;
+  } catch {
+    const ch = channelMessage.channel;
+    if (ch.isTextBased() && "send" in ch) {
+      const notice = await ch.send({ content: content.slice(0, 2000) }).catch(() => null);
+      if (notice) {
+        void deleteChannelNoticeLater(notice, DISCORD_WARNING_MESSAGE_TTL_MS);
+      }
+    }
+  }
+}
+
+async function fetchFullMessage(message: Message | PartialMessage): Promise<Message | null> {
+  if (message.partial) {
+    return message.fetch().catch(() => null);
+  }
+  return message as Message;
+}
+
+async function resolvePendingMessage(pending: ClanAdPendingReview, fallback?: Message): Promise<Message | null> {
+  if (fallback?.guild) {
+    const ch = await fallback.guild.channels.fetch(pending.channelId).catch(() => null);
+    if (ch?.isTextBased()) {
+      return ch.messages.fetch(pending.messageId).catch(() => null);
+    }
+  }
+  return null;
+}
+
+async function deleteExpiredPendingMessage(message: Message, pending: ClanAdPendingReview): Promise<void> {
+  if (!pendingClanAds.has(pending.messageId)) return;
+  removePending(pending.messageId);
+
+  const member = message.member ?? (await message.guild?.members.fetch(pending.authorId).catch(() => null) ?? null);
+  await message.delete().catch(() => undefined);
+  if (member) {
+    await notifyClanAdUser(member, message, fmtTxt.expiredDeleted);
+  }
+}
+
+function schedulePendingExpiry(pending: ClanAdPendingReview, fallbackMessage: Message): void {
+  clearPendingTimer(pending);
+  const delay = pending.deadlineMs - Date.now();
+  const run = () => {
+    void (async () => {
+      const message = await resolvePendingMessage(pending, fallbackMessage);
+      if (message) {
+        await deleteExpiredPendingMessage(message, pending);
+      } else {
+        removePending(pending.messageId);
+      }
+    })();
+  };
+  if (delay <= 0) {
+    run();
+    return;
+  }
+  pending.timeoutId = setTimeout(run, delay);
+}
+
+function startPendingReview(message: Message, formatId: ClanAdFormatId, errorsText: string): void {
+  const messageId = message.id;
+  removePending(messageId);
+
+  const pending: ClanAdPendingReview = {
+    messageId,
+    guildId: message.guildId!,
+    channelId: message.channelId,
+    authorId: message.author.id,
+    formatId,
+    deadlineMs: Date.now() + DISCORD_CLAN_AD_FORMAT_GRACE_MS,
+  };
+  pendingClanAds.set(messageId, pending);
+  schedulePendingExpiry(pending, message);
+
+  void notifyClanAdUser(message.member!, message, errorsText);
+}
+
+function resetPendingDeadline(pending: ClanAdPendingReview, message: Message): void {
+  pending.deadlineMs = Date.now() + DISCORD_CLAN_AD_FORMAT_GRACE_MS;
+  schedulePendingExpiry(pending, message);
+}
+
+function shouldBypassClanAdCheck(member: GuildMember): boolean {
+  return isModerationProtectedTarget(member) || isDiscordModerator(member) || isDiscordAdmin(member);
+}
+
+function clanAdFormatForMessage(message: Message | PartialMessage): ClanAdFormatId | undefined {
+  if (!message.channelId) return undefined;
+  return DISCORD_CLAN_AD_FORMAT_CHANNELS[message.channelId];
+}
+
+function evaluateClanAdMessage(message: Message): { ok: true } | { ok: false; errorsText: string } {
+  const formatId = DISCORD_CLAN_AD_FORMAT_CHANNELS[message.channelId];
+  if (!formatId) return { ok: true };
+
+  const hasAttachment = message.attachments.size > 0;
+  const result = validateClanAdMessage(message.content, formatId, hasAttachment);
+  if (result.ok) return { ok: true };
+
+  const pinUrl = DISCORD_CLAN_AD_FORMAT_PIN_URLS[formatId];
+  return {
+    ok: false,
+    errorsText: formatClanAdValidationErrors(result.errors, formatId, pinUrl),
+  };
+}
+
+/** Returns true when the message was handled (pending review started). */
 export async function handleClanAdFormatMessage(message: Message): Promise<boolean> {
   if (!message.inGuild() || message.author.bot || message.system) return false;
 
-  const formatId = DISCORD_CLAN_AD_FORMAT_CHANNELS[message.channelId];
+  const formatId = clanAdFormatForMessage(message);
   if (!formatId) return false;
 
   const member = message.member;
   if (!(member instanceof GuildMember)) return false;
-  if (isModerationProtectedTarget(member)) return false;
-  if (isDiscordModerator(member) || isDiscordAdmin(member)) return false;
+  if (shouldBypassClanAdCheck(member)) return false;
 
-  const hasAttachment = message.attachments.size > 0;
-  const result = validateClanAdMessage(message.content, formatId, hasAttachment);
-  if (result.ok) return false;
+  const evaluation = evaluateClanAdMessage(message);
+  if (evaluation.ok) return false;
 
-  const pinUrl = DISCORD_CLAN_AD_FORMAT_PIN_URLS[formatId];
-  const reason = formatClanAdValidationErrors(result.errors, formatId, pinUrl);
-  await applyLightStrikeForMessage(message, member, reason, logTitleForFormat(formatId));
+  startPendingReview(message, formatId, evaluation.errorsText);
   return true;
+}
+
+/** Returns true when a pending clan ad was updated. */
+export async function handleClanAdFormatMessageUpdate(
+  oldMessage: Message | PartialMessage,
+  newMessage: Message | PartialMessage,
+): Promise<boolean> {
+  if (!newMessage.inGuild() || newMessage.author?.bot) return false;
+
+  const formatId = clanAdFormatForMessage(newMessage);
+  if (!formatId) return false;
+
+  const messageId = newMessage.id;
+  const pending = pendingClanAds.get(messageId);
+  if (!pending) return false;
+
+  const contentChanged = oldMessage.content !== newMessage.content;
+  const attachmentsChanged =
+    (oldMessage.attachments?.size ?? 0) !== (newMessage.attachments?.size ?? 0);
+  if (!contentChanged && !attachmentsChanged) return false;
+
+  const message = await fetchFullMessage(newMessage);
+  if (!message) return false;
+
+  const member = message.member ?? (await message.guild?.members.fetch(pending.authorId).catch(() => null) ?? null);
+  if (!member || shouldBypassClanAdCheck(member)) {
+    removePending(messageId);
+    return true;
+  }
+
+  const evaluation = evaluateClanAdMessage(message);
+  if (evaluation.ok) {
+    removePending(messageId);
+    await notifyClanAdUser(member, message, fmtTxt.approved);
+    return true;
+  }
+
+  resetPendingDeadline(pending, message);
+  await notifyClanAdUser(member, message, evaluation.errorsText);
+  return true;
+}
+
+export function clearClanAdPendingOnDelete(messageId: string): void {
+  removePending(messageId);
+}
+
+export function isClanAdPendingMessage(messageId: string): boolean {
+  return pendingClanAds.has(messageId);
 }

@@ -471,21 +471,20 @@ export const discordAutoMod = {
 
 /** Clan recruitment ad format validation (#набор-в-кланы / #поиск-кланов). */
 export const discordClanAdFormat = {
-  logTitleNabor: "[Клан] Неверный формат объявления (#набор-в-кланы)",
-  logTitlePoisk: "[Клан] Неверный формат объявления (#поиск-кланов)",
-  intro: "Сообщение удалено — исправьте формат объявления:",
+  introInvalid: "Объявление не прошло проверку формата. Исправьте его редактированием того же сообщения:",
+  approved: "Объявление прошло проверку формата — всё в порядке.",
+  expiredDeleted:
+    "Объявление удалено: не было исправлено в отведённое время. Отредактируйте следующий пост или дождитесь снятия ограничения канала.",
+  editGraceHint: (graceMs: number) => {
+    const min = Math.max(1, Math.round(graceMs / 60_000));
+    return `У вас **${min} мин.** — после этого сообщение будет удалено.`;
+  },
   pinLine: (url: string) => `Шаблон: ${url}`,
   formHeader: (n: number) => `**Форма ${n}:**`,
   hintMissingSection: (section: number) => `Пункт ${section}): отсутствует — добавьте строку по шаблону`,
   hintEmptyRequired: (section: number) => `Пункт ${section}): заполните поле (не оставляйте пустым, «-» или «нет»)`,
-  hintClanNameLength: (min: number, max: number) =>
-    `Пункт 1): название клана — ${min}–${max} символов, без @ и #`,
-  hintClanNameChars: "Пункт 1): название клана не должно содержать @ или #",
-  hintClanNameTag: "Пункт 1): в названии клана не указывайте тэг (скобки или отдельный токен из 4 заглавных букв)",
   hintFraction: (section: number) =>
     `Пункт ${section}): укажите фракцию — Заря, Наемники, Завет или Рубеж`,
-  hintNaborField9: "Пункт 9): допустимо — Да, Нет, + или -",
-  hintNaborField10: "Пункт 10): допустимо — Да, Нет, +, - или «Онли кувалды»",
   hintBlockCountNabor: (got: number) =>
     got === 0
       ? "В сообщении не найдено объявление по шаблону (начните с пункта 1))"
