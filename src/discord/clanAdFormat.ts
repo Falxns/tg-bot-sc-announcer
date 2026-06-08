@@ -219,8 +219,12 @@ export function formatClanAdValidationErrors(
   errors: ClanAdValidationError[],
   formatId: ClanAdFormatId,
   pinUrl?: string,
+  messageUrl?: string,
 ): string {
   const lines: string[] = [fmtTxt.introInvalid];
+  if (messageUrl) {
+    lines.push(fmtTxt.messageEditLink(messageUrl));
+  }
   if (pinUrl) {
     lines.push(fmtTxt.pinLine(pinUrl));
   }
@@ -439,9 +443,12 @@ function evaluateClanAdMessage(message: Message): { ok: true } | { ok: false; er
   if (result.ok) return { ok: true };
 
   const pinUrl = DISCORD_CLAN_AD_FORMAT_PIN_URLS[formatId];
+  const messageUrl = message.guildId
+    ? `https://discord.com/channels/${message.guildId}/${message.channelId}/${message.id}`
+    : undefined;
   return {
     ok: false,
-    errorsText: formatClanAdValidationErrors(result.errors, formatId, pinUrl),
+    errorsText: formatClanAdValidationErrors(result.errors, formatId, pinUrl, messageUrl),
   };
 }
 
