@@ -3,7 +3,9 @@ import {
   DISCORD_CLAN_AD_FORMAT_CHANNELS,
   DISCORD_CLAN_AD_FORMAT_GRACE_MS,
   DISCORD_CLAN_AD_FORMAT_PIN_URLS,
+  DISCORD_CLAN_RECRUIT_CHANNEL_ID,
   DISCORD_DEV_MODE,
+  DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS,
   DISCORD_WARNING_MESSAGE_TTL_MS,
   LOG_LEVEL,
   type ClanAdFormatId,
@@ -141,6 +143,30 @@ function validatePoiskBlock(block: Map<number, string>, blockIndex: number, erro
       errors.push({ code: "empty_required", section, blockIndex });
     }
   }
+}
+
+function looksLikeNaborForm(content: string): boolean {
+  const blocks = splitSectionsIntoBlocks(parseNumberedSections(content));
+  return blocks.length > 0 && blocks[0].has(11);
+}
+
+function resolveClanAdChannelId(formatId: ClanAdFormatId): string | undefined {
+  for (const [channelId, id] of Object.entries(DISCORD_CLAN_AD_FORMAT_CHANNELS)) {
+    if (id === formatId) return channelId;
+  }
+  const presetChannelId = DISCORD_MODERATION_CHANNEL_PRESET_CHANNEL_IDS[formatId];
+  if (presetChannelId) return presetChannelId;
+  if (formatId === "nabor_klany" && DISCORD_CLAN_RECRUIT_CHANNEL_ID) {
+    return DISCORD_CLAN_RECRUIT_CHANNEL_ID;
+  }
+  return undefined;
+}
+
+async function handleNaborPostedInPoiskChannel(message: Message, member: GuildMember): Promise<void> {
+  removePending(message.id);
+  const naborChannelId = resolveClanAdChannelId("nabor_klany");
+  await notifyClanAdUserDmOnly(member, fmtTxt.wrongChannelNaborInPoisk(naborChannelId));
+  await message.delete().catch(() => undefined);
 }
 
 function validateNaborMessage(content: string): ClanAdValidationError[] {
@@ -473,6 +499,11 @@ export async function handleClanAdFormatMessage(message: Message): Promise<boole
     return false;
   }
 
+  if (formatId === "poisk_klanov" && looksLikeNaborForm(message.content)) {
+    await handleNaborPostedInPoiskChannel(message, member);
+    return true;
+  }
+
   const evaluation = evaluateClanAdMessage(message);
   if (evaluation.ok) return false;
 
@@ -494,8 +525,6 @@ export async function handleClanAdFormatMessageUpdate(
   if (!formatId) return false;
 
   const messageId = newMessage.id;
-  const pending = pendingClanAds.get(messageId);
-  if (!pending) return false;
 
   const contentChanged = oldMessage.content !== newMessage.content;
   const attachmentsChanged =
@@ -507,9 +536,18 @@ export async function handleClanAdFormatMessageUpdate(
 
   const member = message.member ?? (await resolveMessageMember(message));
   if (!member || (!DISCORD_DEV_MODE && shouldBypassClanAdCheck(member))) {
+    const hadPending = pendingClanAds.has(messageId);
     removePending(messageId);
+    return hadPending;
+  }
+
+  if (formatId === "poisk_klanov" && looksLikeNaborForm(message.content)) {
+    await handleNaborPostedInPoiskChannel(message, member);
     return true;
   }
+
+  const pending = pendingClanAds.get(messageId);
+  if (!pending) return false;
 
   const evaluation = evaluateClanAdMessage(message);
   if (evaluation.ok) {
