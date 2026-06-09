@@ -131,6 +131,11 @@ function validateNaborBlock(block: Map<number, string>, blockIndex: number, erro
   }
 }
 
+function containsForbiddenPoiskField10Word(value: string): boolean {
+  const normalized = normalizeEnumValue(value);
+  return normalized.includes("долг") || normalized.includes("свобода");
+}
+
 function validatePoiskBlock(block: Map<number, string>, blockIndex: number, errors: ClanAdValidationError[]): void {
   for (const section of POISK_REQUIRED_SECTIONS) {
     if (!block.has(section)) {
@@ -141,6 +146,10 @@ function validatePoiskBlock(block: Map<number, string>, blockIndex: number, erro
     if (section === 8) continue;
     if (isEmptyPlaceholder(value)) {
       errors.push({ code: "empty_required", section, blockIndex });
+      continue;
+    }
+    if (section === 10 && containsForbiddenPoiskField10Word(value)) {
+      errors.push({ code: "invalid_enum", section, blockIndex });
     }
   }
 }
