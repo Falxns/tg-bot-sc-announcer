@@ -11,6 +11,7 @@ import {
   type ClanAdFormatId,
 } from "../config";
 import { isDiscordAdmin, isDiscordModerator, isModerationProtectedTarget } from "./guildPermissions";
+import { hasClanTagInText } from "./clanRoles/helpers";
 import { discordClanAdFormat as fmtTxt } from "./userStrings";
 
 export type ClanAdValidationError =
@@ -154,9 +155,16 @@ function validatePoiskBlock(block: Map<number, string>, blockIndex: number, erro
   }
 }
 
+function looksLikeNaborBlock(block: Map<number, string>): boolean {
+  if (block.has(11)) return true;
+  if (block.has(2) && isValidFraction(block.get(2) ?? "")) return true;
+  if (block.has(1) && hasClanTagInText(block.get(1) ?? "")) return true;
+  return false;
+}
+
 function looksLikeNaborForm(content: string): boolean {
   const blocks = splitSectionsIntoBlocks(parseNumberedSections(content));
-  return blocks.length > 0 && blocks[0].has(11);
+  return blocks.some(looksLikeNaborBlock);
 }
 
 function resolveClanAdChannelId(formatId: ClanAdFormatId): string | undefined {
