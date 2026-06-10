@@ -18,8 +18,7 @@ export type ClanAdValidationError =
   | { code: "missing_section"; section: number; blockIndex?: number }
   | { code: "empty_required"; section: number; blockIndex?: number }
   | { code: "invalid_enum"; section: number; blockIndex?: number }
-  | { code: "invalid_block_count"; expected: "1-3" | "1"; got: number }
-  | { code: "missing_attachment" };
+  | { code: "invalid_block_count"; expected: "1-3" | "1"; got: number };
 
 type ParsedSection = { number: number; value: string };
 
@@ -49,7 +48,7 @@ function normalizeAdContent(content: string): string {
 const FRACTION_VALUES = new Set(["заря", "наемники", "завет", "рубеж"]);
 
 const NABOR_REQUIRED_SECTIONS = [1, 2, 3, 4, 5, 6, 8, 9, 10, 11] as const;
-const POISK_REQUIRED_SECTIONS = [1, 5, 6, 8, 10] as const;
+const POISK_REQUIRED_SECTIONS = [1, 5, 6, 10] as const;
 
 const NOTICE_MAX_LEN = 3500;
 
@@ -144,7 +143,6 @@ function validatePoiskBlock(block: Map<number, string>, blockIndex: number, erro
       continue;
     }
     const value = block.get(section) ?? "";
-    if (section === 8) continue;
     if (isEmptyPlaceholder(value)) {
       errors.push({ code: "empty_required", section, blockIndex });
       continue;
@@ -206,7 +204,7 @@ function validateNaborMessage(content: string): ClanAdValidationError[] {
   return errors;
 }
 
-function validatePoiskMessage(content: string, hasAttachment: boolean): ClanAdValidationError[] {
+function validatePoiskMessage(content: string): ClanAdValidationError[] {
   const sections = parseNumberedSections(content);
   const blocks = splitSectionsIntoBlocks(sections);
   const errors: ClanAdValidationError[] = [];
@@ -220,21 +218,17 @@ function validatePoiskMessage(content: string, hasAttachment: boolean): ClanAdVa
   }
 
   validatePoiskBlock(blocks[0], 0, errors);
-  if (!hasAttachment) {
-    errors.push({ code: "missing_attachment" });
-  }
   return errors;
 }
 
 export function validateClanAdMessage(
   content: string,
   formatId: ClanAdFormatId,
-  hasAttachment: boolean,
 ): { ok: true } | { ok: false; errors: ClanAdValidationError[] } {
   const errors =
     formatId === "nabor_klany"
       ? validateNaborMessage(content)
-      : validatePoiskMessage(content, hasAttachment);
+      : validatePoiskMessage(content);
   return errors.length === 0 ? { ok: true } : { ok: false, errors };
 }
 
@@ -251,8 +245,6 @@ function errorHint(error: ClanAdValidationError, formatId: ClanAdFormatId): stri
       return error.expected === "1-3"
         ? fmtTxt.hintBlockCountNabor(error.got)
         : fmtTxt.hintBlockCountPoisk(error.got);
-    case "missing_attachment":
-      return fmtTxt.hintMissingAttachment;
     default:
       return fmtTxt.hintGeneric;
   }
@@ -274,8 +266,8 @@ export function formatClanAdValidationErrors(
   lines.push(fmtTxt.editGraceHint(DISCORD_CLAN_AD_FORMAT_GRACE_MS));
   lines.push("");
 
-  const messageLevel = errors.filter((e) => e.code === "invalid_block_count" || e.code === "missing_attachment");
-  const fieldErrors = errors.filter((e) => e.code !== "invalid_block_count" && e.code !== "missing_attachment");
+  const messageLevel = errors.filter((e) => e.code === "invalid_block_count");
+  const fieldErrors = errors.filter((e) => e.code !== "invalid_block_count");
 
   for (const err of messageLevel) {
     lines.push(`• ${errorHint(err, formatId)}`);
@@ -481,8 +473,7 @@ function evaluateClanAdMessage(message: Message): { ok: true } | { ok: false; er
   const formatId = DISCORD_CLAN_AD_FORMAT_CHANNELS[message.channelId];
   if (!formatId) return { ok: true };
 
-  const hasAttachment = message.attachments.size > 0;
-  const result = validateClanAdMessage(message.content, formatId, hasAttachment);
+  const result = validateClanAdMessage(message.content, formatId);
   if (result.ok) return { ok: true };
 
   const pinUrl = DISCORD_CLAN_AD_FORMAT_PIN_URLS[formatId];
