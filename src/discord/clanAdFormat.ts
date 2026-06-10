@@ -535,9 +535,7 @@ export async function handleClanAdFormatMessageUpdate(
   const messageId = newMessage.id;
 
   const contentChanged = oldMessage.content !== newMessage.content;
-  const attachmentsChanged =
-    (oldMessage.attachments?.size ?? 0) !== (newMessage.attachments?.size ?? 0);
-  if (!contentChanged && !attachmentsChanged) return false;
+  if (!contentChanged) return false;
 
   const message = await fetchFullMessage(newMessage);
   if (!message) return false;
