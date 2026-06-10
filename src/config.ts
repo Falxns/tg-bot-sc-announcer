@@ -702,3 +702,10 @@ export const DISCORD_CLAN_AD_FORMAT_CHANNELS = parseClanAdFormatChannels(
 export const DISCORD_CLAN_AD_FORMAT_PIN_URLS = parseClanAdFormatPinUrls(
   process.env.DISCORD_CLAN_AD_FORMAT_PIN_URLS_JSON ?? "",
 );
+
+/** Time to fix an invalid clan ad by editing before the post is deleted (default 5 min). */
+export const DISCORD_CLAN_AD_FORMAT_GRACE_MS = clampParseInt(
+  process.env.DISCORD_CLAN_AD_FORMAT_GRACE_MS ?? "300000",
+  60_000,
+  3_600_000,
+);

@@ -116,8 +116,9 @@ Edit `.env`:
 | `DISCORD_CLAN_ENFORCEMENT_CHECK_MS` | No | How often to run enforcement checks (default **86400000** = 24h) |
 | `DISCORD_CLAN_COLOR_CHANGE_COOLDOWN_DAYS` | No | Leader `!цвет` cooldown per clan in days (default **7**; admins bypass) |
 | `DISCORD_CLAN_COLOR_PRESETS_JSON` | No | JSON array override for `!создать` color labels, e.g. `[{"id":"red","label":"Красный","hex":15158332}]`; default built-in Russian presets |
-| `DISCORD_CLAN_AD_FORMAT_CHANNELS_JSON` | No | Channel snowflake → format id map: `nabor_klany` (#набор-в-кланы, 1–3 forms per message) or `poisk_klanov` (#поиск-кланов, exactly 1 form). Invalid posts: delete + light strike + DM with all errors |
+| `DISCORD_CLAN_AD_FORMAT_CHANNELS_JSON` | No | Channel snowflake → format id map: `nabor_klany` (#набор-в-кланы, 1–3 forms per message) or `poisk_klanov` (#поиск-кланов, exactly 1 form). Invalid posts: DM with errors, **5 min edit grace**, then delete (no strikes) |
 | `DISCORD_CLAN_AD_FORMAT_PIN_URLS_JSON` | No | Optional pinned-template URLs per format id (shown in validation notice) |
+| `DISCORD_CLAN_AD_FORMAT_GRACE_MS` | No | Time to fix an invalid post by **editing** before deletion (default **300000** = 5 min) |
 | `LOG_LEVEL` | No | `info` (default), `debug`, or `warn` |
 | `PORT` | No | If set, starts an HTTP server on this port that responds `ok` (for health checks) |
 
@@ -202,10 +203,10 @@ Leader-approved clan workflows (separate from self-serve **`/rolepanel`** toggle
 
 **Auto-enforcement (daily check):** if a clan role has fewer than **`DISCORD_CLAN_ACTIVE_MIN_MEMBERS`** (default **10**) members, leaders get a **DM** reminder each day to recruit via `+клан`. If still understaffed after **`DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS`** (default **3**), the bot strips leader meta-roles and **deletes** the clan role. If a clan has **no leaders** for the same grace period, the role is deleted (no leader DMs). Grace timers reset when the roster or leadership is restored. Audit lines go to **`DISCORD_CLAN_STAFF_LOG_CHANNEL_ID`**.
 
-**Recruitment ad format (`DISCORD_CLAN_AD_FORMAT_CHANNELS_JSON`):** when set, posts in mapped channels are checked against the pinned numbered template. Staff bypass. Invalid posts are **deleted**, count as a **light strike** (same warn ladder as automod), and the user gets one notice listing **all** validation errors.
+**Recruitment ad format (`DISCORD_CLAN_AD_FORMAT_CHANNELS_JSON`):** when set, posts in mapped channels are checked against the pinned numbered template. Staff bypass. Invalid posts stay visible briefly: the user gets a **DM** (or short channel notice) listing **all** validation errors and must **edit the same message** to fix it. If not fixed within **`DISCORD_CLAN_AD_FORMAT_GRACE_MS`** (default **5 min**), the post is **deleted** — no strike/warn.
 
-- **`nabor_klany`** (#набор-в-кланы): **1–3** consecutive forms per message, each numbered **1–11** with the same field rules (clan name via `!создать` rules, fraction on field 2, fields 3–6 and 8–11 required, field 7 optional, enums on 9–10).
-- **`poisk_klanov`** (#поиск-кланов): **exactly one** form numbered **1–10**; fields 1, 5, 6, 10 required; 2–4, 7, 9 optional; field **8** must be present and the message must include **≥1 attachment** (screenshot).
+- **`nabor_klany`** (#набор-в-кланы): **1–3** consecutive forms per message, each numbered **1–11** (fields **1**, **3–6**, **8–11** required; **7** optional; fraction on field **2**; field **1** — any non-empty text, no format rules).
+- **`poisk_klanov`** (#поиск-кланов): **exactly one** form numbered **1–10**; fields **1**, **5**, **6**, **10** required; **2–4**, **7–9** optional.
 
 Example valid **`nabor_klany`** (one form):
 
@@ -225,13 +226,12 @@ Example valid **`nabor_klany`** (one form):
 
 Two or three forms: repeat blocks **1–11** back-to-back (each block starts again at `1)`). Fraction spellings are flexible (`наемники` / `наёмники`, any case).
 
-Example valid **`poisk_klanov`** (attach a screenshot file to the message):
+Example valid **`poisk_klanov`**:
 
 ```text
 1) Ник игрока
 5) K/D 1.2
 6) Время 18–22 МСК
-8) Скриншот ниже
 10) Рубеж
 ```
 

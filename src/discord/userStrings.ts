@@ -471,30 +471,34 @@ export const discordAutoMod = {
 
 /** Clan recruitment ad format validation (#набор-в-кланы / #поиск-кланов). */
 export const discordClanAdFormat = {
-  logTitleNabor: "[Клан] Неверный формат объявления (#набор-в-кланы)",
-  logTitlePoisk: "[Клан] Неверный формат объявления (#поиск-кланов)",
-  intro: "Сообщение удалено — исправьте формат объявления:",
+  introInvalid: "Объявление не прошло проверку формата. Исправьте его редактированием того же сообщения:",
+  messageEditLink: (url: string) => `Сообщение для правки: ${url}`,
+  channelCheckDm: (userId: string) =>
+    `<@${userId}> Проверьте личные сообщения — объявление нужно исправить.`,
+  approvedChannel: (userId: string) =>
+    `<@${userId}> Объявление прошло проверку формата — всё в порядке.`,
+  expiredDeleted: "Объявление удалено: оно не было исправлено в отведённое время.",
+  wrongChannelNaborInPoisk: (naborChannelId?: string) =>
+    naborChannelId
+      ? `Проверьте правильность канала. Анкеты по набору отправляются в <#${naborChannelId}>.`
+      : "Проверьте правильность канала. Анкеты по набору отправляются в канал #набор-в-кланы.",
+  editGraceHint: (graceMs: number) => {
+    const min = Math.max(1, Math.round(graceMs / 60_000));
+    return `У вас **${min} мин.** — после этого сообщение будет удалено.`;
+  },
   pinLine: (url: string) => `Шаблон: ${url}`,
-  formHeader: (n: number) => `**Форма ${n}:**`,
-  hintMissingSection: (section: number) => `Пункт ${section}): отсутствует — добавьте строку по шаблону`,
-  hintEmptyRequired: (section: number) => `Пункт ${section}): заполните поле (не оставляйте пустым, «-» или «нет»)`,
-  hintClanNameLength: (min: number, max: number) =>
-    `Пункт 1): название клана — ${min}–${max} символов, без @ и #`,
-  hintClanNameChars: "Пункт 1): название клана не должно содержать @ или #",
-  hintClanNameTag: "Пункт 1): в названии клана не указывайте тэг (скобки или отдельный токен из 4 заглавных букв)",
-  hintFraction: (section: number) =>
-    `Пункт ${section}): укажите фракцию — Заря, Наемники, Завет или Рубеж`,
-  hintNaborField9: "Пункт 9): допустимо — Да, Нет, + или -",
-  hintNaborField10: "Пункт 10): допустимо — Да, Нет, +, - или «Онли кувалды»",
+  formHeader: (n: number) => `Форма ${n}:`,
+  hintMissingSection: (section: number) => `Пункт ${section}): отсутствует — добавьте строку ${section}) в список`,
+  hintEmptyRequired: (section: number) => `Пункт ${section}): заполните поле (не оставляйте пустым, не используйте «-»)`,
+  hintFraction: (section: number) => `Пункт ${section}): укажите фракцию — Заря, Наемники, Завет или Рубеж`,
   hintBlockCountNabor: (got: number) =>
     got === 0
-      ? "В сообщении не найдено объявление по шаблону (начните с пункта 1))"
+      ? "В сообщении не найдено объявление по шаблону (начните форму с 1. или 1) )"
       : `В сообщении более 3 форм (найдено ${got}) — допускается до 3`,
   hintBlockCountPoisk: (got: number) =>
     got === 0
-      ? "В сообщении не найдено объявление по шаблону (начните с пункта 1))"
+      ? "В сообщении не найдено объявление по шаблону (начните форму с 1. или 1) )"
       : `В сообщении более одной формы (найдено ${got}) — допускается только одна`,
-  hintMissingAttachment: "Пункт 8): приложите скриншот (вложение к сообщению)",
   hintGeneric: "Проверьте формат объявления по закреплённому шаблону",
   errorsTruncated: (n: number) => `…и ещё ${n} ошибок`,
 } as const;
