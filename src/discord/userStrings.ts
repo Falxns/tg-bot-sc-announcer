@@ -393,8 +393,12 @@ export const discordModerationCommands = {
     `Без новых нарушений сброс предупреждений и лестниц примерно через **${dur}**.`,
   moderatorQuotaExceeded: (used: number, limit: number) =>
     `Дневной лимит модерации: **${used}/${limit}** (/mute, /strike, /ban). Обновится в 00:00 UTC.`,
+  clanReviewQuotaExceeded: (used: number, limit: number) =>
+    `Дневной лимит заявок на клановые роли: **${used}/${limit}** (принять/отклонить). Обновится в 00:00 UTC.`,
   modstatusDailyQuota: (used: number, limit: number, remaining: number) =>
     `**Ваш лимит сегодня (UTC):** **${used}/${limit}** (/mute, /strike, /ban), осталось **${remaining}**.`,
+  modstatusClanReviewDailyQuota: (used: number, limit: number, remaining: number) =>
+    `**Лимит заявок на клановые роли (UTC):** **${used}/${limit}** (принять/отклонить), осталось **${remaining}**.`,
   modstatusDecayDue: "Порог бездействия для сброса уже пройден — сброс произойдёт при следующей проверке нарушения.",
   staffDmLabelReason: "Причина",
   staffDmLabelChannelViolation: "Нарушение в канале",

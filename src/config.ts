@@ -123,6 +123,13 @@ export const DISCORD_MODERATION_DAILY_QUOTA = clampParseInt(
   500,
 );
 
+/** Max clan create accept/deny actions per staff per UTC day (0 = disabled). Bypass: DISCORD_ADMIN_ROLE_IDS */
+export const DISCORD_CLAN_REVIEW_DAILY_QUOTA = clampParseInt(
+  process.env.DISCORD_CLAN_REVIEW_DAILY_QUOTA ?? "20",
+  0,
+  500,
+);
+
 export const DISCORD_MODERATION_LOG_CHANNEL_ID = (process.env.DISCORD_MODERATION_LOG_CHANNEL_ID ?? "").trim();
 
 /** Optional one-line staff digest channel (manual mod commands, role creates, creator posts). */

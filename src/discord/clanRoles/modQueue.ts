@@ -30,10 +30,10 @@ import { canResolveCreateRequest } from "./permissions";
 import { clanTxt } from "./strings";
 import type { ParsedCreateCommand } from "./textCommands";
 import {
-  assertModeratorQuotaInteraction,
-  isModeratorQuotaExempt,
-  recordModeratorQuotaUse,
-} from "../moderatorQuota";
+  assertClanReviewQuotaInteraction,
+  recordClanReviewQuotaUse,
+} from "../clanReviewQuota";
+import { isModeratorQuotaExempt } from "../moderatorQuota";
 
 function modAcceptId(requestId: string): string {
   return `${CLAN_MOD_PREFIX}accept:${requestId}`;
@@ -169,7 +169,7 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
       await interaction.reply({ content: clanTxt.cannotApprove, flags: MessageFlags.Ephemeral });
       return true;
     }
-    if (!(await assertModeratorQuotaInteraction(interaction))) return true;
+    if (!(await assertClanReviewQuotaInteraction(interaction))) return true;
 
     const modal = new ModalBuilder().setCustomId(modDenyModalId(requestId)).setTitle(clanTxt.modDenyModalTitle);
     modal.addComponents(
@@ -202,7 +202,7 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
     await interaction.reply({ content: clanTxt.cannotApprove, flags: MessageFlags.Ephemeral });
     return true;
   }
-  if (!(await assertModeratorQuotaInteraction(interaction))) return true;
+  if (!(await assertClanReviewQuotaInteraction(interaction))) return true;
 
   await interaction.deferUpdate();
 
@@ -239,7 +239,7 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
   );
 
   if (!isModeratorQuotaExempt(interaction.member)) {
-    recordModeratorQuotaUse(interaction.guild.id, interaction.user.id);
+    recordClanReviewQuotaUse(interaction.guild.id, interaction.user.id);
   }
 
   return true;
@@ -259,7 +259,7 @@ export async function handleClanModModal(interaction: ModalSubmitInteraction): P
     await interaction.reply({ content: clanTxt.cannotApprove, flags: MessageFlags.Ephemeral });
     return true;
   }
-  if (!(await assertModeratorQuotaInteraction(interaction))) return true;
+  if (!(await assertClanReviewQuotaInteraction(interaction))) return true;
 
   const reason = interaction.fields.getTextInputValue("reason").trim();
   request.status = "denied";
@@ -301,7 +301,7 @@ export async function handleClanModModal(interaction: ModalSubmitInteraction): P
   }
 
   if (!isModeratorQuotaExempt(interaction.member)) {
-    recordModeratorQuotaUse(interaction.guild.id, interaction.user.id);
+    recordClanReviewQuotaUse(interaction.guild.id, interaction.user.id);
   }
 
   return true;

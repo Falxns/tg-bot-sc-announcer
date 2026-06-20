@@ -3,9 +3,6 @@ import {
   ChatInputCommandInteraction,
   GuildMember,
   MessageFlags,
-  type InteractionReplyOptions,
-  type MessageComponentInteraction,
-  type ModalSubmitInteraction,
 } from "discord.js";
 import { DISCORD_ADMIN_ROLE_IDS, DISCORD_MODERATION_DAILY_QUOTA } from "../config";
 import { isDiscordAdmin } from "./guildPermissions";
@@ -54,37 +51,4 @@ export async function assertModeratorQuota(
 export function recordModeratorQuotaUse(guildId: string, staffUserId: string): void {
   if (DISCORD_MODERATION_DAILY_QUOTA <= 0) return;
   incrementModeratorDailyQuota(guildId, staffUserId, Date.now());
-}
-
-type QuotaGateInteraction = (MessageComponentInteraction | ModalSubmitInteraction) & {
-  guildId: string | null;
-  user: { id: string };
-  member: GuildMember | APIInteractionGuildMember | null;
-  reply: (options: InteractionReplyOptions) => Promise<unknown>;
-  followUp: (options: InteractionReplyOptions) => Promise<unknown>;
-  replied: boolean;
-  deferred: boolean;
-};
-
-/** Blocks clan-review buttons when daily punitive quota is exhausted. */
-export async function assertModeratorQuotaInteraction(interaction: QuotaGateInteraction): Promise<boolean> {
-  const limit = DISCORD_MODERATION_DAILY_QUOTA;
-  if (limit <= 0) return true;
-  if (isModeratorQuotaExempt(interaction.member)) return true;
-  const guildId = interaction.guildId;
-  if (!guildId) return true;
-
-  const { used } = getModeratorQuotaStatus(guildId, interaction.user.id);
-  if (used < limit) return true;
-
-  const payload: InteractionReplyOptions = {
-    content: modTxt.moderatorQuotaExceeded(used, limit),
-    flags: MessageFlags.Ephemeral,
-  };
-  if (interaction.replied || interaction.deferred) {
-    await interaction.followUp(payload).catch(() => undefined);
-  } else {
-    await interaction.reply(payload).catch(() => undefined);
-  }
-  return false;
 }

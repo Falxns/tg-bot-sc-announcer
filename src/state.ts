@@ -104,6 +104,8 @@ export const discordModerationLastViolationAt = new Map<string, number>();
 export const discordStaffSummaryCreatorLastAt = new Map<string, number>();
 /** Punitive slash uses per UTC day: `${guildId}:${staffUserId}:${YYYY-MM-DD}`. */
 export const discordModeratorDailyQuota = new Map<string, number>();
+/** Clan create review accept/deny per UTC day: `${guildId}:${staffUserId}:${YYYY-MM-DD}`. */
+export const discordClanReviewDailyQuota = new Map<string, number>();
 
 const ROLE_BUTTON_PREFIX = "role:";
 const ROLE_BUTTON_SINGLE_PREFIX = "roleone:";
@@ -145,6 +147,30 @@ export function recordModeratorDailyQuotaUse(guildId: string, staffUserId: strin
   discordModeratorDailyQuota.set(key, next);
   const yesterday = utcQuotaDateString(nowMs - 86_400_000);
   pruneModeratorQuotaBefore(yesterday);
+  return next;
+}
+
+export function getClanReviewDailyQuotaUsed(guildId: string, staffUserId: string, nowMs: number): number {
+  const key = moderatorDailyQuotaKey(guildId, staffUserId, utcQuotaDateString(nowMs));
+  const v = discordClanReviewDailyQuota.get(key);
+  return typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+}
+
+function pruneClanReviewQuotaBefore(keepDateUtc: string): void {
+  for (const key of discordClanReviewDailyQuota.keys()) {
+    const date = key.slice(key.lastIndexOf(":") + 1);
+    if (date < keepDateUtc) discordClanReviewDailyQuota.delete(key);
+  }
+}
+
+/** Increments today's clan create review count for staff. */
+export function recordClanReviewDailyQuotaUse(guildId: string, staffUserId: string, nowMs: number): number {
+  const date = utcQuotaDateString(nowMs);
+  const key = moderatorDailyQuotaKey(guildId, staffUserId, date);
+  const next = getClanReviewDailyQuotaUsed(guildId, staffUserId, nowMs) + 1;
+  discordClanReviewDailyQuota.set(key, next);
+  const yesterday = utcQuotaDateString(nowMs - 86_400_000);
+  pruneClanReviewQuotaBefore(yesterday);
   return next;
 }
 
@@ -502,6 +528,12 @@ export async function loadState(path: string): Promise<void> {
           if (v > 0) discordModeratorDailyQuota.set(k, v);
         }
       }
+      const clanReviewQuota = obj.discordClanReviewDailyQuota;
+      if (clanReviewQuota && typeof clanReviewQuota === "object" && !Array.isArray(clanReviewQuota)) {
+        for (const [k, v] of parseNumberMap(clanReviewQuota)) {
+          if (v > 0) discordClanReviewDailyQuota.set(k, v);
+        }
+      }
       loadSpamFilterFingerprintsFromState(obj.discordSpamFilterFingerprints);
 
       const voiceRooms = obj.tempVoiceRooms;
@@ -755,6 +787,7 @@ export async function saveState(path: string): Promise<boolean> {
       discordModerationLastViolationAt: Object.fromEntries(discordModerationLastViolationAt),
       discordStaffSummaryCreatorLastAt: Object.fromEntries(discordStaffSummaryCreatorLastAt),
       discordModeratorDailyQuota: Object.fromEntries(discordModeratorDailyQuota),
+      discordClanReviewDailyQuota: Object.fromEntries(discordClanReviewDailyQuota),
       discordSpamFilterFingerprints: serializeSpamFilterFingerprintsForState(),
       tempVoiceRooms: Object.fromEntries(tempVoiceRooms),
       tempVoicePanel: Object.fromEntries(tempVoicePanel),
