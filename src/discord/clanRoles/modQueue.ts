@@ -25,9 +25,15 @@ import { CLAN_MOD_PREFIX } from "./constants";
 import { formatUserList, newClanRequestId, sendInClanChannel } from "./helpers";
 import { deleteClanThreadMessage, notifyClanRequestOutcome } from "./notifications";
 import { handleClanLeaderMetaModButton } from "./leaderMeta";
+import { markModReviewMessageResolved } from "./modReviewEmbed";
 import { canResolveCreateRequest } from "./permissions";
 import { clanTxt } from "./strings";
 import type { ParsedCreateCommand } from "./textCommands";
+import {
+  assertModeratorQuotaInteraction,
+  isModeratorQuotaExempt,
+  recordModeratorQuotaUse,
+} from "../moderatorQuota";
 
 function modAcceptId(requestId: string): string {
   return `${CLAN_MOD_PREFIX}accept:${requestId}`;
@@ -163,6 +169,7 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
       await interaction.reply({ content: clanTxt.cannotApprove, flags: MessageFlags.Ephemeral });
       return true;
     }
+    if (!(await assertModeratorQuotaInteraction(interaction))) return true;
 
     const modal = new ModalBuilder().setCustomId(modDenyModalId(requestId)).setTitle(clanTxt.modDenyModalTitle);
     modal.addComponents(
@@ -195,6 +202,7 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
     await interaction.reply({ content: clanTxt.cannotApprove, flags: MessageFlags.Ephemeral });
     return true;
   }
+  if (!(await assertModeratorQuotaInteraction(interaction))) return true;
 
   await interaction.deferUpdate();
 
@@ -209,7 +217,7 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
   request.resolvedAt = Date.now();
   request.resolvedBy = interaction.user.id;
   setClanCreateRequest(request);
-  await interaction.message.edit({ components: [] }).catch(() => undefined);
+  await markModReviewMessageResolved(interaction.message, "approved", interaction.user.id);
   await deleteClanThreadMessage(
     interaction.guild,
     request.threadId,
@@ -230,6 +238,10 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
     clanTxt.auditCreate(interaction.member?.toString() ?? interaction.user.tag, request.clanName, request.memberIds.length),
   );
 
+  if (!isModeratorQuotaExempt(interaction.member)) {
+    recordModeratorQuotaUse(interaction.guild.id, interaction.user.id);
+  }
+
   return true;
 }
 
@@ -247,6 +259,7 @@ export async function handleClanModModal(interaction: ModalSubmitInteraction): P
     await interaction.reply({ content: clanTxt.cannotApprove, flags: MessageFlags.Ephemeral });
     return true;
   }
+  if (!(await assertModeratorQuotaInteraction(interaction))) return true;
 
   const reason = interaction.fields.getTextInputValue("reason").trim();
   request.status = "denied";
@@ -281,8 +294,14 @@ export async function handleClanModModal(interaction: ModalSubmitInteraction): P
     const ch = await interaction.guild.channels.fetch(request.reviewChannelId).catch(() => null);
     if (ch?.isTextBased()) {
       const msg = await ch.messages.fetch(request.reviewMessageId).catch(() => null);
-      await msg?.edit({ components: [] }).catch(() => undefined);
+      if (msg) {
+        await markModReviewMessageResolved(msg, "denied", interaction.user.id, reason);
+      }
     }
+  }
+
+  if (!isModeratorQuotaExempt(interaction.member)) {
+    recordModeratorQuotaUse(interaction.guild.id, interaction.user.id);
   }
 
   return true;

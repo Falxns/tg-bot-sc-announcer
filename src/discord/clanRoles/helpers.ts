@@ -75,6 +75,22 @@ export function parseLeaderIdsFromMentions(content: string, memberIds: string[])
   return leaders;
 }
 
+/** Mention snowflakes in left-to-right order (deduped). */
+export function parseMentionIdsInOrder(content: string): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  const re = /<@!?(\d+)>/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(content)) !== null) {
+    const id = match[1];
+    if (!seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
 export async function isClanRulesThread(guild: Guild, thread: ThreadChannel): Promise<boolean> {
   const rulesMsgId = DISCORD_CLAN_RULES_MESSAGE_ID;
   if (!rulesMsgId || !thread.parentId) return false;

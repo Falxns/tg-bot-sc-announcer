@@ -21,7 +21,7 @@ import type { Message } from "discord.js";
 import { DISCORD_ROLE_PANEL_CHANNEL_ID, LAST_SEEN_STATE_FILE, LOG_LEVEL } from "../config";
 import { isDiscordAdmin } from "./guildPermissions";
 import { handleVoicePanelCommand, voicePanelSlashCommand } from "./tempVoice/commands";
-import { clanPanelSlashCommand, clanslistSlashCommand, handleClanSlashCommand } from "./clanRoles/commands";
+import { clanPanelSlashCommand, clancheckSlashCommand, clanslistSlashCommand, handleClanSlashCommand } from "./clanRoles/commands";
 import { saveState, setDiscordRolePanel } from "../state";
 import {
   banSlashCommand,
@@ -470,6 +470,7 @@ export async function registerGuildCommands(guild: Guild): Promise<void> {
     voicePanelSlashCommand,
     clanPanelSlashCommand,
     clanslistSlashCommand,
+    clancheckSlashCommand,
   ];
   for (const cmd of commandPayloads) {
     assertSlashOptionCount(cmd, cmd.name);
@@ -1656,7 +1657,7 @@ export async function handleDiscordCommand(interaction: ChatInputCommandInteract
     return;
   }
 
-  if (interaction.commandName === "clanpanel" || interaction.commandName === "clanslist") {
+  if (interaction.commandName === "clanpanel" || interaction.commandName === "clanslist" || interaction.commandName === "clancheck") {
     await handleClanSlashCommand(interaction);
     return;
   }

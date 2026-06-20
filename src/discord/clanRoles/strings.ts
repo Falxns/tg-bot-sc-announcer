@@ -100,7 +100,9 @@ export const clanTxt = {
   leaderMetaApprovalPostFailed:
     "Не удалось опубликовать запрос на подтверждение. Проверьте, что у бота есть право «Отправка сообщений в ветках» в канале правил.",
   leaderMetaSentToMod: (clanName: string) =>
-    `Клан **${clanName}** — лидер клана подтвердил запрос на получение роли лидера. Запрос передан администраторам.`,
+    `Клан **${clanName}** — запрос на получение роли лидера передан администраторам.`,
+  leaderMetaGrantedDirect: (clanName: string, targetUserId: string) =>
+    `Роль лидера в клане **${clanName}** выдана <@${targetUserId}>.`,
   leaderMetaClanDeniedReply: (clanName: string) =>
     `Запрос на получение роли лидера в **${clanName}** отклонён лидером клана.`,
   alreadyClanLeader: "У участника уже есть роль лидера в этом клане.",
@@ -141,6 +143,11 @@ export const clanTxt = {
   modDenyModalTitle: "Отклонить запрос",
   modDenyReasonLabel: "Причина (необязательно)",
   modAlreadyResolved: "Запрос уже обработан.",
+  modReviewApproved: (resolver: string) => `**✅ Принято** — ${resolver}`,
+  modReviewDenied: (resolver: string, reason?: string) =>
+    reason?.trim()
+      ? `**❌ Отклонено** — ${resolver}\n**Причина:** ${reason.trim()}`
+      : `**❌ Отклонено** — ${resolver}`,
   modReviewChannelMissing: "Не настроен канал модерации запросов (DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID).",
 
   createSuccess: (roleName: string) => `Клановая роль **${roleName}** создана, участникам выданы роли.`,
@@ -158,6 +165,14 @@ export const clanTxt = {
   clanslistEmpty: "Клановые роли не найдены.",
   clanslistLine: (name: string, leaders: number, members: number) =>
     `**${name}** — лидеров: ${leaders}, участников с ролью: ${members}`,
+
+  clancheckLeadersWithoutClanTitle: "Лидеры без клановой роли",
+  clancheckMultiClanTitle: "Участники с 2+ клановыми ролями",
+  clancheckMultiLeadersTitle: "Кланы с более чем 2 лидерами",
+  clancheckEmpty: "Нарушений не найдено.",
+  clancheckMultiClanLine: (member: string, roles: string[]) =>
+    `${member} — ${roles.join(", ")}`,
+  clancheckMultiLeadersLine: (roleName: string, count: number) => `**${roleName}** — лидеров: ${count}`,
 
   auditGrant: (mod: string, target: string, role: string) =>
     `[Клан] ${mod} одобрил выдачу **${role}** → ${target}`,

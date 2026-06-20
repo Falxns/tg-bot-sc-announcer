@@ -1,6 +1,6 @@
 import type { Guild, GuildMember } from "discord.js";
 import { DISCORD_ADMIN_ROLE_IDS } from "../../config";
-import { memberRoleIds } from "../guildPermissions";
+import { isDiscordModerator, memberRoleIds } from "../guildPermissions";
 import type { ClanCreateRequest, ClanGrantRequest, ClanLeaderMetaRequest } from "../types";
 import { isClanLeaderFor } from "./resolver";
 
@@ -15,8 +15,9 @@ export function canApproveGrantRequest(member: GuildMember, request: ClanGrantRe
   return isClanLeaderFor(member, request.clanRoleId);
 }
 
+/** Clan creation review — admins and line moderators (`DISCORD_MODERATOR_ROLE_IDS`). */
 export function canApproveCreateRequest(member: GuildMember): boolean {
-  return isClanModerator(member);
+  return isClanModerator(member) || isDiscordModerator(member);
 }
 
 export function canResolveCreateRequest(

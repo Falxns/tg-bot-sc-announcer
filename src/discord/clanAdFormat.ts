@@ -1,4 +1,5 @@
 import { GuildMember, Message, PartialMessage } from "discord.js";
+import { MessageReferenceType } from "discord-api-types/v10";
 import {
   DISCORD_CLAN_AD_FORMAT_CHANNELS,
   DISCORD_CLAN_AD_FORMAT_GRACE_MS,
@@ -18,7 +19,8 @@ export type ClanAdValidationError =
   | { code: "missing_section"; section: number; blockIndex?: number }
   | { code: "empty_required"; section: number; blockIndex?: number }
   | { code: "invalid_enum"; section: number; blockIndex?: number }
-  | { code: "invalid_block_count"; expected: "1-3" | "1"; got: number };
+  | { code: "invalid_block_count"; expected: "1-3" | "1"; got: number }
+  | { code: "outer_text" };
 
 type ParsedSection = { number: number; value: string };
 
@@ -86,6 +88,72 @@ export function parseNumberedSections(content: string): ParsedSection[] {
     sections.push({ number, value: normalized.slice(valueStart, valueEnd).trim() });
   }
   return sections;
+}
+
+type SectionHeader = { number: number; valueStart: number; matchStart: number };
+
+function collectSectionHeaders(content: string): SectionHeader[] {
+  const normalized = normalizeAdContent(content);
+  const headers: SectionHeader[] = [];
+  SECTION_HEADER_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = SECTION_HEADER_RE.exec(normalized)) !== null) {
+    const number = parseInt(match[1], 10);
+    if (!Number.isFinite(number) || number < 1 || number > 11) continue;
+    headers.push({
+      number,
+      valueStart: match.index + match[0].length,
+      matchStart: match.index,
+    });
+  }
+  return headers;
+}
+
+/** Text to validate: direct content or forwarded snapshot when the wrapper is empty. */
+export function resolveClanAdContent(message: Message | PartialMessage): string {
+  const direct = message.content ?? "";
+  const snapshotMsg = message.messageSnapshots?.first?.();
+  const snapshotContent = snapshotMsg?.content ?? "";
+  const isForward = message.reference?.type === MessageReferenceType.Forward;
+
+  if (isForward && snapshotContent.trim()) {
+    return snapshotContent;
+  }
+  if (!direct.trim() && snapshotContent.trim()) {
+    return snapshotContent;
+  }
+  if (direct.trim() && snapshotContent.trim()) {
+    const directBlocks = splitSectionsIntoBlocks(parseNumberedSections(direct));
+    const snapshotBlocks = splitSectionsIntoBlocks(parseNumberedSections(snapshotContent));
+    if (directBlocks.length === 0 && snapshotBlocks.length > 0) {
+      return snapshotContent;
+    }
+  }
+  return direct;
+}
+
+function validatePoiskOuterText(content: string, errors: ClanAdValidationError[]): void {
+  const normalized = normalizeAdContent(content);
+  const headers = collectSectionHeaders(normalized);
+  const firstBlockIdx = headers.findIndex((h) => h.number === 1);
+  if (firstBlockIdx < 0) return;
+
+  let endHeaderIdx = headers.length;
+  for (let i = firstBlockIdx + 1; i < headers.length; i++) {
+    if (headers[i].number === 1) {
+      endHeaderIdx = i;
+      break;
+    }
+  }
+
+  const templateStart = headers[firstBlockIdx].matchStart;
+  const templateEnd =
+    endHeaderIdx < headers.length ? headers[endHeaderIdx].matchStart : normalized.length;
+  const before = normalized.slice(0, templateStart).trim();
+  const after = normalized.slice(templateEnd).trim();
+  if (before || after) {
+    errors.push({ code: "outer_text" });
+  }
 }
 
 export function splitSectionsIntoBlocks(sections: ParsedSection[]): Map<number, string>[] {
@@ -217,6 +285,7 @@ function validatePoiskMessage(content: string): ClanAdValidationError[] {
     errors.push({ code: "invalid_block_count", expected: "1", got: blocks.length });
   }
 
+  validatePoiskOuterText(content, errors);
   validatePoiskBlock(blocks[0], 0, errors);
   return errors;
 }
@@ -245,6 +314,8 @@ function errorHint(error: ClanAdValidationError, formatId: ClanAdFormatId): stri
       return error.expected === "1-3"
         ? fmtTxt.hintBlockCountNabor(error.got)
         : fmtTxt.hintBlockCountPoisk(error.got);
+    case "outer_text":
+      return fmtTxt.hintOuterText;
     default:
       return fmtTxt.hintGeneric;
   }
@@ -266,8 +337,12 @@ export function formatClanAdValidationErrors(
   lines.push(fmtTxt.editGraceHint(DISCORD_CLAN_AD_FORMAT_GRACE_MS));
   lines.push("");
 
-  const messageLevel = errors.filter((e) => e.code === "invalid_block_count");
-  const fieldErrors = errors.filter((e) => e.code !== "invalid_block_count");
+  const messageLevel = errors.filter(
+    (e) => e.code === "invalid_block_count" || e.code === "outer_text",
+  );
+  const fieldErrors = errors.filter(
+    (e) => e.code !== "invalid_block_count" && e.code !== "outer_text",
+  );
 
   for (const err of messageLevel) {
     lines.push(`• ${errorHint(err, formatId)}`);
@@ -473,7 +548,8 @@ function evaluateClanAdMessage(message: Message): { ok: true } | { ok: false; er
   const formatId = DISCORD_CLAN_AD_FORMAT_CHANNELS[message.channelId];
   if (!formatId) return { ok: true };
 
-  const result = validateClanAdMessage(message.content, formatId);
+  const content = resolveClanAdContent(message);
+  const result = validateClanAdMessage(content, formatId);
   if (result.ok) return { ok: true };
 
   const pinUrl = DISCORD_CLAN_AD_FORMAT_PIN_URLS[formatId];
@@ -507,7 +583,7 @@ export async function handleClanAdFormatMessage(message: Message): Promise<boole
     return false;
   }
 
-  if (formatId === "poisk_klanov" && looksLikeNaborForm(message.content)) {
+  if (formatId === "poisk_klanov" && looksLikeNaborForm(resolveClanAdContent(message))) {
     await handleNaborPostedInPoiskChannel(message, member);
     return true;
   }
@@ -535,7 +611,10 @@ export async function handleClanAdFormatMessageUpdate(
   const messageId = newMessage.id;
 
   const contentChanged = oldMessage.content !== newMessage.content;
-  if (!contentChanged) return false;
+  const oldAdContent = resolveClanAdContent(oldMessage as Message);
+  const newAdContent = resolveClanAdContent(newMessage as Message);
+  const adContentChanged = oldAdContent !== newAdContent;
+  if (!contentChanged && !adContentChanged) return false;
 
   const message = await fetchFullMessage(newMessage);
   if (!message) return false;
@@ -547,7 +626,7 @@ export async function handleClanAdFormatMessageUpdate(
     return hadPending;
   }
 
-  if (formatId === "poisk_klanov" && looksLikeNaborForm(message.content)) {
+  if (formatId === "poisk_klanov" && looksLikeNaborForm(resolveClanAdContent(message))) {
     await handleNaborPostedInPoiskChannel(message, member);
     return true;
   }

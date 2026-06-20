@@ -6,7 +6,7 @@ import {
 import type { ClanColorPreset } from "../../config";
 import { formatClanColorPresetOptions, resolveClanCreateColor, splitClanQueryAndColorInput } from "./colorPresets";
 import { CLAN_NAME_MAX_LEN, CLAN_NAME_MIN_LEN, MAX_CLAN_LEADERS } from "./constants";
-import { isClanTierEligibleForCreate, parseClanTier, parseLeaderIdsFromMentions, validateClanName } from "./helpers";
+import { isClanTierEligibleForCreate, parseClanTier, parseLeaderIdsFromMentions, parseMentionIdsInOrder, validateClanName } from "./helpers";
 import { isClanModerator } from "./permissions";
 import {
   getMemberClanRoleCapConflict,
@@ -468,6 +468,7 @@ function parseCreateCommand(
   guild: Guild,
   content: string,
   mentions: MessageMentions,
+  applicantId: string,
 ): ParsedCreateCommand | ClanTextParseError {
   const lines = content.split(/\r?\n/).map((l) => l.trim());
   if (lines.length < 5 || !CREATE_HEADER.test(lines[0] ?? "")) {
@@ -477,7 +478,7 @@ function parseCreateCommand(
   const clanName = lines[1]?.trim() ?? "";
   const tierInput = lines[2]?.trim() ?? "";
   const colorLabel = lines[3]?.trim() ?? "";
-  const rosterLines = lines.slice(4).join("\n");
+  const rosterText = lines.slice(4).join("\n");
 
   const invalid = validateClanName(clanName, CLAN_NAME_MIN_LEN, CLAN_NAME_MAX_LEN);
   if (invalid === "brackets") {
@@ -507,7 +508,16 @@ function parseCreateCommand(
     return { kind: "error", message: clanTxt.cmdCreateInvalidColor(colorLabel, formatClanColorPresetOptions()) };
   }
 
-  const memberIds = [...new Set(mentions.users.keys())];
+  const mentionSet = new Set(mentions.users.keys());
+  const orderedFromText = parseMentionIdsInOrder(rosterText);
+  const memberIds: string[] = [];
+  for (const id of orderedFromText) {
+    if (mentionSet.has(id)) memberIds.push(id);
+  }
+  for (const id of mentionSet) {
+    if (!memberIds.includes(id)) memberIds.push(id);
+  }
+
   if (memberIds.length < DISCORD_CLAN_ROSTER_MIN || memberIds.length > DISCORD_CLAN_ROSTER_MAX) {
     return { kind: "error", message: clanTxt.createRosterInvalid(DISCORD_CLAN_ROSTER_MIN, DISCORD_CLAN_ROSTER_MAX) };
   }
@@ -521,9 +531,9 @@ function parseCreateCommand(
     return { kind: "error", message: clanTxt.createRosterInvalid(DISCORD_CLAN_ROSTER_MIN, DISCORD_CLAN_ROSTER_MAX) };
   }
 
-  let leaders = parseLeaderIdsFromMentions(rosterLines, onServer);
+  let leaders = parseLeaderIdsFromMentions(rosterText, onServer);
   if (leaders.length === 0 && onServer.length >= 1) {
-    leaders = [onServer[0]];
+    leaders = onServer.includes(applicantId) ? [applicantId] : [onServer[0]];
   }
   if (leaders.length < 1 || leaders.length > MAX_CLAN_LEADERS) {
     return { kind: "error", message: clanTxt.createLeadersInvalid };
@@ -651,7 +661,7 @@ export function parseClanTextCommand(
   if (!trimmed) return null;
 
   if (CREATE_HEADER.test(trimmed.split(/\r?\n/)[0] ?? "")) {
-    return parseCreateCommand(guild, content, mentions);
+    return parseCreateCommand(guild, content, mentions, member.id);
   }
 
   if (GRANT_PREFIX.test(trimmed)) {

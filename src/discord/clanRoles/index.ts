@@ -7,7 +7,7 @@ export {
   isClanLeaderMetaClanCustomId,
 } from "./leaderMeta";
 export { handleClanModButton, handleClanModModal, isClanModCustomId } from "./modQueue";
-export { handleClanSlashCommand, clanPanelSlashCommand, clanslistSlashCommand } from "./commands";
+export { handleClanSlashCommand, clanPanelSlashCommand, clanslistSlashCommand, clancheckSlashCommand } from "./commands";
 export { handleClanRulesMessage } from "./textHandler";
 export { startClanEnforcementScheduler, stopClanEnforcementScheduler } from "./enforcement";
 export { startClanThreadCleanupScheduler, stopClanThreadCleanupScheduler } from "./threadCleanup";

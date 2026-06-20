@@ -214,6 +214,27 @@ export async function submitLeaderMetaGrantRequest(
     return clanTxt.grantLeaderCap(MAX_CLAN_LEADERS);
   }
 
+  const requester = await guild.members.fetch(requesterId).catch(() => null);
+  if (requester && isClanLeaderFor(requester, clanRole.id)) {
+    const result = await grantLeaderMetaOnly(guild, target, clanRole);
+    if (!result.ok) return result.error;
+    await notifyClanRequestOutcome(
+      guild,
+      dest.id,
+      sourceMessageId,
+      clanTxt.leaderMetaGrantedDirect(clanRole.name, targetUserId),
+      clanApprovalOutcomeMentionIds(
+        { requesterUserId: requesterId, targetUserId },
+        requester,
+      ),
+    );
+    await postClanAuditLine(
+      guild,
+      clanTxt.auditGrantLeaderMeta(requester.toString(), target.toString(), clanRole.name),
+    );
+    return null;
+  }
+
   const request: ClanLeaderMetaRequest = {
     id: newClanRequestId(),
     guildId: guild.id,
