@@ -90,7 +90,7 @@ export function parseNumberedSections(content: string): ParsedSection[] {
   return sections;
 }
 
-type SectionHeader = { number: number; valueStart: number; matchStart: number };
+type SectionHeader = { number: number; matchStart: number };
 
 function collectSectionHeaders(content: string): SectionHeader[] {
   const normalized = normalizeAdContent(content);
@@ -100,13 +100,57 @@ function collectSectionHeaders(content: string): SectionHeader[] {
   while ((match = SECTION_HEADER_RE.exec(normalized)) !== null) {
     const number = parseInt(match[1], 10);
     if (!Number.isFinite(number) || number < 1 || number > 11) continue;
-    headers.push({
-      number,
-      valueStart: match.index + match[0].length,
-      matchStart: match.index,
-    });
+    headers.push({ number, matchStart: match.index });
   }
   return headers;
+}
+
+function getFirstPoiskBlockHeaders(headers: SectionHeader[]): SectionHeader[] | null {
+  const start = headers.findIndex((h) => h.number === 1);
+  if (start < 0) return null;
+  let end = headers.length;
+  for (let i = start + 1; i < headers.length; i++) {
+    if (headers[i].number === 1) {
+      end = i;
+      break;
+    }
+  }
+  return headers.slice(start, end);
+}
+
+/**
+ * Trailing outer text below the form: only after a blank line following the last section header line.
+ * Consecutive lines without a blank line are treated as a multi-line value for the last field.
+ */
+function hasPoiskOuterBelow(normalized: string, lastHeaderMatchStart: number): boolean {
+  const tail = normalized.slice(lastHeaderMatchStart);
+  const firstNewline = tail.indexOf("\n");
+  if (firstNewline < 0) return false;
+
+  const afterHeaderLine = tail.slice(firstNewline + 1);
+  if (!afterHeaderLine.trim()) return false;
+
+  // Empty line right after the last header line, then non-empty text
+  if (/^(?:[ \t]*\n)+[ \t]*\S/.test(afterHeaderLine)) {
+    return true;
+  }
+
+  // Blank line between continuation lines and trailing prose
+  return /\n[ \t]*\n[ \t]*\S/.test(afterHeaderLine);
+}
+
+function validatePoiskOuterText(content: string, errors: ClanAdValidationError[]): void {
+  const normalized = normalizeAdContent(content);
+  const blockHeaders = getFirstPoiskBlockHeaders(collectSectionHeaders(normalized));
+  if (!blockHeaders || blockHeaders.length === 0) return;
+
+  const before = normalized.slice(0, blockHeaders[0].matchStart).trim();
+  const lastHeader = blockHeaders[blockHeaders.length - 1];
+  const outerBelow = hasPoiskOuterBelow(normalized, lastHeader.matchStart);
+
+  if (before || outerBelow) {
+    errors.push({ code: "outer_text" });
+  }
 }
 
 /** Text to validate: direct content or forwarded snapshot when the wrapper is empty. */
@@ -130,30 +174,6 @@ export function resolveClanAdContent(message: Message | PartialMessage): string 
     }
   }
   return direct;
-}
-
-function validatePoiskOuterText(content: string, errors: ClanAdValidationError[]): void {
-  const normalized = normalizeAdContent(content);
-  const headers = collectSectionHeaders(normalized);
-  const firstBlockIdx = headers.findIndex((h) => h.number === 1);
-  if (firstBlockIdx < 0) return;
-
-  let endHeaderIdx = headers.length;
-  for (let i = firstBlockIdx + 1; i < headers.length; i++) {
-    if (headers[i].number === 1) {
-      endHeaderIdx = i;
-      break;
-    }
-  }
-
-  const templateStart = headers[firstBlockIdx].matchStart;
-  const templateEnd =
-    endHeaderIdx < headers.length ? headers[endHeaderIdx].matchStart : normalized.length;
-  const before = normalized.slice(0, templateStart).trim();
-  const after = normalized.slice(templateEnd).trim();
-  if (before || after) {
-    errors.push({ code: "outer_text" });
-  }
 }
 
 export function splitSectionsIntoBlocks(sections: ParsedSection[]): Map<number, string>[] {
