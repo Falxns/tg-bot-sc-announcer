@@ -468,7 +468,6 @@ function parseCreateCommand(
   guild: Guild,
   content: string,
   mentions: MessageMentions,
-  applicantId: string,
 ): ParsedCreateCommand | ClanTextParseError {
   const lines = content.split(/\r?\n/).map((l) => l.trim());
   if (lines.length < 5 || !CREATE_HEADER.test(lines[0] ?? "")) {
@@ -533,7 +532,7 @@ function parseCreateCommand(
 
   let leaders = parseLeaderIdsFromMentions(rosterText, onServer);
   if (leaders.length === 0 && onServer.length >= 1) {
-    leaders = onServer.includes(applicantId) ? [applicantId] : [onServer[0]];
+    leaders = [onServer[0]];
   }
   if (leaders.length < 1 || leaders.length > MAX_CLAN_LEADERS) {
     return { kind: "error", message: clanTxt.createLeadersInvalid };
@@ -661,7 +660,7 @@ export function parseClanTextCommand(
   if (!trimmed) return null;
 
   if (CREATE_HEADER.test(trimmed.split(/\r?\n/)[0] ?? "")) {
-    return parseCreateCommand(guild, content, mentions, member.id);
+    return parseCreateCommand(guild, content, mentions);
   }
 
   if (GRANT_PREFIX.test(trimmed)) {
