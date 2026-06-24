@@ -8,9 +8,14 @@ import {
   performDirectLeaderMetaRemove,
   submitLeaderMetaGrantRequest,
 } from "./leaderMeta";
+import {
+  performDirectRecruiterMetaRemove,
+  submitRecruiterMetaGrantRequest,
+} from "./recruiterMeta";
 import { performDirectRemove, submitGrantRequest } from "./panel";
 import { sendClanRosterDm } from "./roster";
 import { changeClanRoleColor } from "./colorChange";
+import { transferClanLeadership, postClanAuditLine } from "./actions";
 import { ensureGuildMembersCached } from "./resolver";
 import { isClanCommandMessage, parseClanTextCommand } from "./textCommands";
 import { notifyClanRequestOutcome } from "./notifications";
@@ -144,6 +149,71 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
         ? clanTxt.notifyRemoveLeaderSelf(parsed.clanRole.name)
         : clanTxt.notifyRemoveLeaderTarget(parsed.clanRole.name),
       [parsed.targetUserId],
+    );
+    return true;
+  }
+
+  if (parsed.kind === "grant_recruiter") {
+    const err = await submitRecruiterMetaGrantRequest(
+      message.guild,
+      message.channel,
+      message.author.id,
+      parsed.clanRole,
+      parsed.targetUserId,
+      message.id,
+    );
+    if (err) {
+      await replyClanCommandError(message, err);
+      return true;
+    }
+    return true;
+  }
+
+  if (parsed.kind === "remove_recruiter") {
+    const removed = await performDirectRecruiterMetaRemove(
+      message.guild,
+      member,
+      parsed.clanRole,
+      parsed.targetUserId,
+    );
+    if (!removed.ok) {
+      await replyClanCommandError(message, removed.error);
+      return true;
+    }
+    const isSelf = parsed.targetUserId === message.author.id;
+    await notifyClanRequestOutcome(
+      message.guild,
+      message.channel.id,
+      message.id,
+      isSelf
+        ? clanTxt.notifyRemoveRecruiterSelf(parsed.clanRole.name)
+        : clanTxt.notifyRemoveRecruiterTarget(parsed.clanRole.name),
+      [parsed.targetUserId],
+    );
+    return true;
+  }
+
+  if (parsed.kind === "transfer_leader") {
+    const target = await message.guild.members.fetch(parsed.targetUserId).catch(() => null);
+    if (!target) {
+      await replyClanCommandError(message, clanTxt.targetMissing);
+      return true;
+    }
+    const result = await transferClanLeadership(message.guild, member, target, parsed.clanRole);
+    if (!result.ok) {
+      await replyClanCommandError(message, result.error);
+      return true;
+    }
+    await notifyClanRequestOutcome(
+      message.guild,
+      message.channel.id,
+      message.id,
+      clanTxt.notifyTransferLeader(parsed.clanRole.name, parsed.targetUserId),
+      [parsed.targetUserId, message.author.id],
+    );
+    await postClanAuditLine(
+      message.guild,
+      clanTxt.auditTransferLeader(member.toString(), target.toString(), parsed.clanRole.name),
     );
     return true;
   }

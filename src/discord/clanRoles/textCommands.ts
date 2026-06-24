@@ -5,13 +5,24 @@ import {
 } from "../../config";
 import type { ClanColorPreset } from "../../config";
 import { formatClanColorPresetOptions, resolveClanCreateColor, splitClanQueryAndColorInput } from "./colorPresets";
-import { CLAN_NAME_MAX_LEN, CLAN_NAME_MIN_LEN, MAX_CLAN_LEADERS } from "./constants";
-import { isClanTierEligibleForCreate, parseClanTier, parseLeaderIdsFromMentions, parseMentionIdsInOrder, validateClanName } from "./helpers";
+import { CLAN_NAME_MAX_LEN, CLAN_NAME_MIN_LEN, MAX_CLAN_LEADERS, MAX_CLAN_RECRUITERS } from "./constants";
+import {
+  isClanTierEligibleForCreate,
+  parseClanTier,
+  parseLeaderIdsFromMentions,
+  parseMentionIdsInOrder,
+  parseRecruiterIdsFromMentions,
+  validateClanName,
+} from "./helpers";
 import { isClanModerator } from "./permissions";
 import {
   getMemberClanRoleCapConflict,
   isClanLeaderFor,
+  isClanRecruiterFor,
+  isClanStaffFor,
+  listLedClanRoles,
   listMemberClanRoles,
+  listStaffClanRoles,
   resolveClanRole,
 } from "./resolver";
 import { clanTxt } from "./strings";
@@ -40,6 +51,24 @@ export type ParsedRemoveLeaderCommand = {
   targetUserId: string;
 };
 
+export type ParsedRemoveRecruiterCommand = {
+  kind: "remove_recruiter";
+  clanRole: Role;
+  targetUserId: string;
+};
+
+export type ParsedGrantRecruiterCommand = {
+  kind: "grant_recruiter";
+  clanRole: Role;
+  targetUserId: string;
+};
+
+export type ParsedTransferLeaderCommand = {
+  kind: "transfer_leader";
+  clanRole: Role;
+  targetUserId: string;
+};
+
 export type ParsedCreateCommand = {
   kind: "create";
   clanName: string;
@@ -47,6 +76,7 @@ export type ParsedCreateCommand = {
   colorPreset: ClanColorPreset;
   memberIds: string[];
   leaderIds: string[];
+  recruiterIds: string[];
 };
 
 export type ParsedRosterCommand = {
@@ -70,6 +100,9 @@ export type ClanTextCommand =
   | ParsedRemoveCommand
   | ParsedGrantLeaderCommand
   | ParsedRemoveLeaderCommand
+  | ParsedGrantRecruiterCommand
+  | ParsedRemoveRecruiterCommand
+  | ParsedTransferLeaderCommand
   | ParsedCreateCommand
   | ParsedRosterCommand
   | ParsedChangeColorCommand;
@@ -78,6 +111,9 @@ const GRANT_PREFIX = /^\+клан\s*:?\s*/i;
 const REMOVE_PREFIX = /^-клан\s*:?\s*/i;
 const GRANT_LEADER_PREFIX = /^\+лидер\s*:?\s*/i;
 const REMOVE_LEADER_PREFIX = /^-лидер\s*:?\s*/i;
+const GRANT_RECRUITER_PREFIX = /^\+рекрутер\s*:?\s*/i;
+const REMOVE_RECRUITER_PREFIX = /^-рекрутер\s*:?\s*/i;
+const TRANSFER_LEADER_PREFIX = /^!передать\s+лидера\s*:?\s*/i;
 const CREATE_HEADER = /^!создать\s*$/i;
 const ROSTER_PREFIX = /^!состав\s*:?\s*/i;
 const CHANGE_COLOR_PREFIX = /^!цвет\s*:?\s*/i;
@@ -121,8 +157,12 @@ function leaderRemoveClanRoleTargetBlocked(
   return null;
 }
 
-function listLedClanRoles(guild: Guild, member: GuildMember): Role[] {
-  return listMemberClanRoles(guild, member).filter((role) => isClanLeaderFor(member, role.id));
+function listLedClanRolesLocal(guild: Guild, member: GuildMember): Role[] {
+  return listLedClanRoles(guild, member);
+}
+
+function listStaffClanRolesLocal(guild: Guild, member: GuildMember): Role[] {
+  return listStaffClanRoles(guild, member);
 }
 
 function validateGrantTargetCap(
@@ -164,11 +204,11 @@ function parseGrantCommand(
   const targetMentionId = firstMentionId(mentions);
   const clanQuery = stripMentions(body);
   const isMod = isClanModerator(member);
-  const ledClans = listLedClanRoles(guild, member);
+  const staffClans = listStaffClanRolesLocal(guild, member);
 
   if (targetMentionId) {
-    if (!isMod && ledClans.length === 0) {
-      return { kind: "error", message: clanTxt.cmdTargetOnlyLeaderMod };
+    if (!isMod && staffClans.length === 0) {
+      return { kind: "error", message: clanTxt.cmdTargetOnlyStaffMod };
     }
 
     if (clanQuery) {
@@ -177,11 +217,11 @@ function parseGrantCommand(
       return finishGrant(guild, member, resolved, targetMentionId);
     }
 
-    if (ledClans.length === 1) {
-      return finishGrant(guild, member, ledClans[0], targetMentionId);
+    if (staffClans.length === 1) {
+      return finishGrant(guild, member, staffClans[0], targetMentionId);
     }
-    if (ledClans.length > 1) {
-      return { kind: "error", message: clanTxt.cmdLeaderMultipleClans };
+    if (staffClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdStaffMultipleClans };
     }
 
     const targetMember = guild.members.cache.get(targetMentionId);
@@ -217,7 +257,7 @@ function parseRemoveCommand(
   const clanQuery = stripMentions(body);
   const isMod = isClanModerator(member);
   const ownClans = listMemberClanRoles(guild, member);
-  const ledClans = listLedClanRoles(guild, member);
+  const staffClans = listStaffClanRolesLocal(guild, member);
 
   if (!targetMentionId && !clanQuery) {
     if (isMod) {
@@ -233,8 +273,8 @@ function parseRemoveCommand(
   }
 
   if (targetMentionId && !clanQuery) {
-    if (ledClans.length === 1) {
-      const role = ledClans[0];
+    if (staffClans.length === 1) {
+      const role = staffClans[0];
       const target = guild.members.cache.get(targetMentionId);
       if (!target?.roles.cache.has(role.id)) {
         return { kind: "error", message: clanTxt.cmdTargetNotInClan };
@@ -243,8 +283,8 @@ function parseRemoveCommand(
       if (leaderBlock) return leaderBlock;
       return { kind: "remove", clanRole: role, targetUserId: targetMentionId };
     }
-    if (ledClans.length > 1) {
-      return { kind: "error", message: clanTxt.cmdLeaderMultipleClans };
+    if (staffClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdStaffMultipleClans };
     }
     if (isMod) {
       const target = guild.members.cache.get(targetMentionId);
@@ -276,9 +316,9 @@ function parseRemoveCommand(
       return { kind: "error", message: clanTxt.removeNotYourClanRole };
     }
   } else {
-    const isLeader = isClanLeaderFor(member, resolved.id);
-    if (!isMod && !isLeader) {
-      return { kind: "error", message: clanTxt.cmdTargetOnlyLeaderMod };
+    const isStaff = isClanStaffFor(member, resolved.id);
+    if (!isMod && !isStaff) {
+      return { kind: "error", message: clanTxt.cmdTargetOnlyStaffMod };
     }
     const target = guild.members.cache.get(targetUserId);
     if (!target?.roles.cache.has(resolved.id)) {
@@ -313,14 +353,8 @@ function parseGrantLeaderCommand(
 ): ParsedGrantLeaderCommand | ClanTextParseError {
   const targetMentionId = firstMentionId(mentions);
   const clanQuery = stripMentions(body);
-  const isMod = isClanModerator(member);
-  const ledClans = listLedClanRoles(guild, member);
 
   if (targetMentionId) {
-    if (!isMod && ledClans.length === 0) {
-      return { kind: "error", message: clanTxt.cmdTargetOnlyLeaderMod };
-    }
-
     if (clanQuery) {
       const resolved = resolveClanQuery(guild, clanQuery);
       if (isParseError(resolved)) return resolved;
@@ -332,21 +366,6 @@ function parseGrantLeaderCommand(
         return { kind: "error", message: clanTxt.alreadyClanLeader };
       }
       return { kind: "grant_leader", clanRole: resolved, targetUserId: targetMentionId };
-    }
-
-    if (ledClans.length === 1) {
-      const role = ledClans[0];
-      const target = guild.members.cache.get(targetMentionId);
-      if (!target?.roles.cache.has(role.id)) {
-        return leaderMetaNotInClanError(role.name, targetMentionId, member.id);
-      }
-      if (isClanLeaderFor(target, role.id)) {
-        return { kind: "error", message: clanTxt.alreadyClanLeader };
-      }
-      return { kind: "grant_leader", clanRole: role, targetUserId: targetMentionId };
-    }
-    if (ledClans.length > 1) {
-      return { kind: "error", message: clanTxt.cmdLeaderMultipleClans };
     }
 
     const targetMember = guild.members.cache.get(targetMentionId);
@@ -401,7 +420,7 @@ function parseRemoveLeaderCommand(
   const targetMentionId = firstMentionId(mentions);
   const clanQuery = stripMentions(body);
   const isMod = isClanModerator(member);
-  const ledClans = listLedClanRoles(guild, member);
+  const ledClans = listLedClanRolesLocal(guild, member);
 
   if (!isMod && targetMentionId && targetMentionId !== member.id) {
     return { kind: "error", message: clanTxt.cmdLeaderRemoveLeaderSelfOnly };
@@ -541,6 +560,18 @@ function parseCreateCommand(
     return { kind: "error", message: clanTxt.createLeadersInvalid };
   }
 
+  const recruiters = parseRecruiterIdsFromMentions(rosterText, onServer);
+  if (recruiters.length > MAX_CLAN_RECRUITERS) {
+    return { kind: "error", message: clanTxt.createRecruitersInvalid };
+  }
+  const leaderSet = new Set(leaders);
+  if (recruiters.some((id) => leaderSet.has(id))) {
+    return { kind: "error", message: clanTxt.createLeaderRecruiterOverlap };
+  }
+  if (!recruiters.every((id) => onServer.includes(id))) {
+    return { kind: "error", message: clanTxt.createRecruitersInvalid };
+  }
+
   for (const id of onServer) {
     const m = guild.members.cache.get(id);
     if (!m) continue;
@@ -557,7 +588,247 @@ function parseCreateCommand(
     colorPreset: preset,
     memberIds: onServer,
     leaderIds: leaders,
+    recruiterIds: recruiters,
   };
+}
+
+function recruiterMetaNotInClanError(
+  clanName: string,
+  targetUserId: string,
+  actorId: string,
+): ClanTextParseError {
+  return {
+    kind: "error",
+    message:
+      targetUserId === actorId
+        ? clanTxt.recruiterMetaNeedsClanFirstSelf(clanName)
+        : clanTxt.recruiterMetaNeedsClanFirstTarget(clanName),
+  };
+}
+
+function parseGrantRecruiterCommand(
+  guild: Guild,
+  member: GuildMember,
+  body: string,
+  mentions: MessageMentions,
+): ParsedGrantRecruiterCommand | ClanTextParseError {
+  const targetMentionId = firstMentionId(mentions);
+  const clanQuery = stripMentions(body);
+  const isMod = isClanModerator(member);
+  const ledClans = listLedClanRolesLocal(guild, member);
+
+  if (targetMentionId) {
+    if (clanQuery) {
+      const resolved = resolveClanQuery(guild, clanQuery);
+      if (isParseError(resolved)) return resolved;
+      const target = guild.members.cache.get(targetMentionId);
+      if (!target?.roles.cache.has(resolved.id)) {
+        return recruiterMetaNotInClanError(resolved.name, targetMentionId, member.id);
+      }
+      if (isClanLeaderFor(target, resolved.id)) {
+        return { kind: "error", message: clanTxt.leaderCannotBeRecruiter };
+      }
+      if (isClanRecruiterFor(target, resolved.id)) {
+        return { kind: "error", message: clanTxt.alreadyClanRecruiter };
+      }
+      return { kind: "grant_recruiter", clanRole: resolved, targetUserId: targetMentionId };
+    }
+
+    if (ledClans.length === 1) {
+      const role = ledClans[0];
+      const target = guild.members.cache.get(targetMentionId);
+      if (!target?.roles.cache.has(role.id)) {
+        return recruiterMetaNotInClanError(role.name, targetMentionId, member.id);
+      }
+      if (isClanLeaderFor(target, role.id)) {
+        return { kind: "error", message: clanTxt.leaderCannotBeRecruiter };
+      }
+      if (isClanRecruiterFor(target, role.id)) {
+        return { kind: "error", message: clanTxt.alreadyClanRecruiter };
+      }
+      return { kind: "grant_recruiter", clanRole: role, targetUserId: targetMentionId };
+    }
+    if (ledClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdLeaderMultipleClans };
+    }
+
+    const targetMember = guild.members.cache.get(targetMentionId);
+    if (!targetMember) {
+      return { kind: "error", message: clanTxt.targetMissing };
+    }
+    const targetClans = listMemberClanRoles(guild, targetMember);
+    if (targetClans.length === 1) {
+      if (isClanLeaderFor(targetMember, targetClans[0].id)) {
+        return { kind: "error", message: clanTxt.leaderCannotBeRecruiter };
+      }
+      if (isClanRecruiterFor(targetMember, targetClans[0].id)) {
+        return { kind: "error", message: clanTxt.alreadyClanRecruiter };
+      }
+      return { kind: "grant_recruiter", clanRole: targetClans[0], targetUserId: targetMentionId };
+    }
+    if (targetClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdTargetMultipleClans };
+    }
+    return { kind: "error", message: clanTxt.recruiterMetaNeedsClanFirstAny };
+  }
+
+  if (!clanQuery) {
+    const ownClans = listMemberClanRoles(guild, member);
+    if (ownClans.length === 0) {
+      return { kind: "error", message: clanTxt.recruiterMetaNeedsClanFirstAny };
+    }
+    if (ownClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdClanAmbiguous };
+    }
+    const role = ownClans[0];
+    if (isClanLeaderFor(member, role.id)) {
+      return { kind: "error", message: clanTxt.leaderCannotBeRecruiter };
+    }
+    if (isClanRecruiterFor(member, role.id)) {
+      return { kind: "error", message: clanTxt.alreadyClanRecruiter };
+    }
+    return { kind: "grant_recruiter", clanRole: role, targetUserId: member.id };
+  }
+
+  const resolved = resolveClanQuery(guild, clanQuery);
+  if (isParseError(resolved)) return resolved;
+  if (!member.roles.cache.has(resolved.id)) {
+    return recruiterMetaNotInClanError(resolved.name, member.id, member.id);
+  }
+  if (isClanLeaderFor(member, resolved.id)) {
+    return { kind: "error", message: clanTxt.leaderCannotBeRecruiter };
+  }
+  if (isClanRecruiterFor(member, resolved.id)) {
+    return { kind: "error", message: clanTxt.alreadyClanRecruiter };
+  }
+  return { kind: "grant_recruiter", clanRole: resolved, targetUserId: member.id };
+}
+
+function parseRemoveRecruiterCommand(
+  guild: Guild,
+  member: GuildMember,
+  body: string,
+  mentions: MessageMentions,
+): ParsedRemoveRecruiterCommand | ClanTextParseError {
+  const targetMentionId = firstMentionId(mentions);
+  const clanQuery = stripMentions(body);
+  const isMod = isClanModerator(member);
+  const ledClans = listLedClanRolesLocal(guild, member);
+  const recruitedClans = listMemberClanRoles(guild, member).filter((r) => isClanRecruiterFor(member, r.id));
+
+  if (!isMod && targetMentionId && targetMentionId !== member.id && ledClans.length === 0) {
+    return { kind: "error", message: clanTxt.cmdRecruiterRemoveLeaderOnly };
+  }
+
+  if (!targetMentionId && !clanQuery) {
+    if (isMod) {
+      return { kind: "error", message: clanTxt.cmdModNeedsTarget };
+    }
+    if (recruitedClans.length === 0) {
+      return { kind: "error", message: clanTxt.notClanRecruiter };
+    }
+    if (recruitedClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdRecruiterMultipleClans };
+    }
+    return { kind: "remove_recruiter", clanRole: recruitedClans[0], targetUserId: member.id };
+  }
+
+  if (targetMentionId && !clanQuery) {
+    if (isMod) {
+      const target = guild.members.cache.get(targetMentionId);
+      if (!target) {
+        return { kind: "error", message: clanTxt.targetMissing };
+      }
+      const targetRecruited = listMemberClanRoles(guild, target).filter((r) =>
+        isClanRecruiterFor(target, r.id),
+      );
+      if (targetRecruited.length === 1) {
+        return { kind: "remove_recruiter", clanRole: targetRecruited[0], targetUserId: targetMentionId };
+      }
+      if (targetRecruited.length > 1) {
+        return { kind: "error", message: clanTxt.cmdTargetMultipleClans };
+      }
+      return { kind: "error", message: clanTxt.notClanRecruiter };
+    }
+    if (ledClans.length === 1) {
+      const role = ledClans[0];
+      const target = guild.members.cache.get(targetMentionId);
+      if (!target || !isClanRecruiterFor(target, role.id)) {
+        return { kind: "error", message: clanTxt.notClanRecruiter };
+      }
+      return { kind: "remove_recruiter", clanRole: role, targetUserId: targetMentionId };
+    }
+    return { kind: "error", message: clanTxt.cmdInvalidFormat("-рекрутер или -рекрутер Название") };
+  }
+
+  if (!clanQuery) {
+    return { kind: "error", message: clanTxt.cmdInvalidFormat("-рекрутер или -рекрутер Название") };
+  }
+
+  const resolved = resolveClanQuery(guild, clanQuery);
+  if (isParseError(resolved)) return resolved;
+
+  const targetUserId = targetMentionId ?? member.id;
+  if (!isMod && targetUserId !== member.id && !isClanLeaderFor(member, resolved.id)) {
+    return { kind: "error", message: clanTxt.cmdRecruiterRemoveLeaderOnly };
+  }
+
+  const target = guild.members.cache.get(targetUserId);
+  if (!target || !isClanRecruiterFor(target, resolved.id)) {
+    return { kind: "error", message: clanTxt.notClanRecruiter };
+  }
+
+  return { kind: "remove_recruiter", clanRole: resolved, targetUserId };
+}
+
+function parseTransferLeaderCommand(
+  guild: Guild,
+  member: GuildMember,
+  body: string,
+  mentions: MessageMentions,
+): ParsedTransferLeaderCommand | ClanTextParseError {
+  const targetMentionId = firstMentionId(mentions);
+  if (!targetMentionId) {
+    return { kind: "error", message: clanTxt.cmdTransferLeaderNeedsMention };
+  }
+  if (targetMentionId === member.id) {
+    return { kind: "error", message: clanTxt.cmdTransferLeaderSelf };
+  }
+
+  const clanQuery = stripMentions(body);
+  const ledClans = listLedClanRolesLocal(guild, member);
+
+  if (clanQuery) {
+    const resolved = resolveClanQuery(guild, clanQuery);
+    if (isParseError(resolved)) return resolved;
+    if (!isClanLeaderFor(member, resolved.id)) {
+      return { kind: "error", message: clanTxt.cmdTransferLeaderOnly };
+    }
+    const target = guild.members.cache.get(targetMentionId);
+    if (!target?.roles.cache.has(resolved.id)) {
+      return { kind: "error", message: clanTxt.cmdTargetNotInClan };
+    }
+    if (isClanLeaderFor(target, resolved.id)) {
+      return { kind: "error", message: clanTxt.alreadyClanLeader };
+    }
+    return { kind: "transfer_leader", clanRole: resolved, targetUserId: targetMentionId };
+  }
+
+  if (ledClans.length === 1) {
+    const role = ledClans[0];
+    const target = guild.members.cache.get(targetMentionId);
+    if (!target?.roles.cache.has(role.id)) {
+      return { kind: "error", message: clanTxt.cmdTargetNotInClan };
+    }
+    if (isClanLeaderFor(target, role.id)) {
+      return { kind: "error", message: clanTxt.alreadyClanLeader };
+    }
+    return { kind: "transfer_leader", clanRole: role, targetUserId: targetMentionId };
+  }
+  if (ledClans.length > 1) {
+    return { kind: "error", message: clanTxt.cmdLeaderMultipleClans };
+  }
+  return { kind: "error", message: clanTxt.cmdTransferLeaderOnly };
 }
 
 function parseRosterCommand(
@@ -567,25 +838,25 @@ function parseRosterCommand(
 ): ParsedRosterCommand | ClanTextParseError {
   const clanQuery = body.trim();
   const isMod = isClanModerator(member);
-  const ledClans = listLedClanRoles(guild, member);
+  const staffClans = listStaffClanRolesLocal(guild, member);
 
   if (!clanQuery) {
-    if (ledClans.length === 0) {
+    if (staffClans.length === 0) {
       if (isMod) {
         return { kind: "error", message: clanTxt.cmdRosterModNeedsClan };
       }
-      return { kind: "error", message: clanTxt.cmdRosterLeaderOnly };
+      return { kind: "error", message: clanTxt.cmdRosterStaffOnly };
     }
-    if (ledClans.length > 1) {
-      return { kind: "error", message: clanTxt.cmdLeaderMultipleClans };
+    if (staffClans.length > 1) {
+      return { kind: "error", message: clanTxt.cmdStaffMultipleClans };
     }
-    return { kind: "roster", clanRole: ledClans[0] };
+    return { kind: "roster", clanRole: staffClans[0] };
   }
 
   const resolved = resolveClanQuery(guild, clanQuery);
   if (isParseError(resolved)) return resolved;
 
-  if (!isMod && !isClanLeaderFor(member, resolved.id)) {
+  if (!isMod && !isClanStaffFor(member, resolved.id)) {
     return { kind: "error", message: clanTxt.cmdRosterNotYourClan(resolved.name) };
   }
 
@@ -609,7 +880,7 @@ function parseChangeColorCommand(
   }
 
   const isMod = isClanModerator(member);
-  const ledClans = listLedClanRoles(guild, member);
+  const ledClans = listLedClanRolesLocal(guild, member);
   const clanQuery = split.clanQuery;
 
   if (!clanQuery) {
@@ -644,6 +915,9 @@ export function isClanCommandMessage(content: string): boolean {
     REMOVE_PREFIX.test(trimmed) ||
     GRANT_LEADER_PREFIX.test(trimmed) ||
     REMOVE_LEADER_PREFIX.test(trimmed) ||
+    GRANT_RECRUITER_PREFIX.test(trimmed) ||
+    REMOVE_RECRUITER_PREFIX.test(trimmed) ||
+    TRANSFER_LEADER_PREFIX.test(trimmed) ||
     CREATE_HEADER.test(firstLine) ||
     ROSTER_PREFIX.test(trimmed) ||
     CHANGE_COLOR_PREFIX.test(trimmed)
@@ -681,6 +955,21 @@ export function parseClanTextCommand(
   if (REMOVE_LEADER_PREFIX.test(trimmed)) {
     const body = trimmed.replace(REMOVE_LEADER_PREFIX, "").trim();
     return parseRemoveLeaderCommand(guild, member, body, mentions);
+  }
+
+  if (GRANT_RECRUITER_PREFIX.test(trimmed)) {
+    const body = trimmed.replace(GRANT_RECRUITER_PREFIX, "").trim();
+    return parseGrantRecruiterCommand(guild, member, body, mentions);
+  }
+
+  if (REMOVE_RECRUITER_PREFIX.test(trimmed)) {
+    const body = trimmed.replace(REMOVE_RECRUITER_PREFIX, "").trim();
+    return parseRemoveRecruiterCommand(guild, member, body, mentions);
+  }
+
+  if (TRANSFER_LEADER_PREFIX.test(trimmed)) {
+    const body = trimmed.replace(TRANSFER_LEADER_PREFIX, "").trim();
+    return parseTransferLeaderCommand(guild, member, body, mentions);
   }
 
   if (ROSTER_PREFIX.test(trimmed)) {

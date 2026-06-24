@@ -69,10 +69,25 @@ export function validateClanName(name: string, minLen: number, maxLen: number): 
 export function parseLeaderIdsFromMentions(content: string, memberIds: string[]): string[] {
   const leaders: string[] = [];
   for (const id of memberIds) {
-    const re = new RegExp(`👑\\s*<@!?${id}>`);
-    if (re.test(content)) leaders.push(id);
+    if (hasMarkerBeforeMention(content, "👑", id)) leaders.push(id);
   }
   return leaders;
+}
+
+export function parseRecruiterIdsFromMentions(content: string, memberIds: string[]): string[] {
+  const recruiters: string[] = [];
+  for (const id of memberIds) {
+    if (hasMarkerBeforeMention(content, "⭐", id)) recruiters.push(id);
+  }
+  return recruiters;
+}
+
+/** Match marker immediately before a mention (optional spaces/tabs, same line). */
+function hasMarkerBeforeMention(content: string, marker: string, userId: string): boolean {
+  const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const mention = `<@!?${userId}>`;
+  const re = new RegExp(`${escaped}[ \\t]*${mention}`);
+  return re.test(content);
 }
 
 /** Mention snowflakes in left-to-right order (deduped). */
@@ -129,12 +144,23 @@ export async function resolveClanRulesThread(guild: Guild): Promise<ThreadChanne
   return null;
 }
 
-export function formatUserList(guild: Guild, userIds: string[], leaderIds: Set<string>): string {
+export function formatUserList(
+  guild: Guild,
+  userIds: string[],
+  leaderIds: Set<string>,
+  recruiterIds: Set<string> = new Set(),
+): string {
   const lines: string[] = [];
   for (const id of userIds) {
     const member = guild.members.cache.get(id);
     const label = member ? member.toString() : `<@${id}>`;
-    lines.push(leaderIds.has(id) ? `👑 ${label}` : label);
+    if (leaderIds.has(id)) {
+      lines.push(`👑 ${label}`);
+    } else if (recruiterIds.has(id)) {
+      lines.push(`⭐ ${label}`);
+    } else {
+      lines.push(label);
+    }
   }
   return lines.join("\n") || "—";
 }

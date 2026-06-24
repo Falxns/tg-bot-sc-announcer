@@ -14,8 +14,11 @@ import {
 } from "../../config";
 import {
   findClanRolesWithExcessLeaders,
+  findClanRolesWithExcessRecruiters,
+  findLeaderRecruiterOverlap,
   findLeadersWithoutClanRole,
   findMembersWithMultipleClanRoles,
+  findRecruitersWithoutClanRole,
 } from "./auditChecks";
 import { formatClansListEmbedLines } from "./actions";
 import { canApproveCreateRequest, isClanModerator } from "./permissions";
@@ -37,7 +40,7 @@ export const clanPanelSlashCommand = new SlashCommandBuilder()
 
 export const clanslistSlashCommand = new SlashCommandBuilder()
   .setName("clanslist")
-  .setDescription("Список клановых ролей и число лидеров (для админов)")
+  .setDescription("Список клановых ролей, лидеров и рекрутеров (для админов)")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
 export const clancheckSlashCommand = new SlashCommandBuilder()
@@ -50,8 +53,11 @@ export const clancheckSlashCommand = new SlashCommandBuilder()
       .setRequired(true)
       .addChoices(
         { name: "Лидеры без клановой роли", value: "leaders_without_clan" },
+        { name: "Рекрутеры без клановой роли", value: "recruiters_without_clan" },
         { name: "2+ клановые роли у участника", value: "multi_clan_members" },
-        { name: "Более 2 лидеров у клана", value: "multi_leaders" },
+        { name: "Более 1 лидера у клана", value: "multi_leaders" },
+        { name: "Более 2 рекрутеров у клана", value: "multi_recruiters" },
+        { name: "Лидер и рекрутер в одном клане", value: "leader_recruiter_overlap" },
       ),
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
@@ -94,6 +100,10 @@ export async function handleClanSlashCommand(interaction: ChatInputCommandIntera
       title = clanTxt.clancheckLeadersWithoutClanTitle;
       const members = await findLeadersWithoutClanRole(interaction.guild);
       lines = members.length > 0 ? members.map((m) => m.toString()) : [clanTxt.clancheckEmpty];
+    } else if (check === "recruiters_without_clan") {
+      title = clanTxt.clancheckRecruitersWithoutClanTitle;
+      const members = await findRecruitersWithoutClanRole(interaction.guild);
+      lines = members.length > 0 ? members.map((m) => m.toString()) : [clanTxt.clancheckEmpty];
     } else if (check === "multi_clan_members") {
       title = clanTxt.clancheckMultiClanTitle;
       const members = await findMembersWithMultipleClanRoles(interaction.guild);
@@ -112,6 +122,22 @@ export async function handleClanSlashCommand(interaction: ChatInputCommandIntera
       lines =
         roles.length > 0
           ? roles.map(({ role, count }) => clanTxt.clancheckMultiLeadersLine(role.name, count))
+          : [clanTxt.clancheckEmpty];
+    } else if (check === "multi_recruiters") {
+      title = clanTxt.clancheckMultiRecruitersTitle;
+      const roles = await findClanRolesWithExcessRecruiters(interaction.guild);
+      lines =
+        roles.length > 0
+          ? roles.map(({ role, count }) => clanTxt.clancheckMultiRecruitersLine(role.name, count))
+          : [clanTxt.clancheckEmpty];
+    } else if (check === "leader_recruiter_overlap") {
+      title = clanTxt.clancheckLeaderRecruiterOverlapTitle;
+      const overlaps = await findLeaderRecruiterOverlap(interaction.guild);
+      lines =
+        overlaps.length > 0
+          ? overlaps.map(({ member, role }) =>
+              clanTxt.clancheckLeaderRecruiterLine(member.toString(), role.name),
+            )
           : [clanTxt.clancheckEmpty];
     }
 

@@ -2,6 +2,7 @@ import type { Guild, GuildMember, Role } from "discord.js";
 import {
   DISCORD_CLAN_LEADER_ROLE_ID,
   DISCORD_CLAN_MAX_ROLES_PER_MEMBER,
+  DISCORD_CLAN_RECRUITER_ROLE_ID,
   DISCORD_CLAN_ROLE_EXCLUDE_IDS,
   DISCORD_CLAN_ROLE_NAME_PATTERN,
 } from "../../config";
@@ -11,8 +12,23 @@ function isExcludedClanRole(role: Role, guild: Guild): boolean {
   if (role.id === guild.id) return true;
   if (DISCORD_CLAN_ROLE_EXCLUDE_IDS.includes(role.id)) return true;
   if (DISCORD_CLAN_LEADER_ROLE_ID && role.id === DISCORD_CLAN_LEADER_ROLE_ID) return true;
+  if (DISCORD_CLAN_RECRUITER_ROLE_ID && role.id === DISCORD_CLAN_RECRUITER_ROLE_ID) return true;
   if (DISCORD_CLAN_ROLE_NAME_PATTERN && !DISCORD_CLAN_ROLE_NAME_PATTERN.test(role.name)) return true;
   return false;
+}
+
+/** Resolve a shared clan meta-role (leader / recruiter) by snowflake, warming the guild role cache if needed. */
+export async function resolveGuildMetaRole(guild: Guild, roleId: string): Promise<Role | null> {
+  if (!roleId) return null;
+
+  const cached = guild.roles.cache.get(roleId);
+  if (cached) return cached;
+
+  const fetched = await guild.roles.fetch(roleId).catch(() => null);
+  if (fetched) return fetched;
+
+  await guild.roles.fetch().catch(() => undefined);
+  return guild.roles.cache.get(roleId) ?? null;
 }
 
 export function listClanRoles(guild: Guild): Role[] {
@@ -80,6 +96,28 @@ export function isClanLeaderFor(member: GuildMember, clanRoleId: string): boolea
   return member.roles.cache.has(clanRoleId) && member.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID);
 }
 
+export function isClanRecruiterFor(member: GuildMember, clanRoleId: string): boolean {
+  if (!DISCORD_CLAN_RECRUITER_ROLE_ID) return false;
+  return member.roles.cache.has(clanRoleId) && member.roles.cache.has(DISCORD_CLAN_RECRUITER_ROLE_ID);
+}
+
+/** Leader or recruiter of a specific clan (not admin). */
+export function isClanStaffFor(member: GuildMember, clanRoleId: string): boolean {
+  return isClanLeaderFor(member, clanRoleId) || isClanRecruiterFor(member, clanRoleId);
+}
+
+export function listLedClanRoles(guild: Guild, member: GuildMember): Role[] {
+  return listMemberClanRoles(guild, member).filter((role) => isClanLeaderFor(member, role.id));
+}
+
+export function listRecruitedClanRoles(guild: Guild, member: GuildMember): Role[] {
+  return listMemberClanRoles(guild, member).filter((role) => isClanRecruiterFor(member, role.id));
+}
+
+export function listStaffClanRoles(guild: Guild, member: GuildMember): Role[] {
+  return listMemberClanRoles(guild, member).filter((role) => isClanStaffFor(member, role.id));
+}
+
 export async function listClanLeaderIds(guild: Guild, clanRoleId: string): Promise<string[]> {
   if (!DISCORD_CLAN_LEADER_ROLE_ID) return [];
   await ensureGuildMembersCached(guild);
@@ -90,6 +128,20 @@ export async function listClanLeaderIds(guild: Guild, clanRoleId: string): Promi
   return ids;
 }
 
+export async function listClanRecruiterIds(guild: Guild, clanRoleId: string): Promise<string[]> {
+  if (!DISCORD_CLAN_RECRUITER_ROLE_ID) return [];
+  await ensureGuildMembersCached(guild);
+  const ids: string[] = [];
+  for (const [, member] of guild.members.cache) {
+    if (isClanRecruiterFor(member, clanRoleId)) ids.push(member.id);
+  }
+  return ids;
+}
+
 export async function countClanLeaders(guild: Guild, clanRoleId: string): Promise<number> {
   return (await listClanLeaderIds(guild, clanRoleId)).length;
+}
+
+export async function countClanRecruiters(guild: Guild, clanRoleId: string): Promise<number> {
+  return (await listClanRecruiterIds(guild, clanRoleId)).length;
 }

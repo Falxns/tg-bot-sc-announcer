@@ -56,6 +56,7 @@ async function postCreateRequestToModQueue(
   request: ClanCreateRequest,
   memberIds: string[],
   leaderIds: string[],
+  recruiterIds: string[],
 ): Promise<string | null> {
   if (!DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID) return clanTxt.modReviewChannelMissing;
 
@@ -66,6 +67,7 @@ async function postCreateRequestToModQueue(
 
   const applicant = await guild.members.fetch(request.applicantId).catch(() => null);
   const leaderSet = new Set(leaderIds);
+  const recruiterSet = new Set(recruiterIds);
   const embed = new EmbedBuilder()
     .setTitle(clanTxt.modCreateTitle)
     .setColor(request.colorHex)
@@ -74,12 +76,12 @@ async function postCreateRequestToModQueue(
         `**Клан:** ${request.clanName}\n` +
         `**Ранг:** ${request.clanTier ?? "—"}\n` +
         `**Цвет:** ${request.colorLabel}\n` +
-        `**Состав:** ${memberIds.length} (лидеров: ${leaderIds.length})\n` +
+        `**Состав:** ${memberIds.length} (лидеров: ${leaderIds.length}, рекрутеров: ${recruiterIds.length})\n` +
         `**Источник:** <#${request.threadId}>`,
     )
     .addFields({
       name: "Участники",
-      value: formatUserList(guild, memberIds, leaderSet).slice(0, 1024),
+      value: formatUserList(guild, memberIds, leaderSet, recruiterSet).slice(0, 1024),
     })
     .setFooter({ text: clanTxt.modCreateReminder })
     .setTimestamp(request.createdAt);
@@ -141,11 +143,18 @@ export async function submitCreateRequestFromText(
     colorLabel: parsed.colorPreset.label,
     memberIds: parsed.memberIds,
     leaderIds: parsed.leaderIds,
+    recruiterIds: parsed.recruiterIds,
     status: "pending",
     createdAt: Date.now(),
   };
   setClanCreateRequest(request);
-  const err = await postCreateRequestToModQueue(guild, request, parsed.memberIds, parsed.leaderIds);
+  const err = await postCreateRequestToModQueue(
+    guild,
+    request,
+    parsed.memberIds,
+    parsed.leaderIds,
+    parsed.recruiterIds,
+  );
   if (err) return err;
   await postCreatePendingThreadNotice(guild, request);
   return null;

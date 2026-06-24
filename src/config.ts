@@ -144,6 +144,22 @@ function parseCommaSeparatedIds(raw: string | undefined): string[] {
     .filter(Boolean);
 }
 
+/** Trim quotes and strip inline `#` / `;` comments from a single Discord snowflake env value. */
+function parseDiscordSnowflake(raw: string | undefined): string {
+  let value = (raw ?? "").trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+  const commentIdx = value.search(/[#;]/);
+  if (commentIdx >= 0) {
+    value = value.slice(0, commentIdx).trim();
+  }
+  return value;
+}
+
 /**
  * Staff-summary role events: audit-log executor must have one of these roles.
  * Applies to guild role create, and member role assign/remove (not role-panel bot toggles).
@@ -492,7 +508,10 @@ export const DISCORD_CLAN_ENABLED = !/^0|false$/i.test((process.env.DISCORD_CLAN
 export const DISCORD_CLAN_RULES_MESSAGE_ID = (process.env.DISCORD_CLAN_RULES_MESSAGE_ID ?? "").trim();
 
 /** Shared «Лидер клана» meta-role snowflake. */
-export const DISCORD_CLAN_LEADER_ROLE_ID = (process.env.DISCORD_CLAN_LEADER_ROLE_ID ?? "").trim();
+export const DISCORD_CLAN_LEADER_ROLE_ID = parseDiscordSnowflake(process.env.DISCORD_CLAN_LEADER_ROLE_ID);
+
+/** Shared «Рекрутер клана» meta-role snowflake. */
+export const DISCORD_CLAN_RECRUITER_ROLE_ID = parseDiscordSnowflake(process.env.DISCORD_CLAN_RECRUITER_ROLE_ID);
 
 /**
  * Anchor role snowflake — new clan roles are placed directly above this role in the hierarchy.
@@ -518,11 +537,12 @@ export const DISCORD_CLAN_NOTIFICATIONS_CHANNEL_ID = (
 
 /**
  * Role IDs excluded from clan discovery.
- * Includes `DISCORD_CLAN_ROLE_EXCLUDE_IDS` from env plus moderator, staff-summary creator, and admin role IDs.
+ * Includes `DISCORD_CLAN_ROLE_EXCLUDE_IDS` from env, recruiter meta-role, moderator, staff-summary creator, and admin role IDs.
  */
 export const DISCORD_CLAN_ROLE_EXCLUDE_IDS = [
   ...new Set([
     ...parseCommaSeparatedIds(process.env.DISCORD_CLAN_ROLE_EXCLUDE_IDS),
+    ...(DISCORD_CLAN_RECRUITER_ROLE_ID ? [DISCORD_CLAN_RECRUITER_ROLE_ID] : []),
     ...DISCORD_MODERATOR_ROLE_IDS,
     ...DISCORD_STAFF_SUMMARY_CREATOR_ROLE_IDS,
     ...DISCORD_ADMIN_ROLE_IDS,
@@ -648,7 +668,11 @@ function parseClanColorPresets(raw: string): ClanColorPreset[] {
 }
 
 export function clanRolesConfigured(): boolean {
-  return DISCORD_CLAN_ENABLED && DISCORD_CLAN_LEADER_ROLE_ID.length > 0;
+  return (
+    DISCORD_CLAN_ENABLED &&
+    DISCORD_CLAN_LEADER_ROLE_ID.length > 0 &&
+    DISCORD_CLAN_RECRUITER_ROLE_ID.length > 0
+  );
 }
 
 export const DISCORD_CLAN_COLOR_PRESETS_FROM_ENV = parseClanColorPresets(
