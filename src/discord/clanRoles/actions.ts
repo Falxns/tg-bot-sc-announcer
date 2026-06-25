@@ -12,6 +12,7 @@ import {
 import {
   DISCORD_CLAN_CHAT_CHANNEL_ID,
   DISCORD_CLAN_LEADER_ROLE_ID,
+  DISCORD_CLAN_RECRUITER_ROLE_ID,
   DISCORD_CLAN_ROLE_POSITION_ABOVE_ROLE_ID,
   DISCORD_CLAN_STAFF_LOG_CHANNEL_ID,
   DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID,
@@ -19,12 +20,26 @@ import {
 import {
   clanGrantRequests,
   clanLeaderMetaRequests,
+  clanRecruiterMetaRequests,
   deleteClanColorChangeCooldown,
   deleteClanRoleEnforcement,
   saveState,
 } from "../../state";
 import type { ClanCreateRequest } from "../types";
-import { countClanLeaders, countMembersWithRole, ensureGuildMembersCached, getMemberClanRoleCapConflict, isClanLeaderFor, listClanRoles, listMemberClanRoles, listMemberIdsWithRole } from "./resolver";
+import { MAX_CLAN_LEADERS, MAX_CLAN_RECRUITERS } from "./constants";
+import {
+  countClanLeaders,
+  countClanRecruiters,
+  countMembersWithRole,
+  ensureGuildMembersCached,
+  getMemberClanRoleCapConflict,
+  isClanLeaderFor,
+  isClanRecruiterFor,
+  listClanRoles,
+  listMemberClanRoles,
+  listMemberIdsWithRole,
+  resolveGuildMetaRole,
+} from "./resolver";
 import { clanTxt } from "./strings";
 
 export type RoleActionResult = { ok: true } | { ok: false; error: string };
@@ -143,8 +158,11 @@ export async function grantClanRoleToMember(
   }
 
   if (grantLeaderMeta) {
-    if ((await countClanLeaders(guild, clanRole.id)) >= 2 && !target.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) {
-      return { ok: false, error: clanTxt.grantLeaderCap(2) };
+    if (
+      (await countClanLeaders(guild, clanRole.id)) >= MAX_CLAN_LEADERS &&
+      !isClanLeaderFor(target, clanRole.id)
+    ) {
+      return { ok: false, error: clanTxt.grantLeaderCap(MAX_CLAN_LEADERS) };
     }
   }
 
@@ -172,8 +190,8 @@ export async function grantLeaderMetaOnly(
   if (!me) return { ok: false, error: clanTxt.noManageRoles };
   if (!DISCORD_CLAN_LEADER_ROLE_ID) return { ok: false, error: clanTxt.leaderMetaNotConfigured };
 
-  const leaderMeta = guild.roles.cache.get(DISCORD_CLAN_LEADER_ROLE_ID);
-  if (!leaderMeta) return { ok: false, error: clanTxt.leaderMetaNotConfigured };
+  const leaderMeta = await resolveGuildMetaRole(guild, DISCORD_CLAN_LEADER_ROLE_ID);
+  if (!leaderMeta) return { ok: false, error: clanTxt.leaderMetaRoleNotFound };
 
   if (!target.roles.cache.has(clanRole.id)) {
     return { ok: false, error: clanTxt.targetDoesNotHaveClanRole };
@@ -185,13 +203,138 @@ export async function grantLeaderMetaOnly(
   const blocker = roleBlocker(me, target, leaderMeta);
   if (blocker) return { ok: false, error: blocker };
 
-  if ((await countClanLeaders(guild, clanRole.id)) >= 2) {
-    return { ok: false, error: clanTxt.grantLeaderCap(2) };
+  if ((await countClanLeaders(guild, clanRole.id)) >= MAX_CLAN_LEADERS) {
+    return { ok: false, error: clanTxt.grantLeaderCap(MAX_CLAN_LEADERS) };
   }
 
   try {
+    if (isClanRecruiterFor(target, clanRole.id) && DISCORD_CLAN_RECRUITER_ROLE_ID) {
+      await target.roles.remove(DISCORD_CLAN_RECRUITER_ROLE_ID);
+    }
     if (!target.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) {
       await target.roles.add(DISCORD_CLAN_LEADER_ROLE_ID);
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: clanTxt.noManageRoles };
+  }
+}
+
+export async function grantRecruiterMetaOnly(
+  guild: Guild,
+  target: GuildMember,
+  clanRole: Role,
+): Promise<RoleActionResult> {
+  const me = await getBotMember(guild);
+  if (!me) return { ok: false, error: clanTxt.noManageRoles };
+  if (!DISCORD_CLAN_RECRUITER_ROLE_ID) return { ok: false, error: clanTxt.recruiterMetaNotConfigured };
+
+  if (!target.roles.cache.has(clanRole.id)) {
+    return { ok: false, error: clanTxt.targetDoesNotHaveClanRole };
+  }
+  if (isClanLeaderFor(target, clanRole.id)) {
+    return { ok: false, error: clanTxt.leaderCannotBeRecruiter };
+  }
+  if (isClanRecruiterFor(target, clanRole.id)) {
+    return { ok: true };
+  }
+
+  const recruiterMeta = await resolveGuildMetaRole(guild, DISCORD_CLAN_RECRUITER_ROLE_ID);
+  if (!recruiterMeta) return { ok: false, error: clanTxt.recruiterMetaRoleNotFound };
+
+  const blocker = roleBlocker(me, target, recruiterMeta);
+  if (blocker) return { ok: false, error: blocker };
+
+  if ((await countClanRecruiters(guild, clanRole.id)) >= MAX_CLAN_RECRUITERS) {
+    return { ok: false, error: clanTxt.grantRecruiterCap(MAX_CLAN_RECRUITERS) };
+  }
+
+  try {
+    if (!target.roles.cache.has(DISCORD_CLAN_RECRUITER_ROLE_ID)) {
+      await target.roles.add(DISCORD_CLAN_RECRUITER_ROLE_ID);
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: clanTxt.noManageRoles };
+  }
+}
+
+export async function removeRecruiterMetaFromMember(
+  guild: Guild,
+  target: GuildMember,
+  clanRole: Role,
+): Promise<RoleActionResult> {
+  const me = await getBotMember(guild);
+  if (!me) return { ok: false, error: clanTxt.noManageRoles };
+  if (!DISCORD_CLAN_RECRUITER_ROLE_ID) return { ok: false, error: clanTxt.recruiterMetaNotConfigured };
+
+  if (!isClanRecruiterFor(target, clanRole.id)) {
+    return { ok: false, error: clanTxt.notClanRecruiter };
+  }
+
+  const recruitedClans = listMemberClanRoles(guild, target).filter((r) => isClanRecruiterFor(target, r.id));
+  if (recruitedClans.length > 1) {
+    return { ok: false, error: clanTxt.cmdRecruiterMultipleClans };
+  }
+
+  const recruiterMeta = await resolveGuildMetaRole(guild, DISCORD_CLAN_RECRUITER_ROLE_ID);
+  if (!recruiterMeta) return { ok: false, error: clanTxt.recruiterMetaRoleNotFound };
+
+  const blocker = roleBlocker(me, target, recruiterMeta);
+  if (blocker) return { ok: false, error: blocker };
+
+  try {
+    if (target.roles.cache.has(DISCORD_CLAN_RECRUITER_ROLE_ID)) {
+      await target.roles.remove(DISCORD_CLAN_RECRUITER_ROLE_ID);
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: clanTxt.noManageRoles };
+  }
+}
+
+export async function transferClanLeadership(
+  guild: Guild,
+  from: GuildMember,
+  to: GuildMember,
+  clanRole: Role,
+): Promise<RoleActionResult> {
+  const me = await getBotMember(guild);
+  if (!me) return { ok: false, error: clanTxt.noManageRoles };
+  if (!DISCORD_CLAN_LEADER_ROLE_ID) return { ok: false, error: clanTxt.leaderMetaNotConfigured };
+
+  if (!isClanLeaderFor(from, clanRole.id)) {
+    return { ok: false, error: clanTxt.notClanLeader };
+  }
+  if (!to.roles.cache.has(clanRole.id)) {
+    return { ok: false, error: clanTxt.targetDoesNotHaveClanRole };
+  }
+  if (isClanLeaderFor(to, clanRole.id)) {
+    return { ok: false, error: clanTxt.alreadyClanLeader };
+  }
+
+  const leaderMeta = await resolveGuildMetaRole(guild, DISCORD_CLAN_LEADER_ROLE_ID);
+  if (!leaderMeta) return { ok: false, error: clanTxt.leaderMetaRoleNotFound };
+
+  const fromBlocker = roleBlocker(me, from, leaderMeta);
+  if (fromBlocker) return { ok: false, error: fromBlocker };
+  const toBlocker = roleBlocker(me, to, leaderMeta);
+  if (toBlocker) return { ok: false, error: toBlocker };
+
+  try {
+    if (isClanRecruiterFor(to, clanRole.id) && DISCORD_CLAN_RECRUITER_ROLE_ID) {
+      await to.roles.remove(DISCORD_CLAN_RECRUITER_ROLE_ID);
+    }
+    if (!to.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) {
+      await to.roles.add(DISCORD_CLAN_LEADER_ROLE_ID);
+    }
+    if (from.roles.cache.has(DISCORD_CLAN_LEADER_ROLE_ID)) {
+      const stillLeadsAnother = listMemberClanRoles(guild, from)
+        .filter((r) => r.id !== clanRole.id)
+        .some((r) => isClanLeaderFor(from, r.id));
+      if (!stillLeadsAnother) {
+        await from.roles.remove(DISCORD_CLAN_LEADER_ROLE_ID);
+      }
     }
     return { ok: true };
   } catch {
@@ -217,8 +360,8 @@ export async function removeLeaderMetaFromMember(
     return { ok: false, error: clanTxt.cmdLeaderMultipleClans };
   }
 
-  const leaderMeta = guild.roles.cache.get(DISCORD_CLAN_LEADER_ROLE_ID);
-  if (!leaderMeta) return { ok: false, error: clanTxt.leaderMetaNotConfigured };
+  const leaderMeta = await resolveGuildMetaRole(guild, DISCORD_CLAN_LEADER_ROLE_ID);
+  if (!leaderMeta) return { ok: false, error: clanTxt.leaderMetaRoleNotFound };
 
   const blocker = roleBlocker(me, target, leaderMeta);
   if (blocker) return { ok: false, error: blocker };
@@ -272,6 +415,26 @@ export async function removeClanRoleFromMember(
       }
     }
 
+    if (DISCORD_CLAN_RECRUITER_ROLE_ID) {
+      const updated = await guild.members.fetch({ user: target.id, force: true }).catch(() => target);
+      if (updated.roles.cache.has(DISCORD_CLAN_RECRUITER_ROLE_ID)) {
+        const remainingClanRoles = listMemberClanRoles(guild, updated).filter((r) => r.id !== clanRole.id);
+        const recruitedBefore = listMemberClanRoles(guild, target).filter((r) =>
+          isClanRecruiterFor(target, r.id),
+        );
+        const stillRecruitsAnother = recruitedBefore
+          .filter((r) => r.id !== clanRole.id)
+          .some((r) => updated.roles.cache.has(r.id));
+
+        if (remainingClanRoles.length === 0 || !stillRecruitsAnother) {
+          const recruiterMeta = guild.roles.cache.get(DISCORD_CLAN_RECRUITER_ROLE_ID);
+          if (recruiterMeta?.editable) {
+            await updated.roles.remove(DISCORD_CLAN_RECRUITER_ROLE_ID);
+          }
+        }
+      }
+    }
+
     return { ok: true };
   } catch {
     return { ok: false, error: clanTxt.noManageRoles };
@@ -291,7 +454,8 @@ export async function executeCreateRequest(
   if (existing) return { ok: false, error: clanTxt.createNameDuplicate };
 
   await ensureGuildMembersCached(guild);
-  const validateIds = [...new Set([...request.memberIds, ...request.leaderIds])];
+  const recruiterIds = request.recruiterIds ?? [];
+  const validateIds = [...new Set([...request.memberIds, ...request.leaderIds, ...recruiterIds])];
   for (const userId of validateIds) {
     const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
     if (!member) return { ok: false, error: clanTxt.targetMissing };
@@ -317,6 +481,7 @@ export async function executeCreateRequest(
 
   const leaderMetaId = DISCORD_CLAN_LEADER_ROLE_ID;
   const leaderSet = new Set(request.leaderIds);
+  const recruiterSet = new Set(recruiterIds);
 
   try {
     for (const userId of request.memberIds) {
@@ -327,16 +492,20 @@ export async function executeCreateRequest(
         result = await grantClanRoleToMember(guild, member, role, false);
       }
       if (!result.ok) throw new Error(result.error);
+
+      if (!grantLeader && recruiterSet.has(userId)) {
+        const recResult = await grantRecruiterMetaOnly(guild, member, role);
+        if (!recResult.ok) throw new Error(recResult.error);
+      }
     }
 
     if (leaderMetaId) {
       for (const userId of request.leaderIds) {
-        if ((await countClanLeaders(guild, role.id)) >= 2) break;
+        if ((await countClanLeaders(guild, role.id)) >= MAX_CLAN_LEADERS) break;
         const member = await guild.members.fetch(userId);
         if (!member.roles.cache.has(role.id)) continue;
-        if (!member.roles.cache.has(leaderMetaId)) {
-          await member.roles.add(leaderMetaId);
-        }
+        const grantResult = await grantLeaderMetaOnly(guild, member, role);
+        if (!grantResult.ok) throw new Error(grantResult.error);
       }
     }
 
@@ -373,7 +542,8 @@ export async function formatClansListEmbedLines(guild: Guild): Promise<string[]>
   const lines: string[] = [];
   for (const r of roles) {
     const leaders = await countClanLeaders(guild, r.id);
-    lines.push(clanTxt.clanslistLine(r.name, leaders, countMembersWithRole(guild, r.id)));
+    const recruiters = await countClanRecruiters(guild, r.id);
+    lines.push(clanTxt.clanslistLine(r.name, leaders, recruiters, countMembersWithRole(guild, r.id)));
   }
   return lines;
 }
@@ -392,6 +562,11 @@ function purgePendingRequestsForClanRole(clanRoleId: string): void {
       (req.status === "pending_clan_leader" || req.status === "pending_mod")
     ) {
       clanLeaderMetaRequests.delete(id);
+    }
+  }
+  for (const [id, req] of clanRecruiterMetaRequests) {
+    if (req.clanRoleId === clanRoleId && req.status === "pending") {
+      clanRecruiterMetaRequests.delete(id);
     }
   }
 }

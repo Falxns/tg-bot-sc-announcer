@@ -8,6 +8,7 @@ import type {
   ClanCreateRequest,
   ClanGrantRequest,
   ClanLeaderMetaRequest,
+  ClanRecruiterMetaRequest,
   ClanColorChangeCooldownState,
   ClanRoleEnforcementState,
   ClanRulesPanelState,
@@ -85,6 +86,8 @@ export const clanGrantRequests = new Map<string, ClanGrantRequest>();
 export const clanCreateRequests = new Map<string, ClanCreateRequest>();
 /** Pending leader-meta grant requests keyed by request id. */
 export const clanLeaderMetaRequests = new Map<string, ClanLeaderMetaRequest>();
+/** Pending recruiter-meta grant requests keyed by request id. */
+export const clanRecruiterMetaRequests = new Map<string, ClanRecruiterMetaRequest>();
 /** Understaffed / leaderless grace tracking keyed by `${guildId}:${clanRoleId}`. */
 export const clanRoleEnforcement = new Map<string, ClanRoleEnforcementState>();
 /** Leader color-change cooldown keyed by `${guildId}:${clanRoleId}`. */
@@ -104,6 +107,8 @@ export const discordModerationLastViolationAt = new Map<string, number>();
 export const discordStaffSummaryCreatorLastAt = new Map<string, number>();
 /** Punitive slash uses per UTC day: `${guildId}:${staffUserId}:${YYYY-MM-DD}`. */
 export const discordModeratorDailyQuota = new Map<string, number>();
+/** Clan create review accept/deny per UTC day: `${guildId}:${staffUserId}:${YYYY-MM-DD}`. */
+export const discordClanReviewDailyQuota = new Map<string, number>();
 
 const ROLE_BUTTON_PREFIX = "role:";
 const ROLE_BUTTON_SINGLE_PREFIX = "roleone:";
@@ -145,6 +150,30 @@ export function recordModeratorDailyQuotaUse(guildId: string, staffUserId: strin
   discordModeratorDailyQuota.set(key, next);
   const yesterday = utcQuotaDateString(nowMs - 86_400_000);
   pruneModeratorQuotaBefore(yesterday);
+  return next;
+}
+
+export function getClanReviewDailyQuotaUsed(guildId: string, staffUserId: string, nowMs: number): number {
+  const key = moderatorDailyQuotaKey(guildId, staffUserId, utcQuotaDateString(nowMs));
+  const v = discordClanReviewDailyQuota.get(key);
+  return typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+}
+
+function pruneClanReviewQuotaBefore(keepDateUtc: string): void {
+  for (const key of discordClanReviewDailyQuota.keys()) {
+    const date = key.slice(key.lastIndexOf(":") + 1);
+    if (date < keepDateUtc) discordClanReviewDailyQuota.delete(key);
+  }
+}
+
+/** Increments today's clan create review count for staff. */
+export function recordClanReviewDailyQuotaUse(guildId: string, staffUserId: string, nowMs: number): number {
+  const date = utcQuotaDateString(nowMs);
+  const key = moderatorDailyQuotaKey(guildId, staffUserId, date);
+  const next = getClanReviewDailyQuotaUsed(guildId, staffUserId, nowMs) + 1;
+  discordClanReviewDailyQuota.set(key, next);
+  const yesterday = utcQuotaDateString(nowMs - 86_400_000);
+  pruneClanReviewQuotaBefore(yesterday);
   return next;
 }
 
@@ -322,6 +351,18 @@ export function getClanLeaderMetaRequest(id: string): ClanLeaderMetaRequest | un
 
 export function deleteClanLeaderMetaRequest(id: string): void {
   clanLeaderMetaRequests.delete(id);
+}
+
+export function setClanRecruiterMetaRequest(req: ClanRecruiterMetaRequest): void {
+  clanRecruiterMetaRequests.set(req.id, req);
+}
+
+export function getClanRecruiterMetaRequest(id: string): ClanRecruiterMetaRequest | undefined {
+  return clanRecruiterMetaRequests.get(id);
+}
+
+export function deleteClanRecruiterMetaRequest(id: string): void {
+  clanRecruiterMetaRequests.delete(id);
 }
 
 export function clanRoleEnforcementKey(guildId: string, clanRoleId: string): string {
@@ -502,6 +543,12 @@ export async function loadState(path: string): Promise<void> {
           if (v > 0) discordModeratorDailyQuota.set(k, v);
         }
       }
+      const clanReviewQuota = obj.discordClanReviewDailyQuota;
+      if (clanReviewQuota && typeof clanReviewQuota === "object" && !Array.isArray(clanReviewQuota)) {
+        for (const [k, v] of parseNumberMap(clanReviewQuota)) {
+          if (v > 0) discordClanReviewDailyQuota.set(k, v);
+        }
+      }
       loadSpamFilterFingerprintsFromState(obj.discordSpamFilterFingerprints);
 
       const voiceRooms = obj.tempVoiceRooms;
@@ -617,6 +664,9 @@ export async function loadState(path: string): Promise<void> {
             leaderIds: Array.isArray(row.leaderIds)
               ? row.leaderIds.filter((x): x is string => typeof x === "string")
               : [],
+            recruiterIds: Array.isArray(row.recruiterIds)
+              ? row.recruiterIds.filter((x): x is string => typeof x === "string")
+              : [],
             status: row.status,
             reviewMessageId: typeof row.reviewMessageId === "string" ? row.reviewMessageId : undefined,
             reviewChannelId: typeof row.reviewChannelId === "string" ? row.reviewChannelId : undefined,
@@ -669,6 +719,39 @@ export async function loadState(path: string): Promise<void> {
             reviewMessageId: typeof row.reviewMessageId === "string" ? row.reviewMessageId : undefined,
             reviewChannelId: typeof row.reviewChannelId === "string" ? row.reviewChannelId : undefined,
             denyReason: typeof row.denyReason === "string" ? row.denyReason : undefined,
+            createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
+            resolvedAt: typeof row.resolvedAt === "number" ? row.resolvedAt : undefined,
+            resolvedBy: typeof row.resolvedBy === "string" ? row.resolvedBy : undefined,
+          });
+        }
+      }
+
+      const recruiterMetaReqRaw = obj.clanRecruiterMetaRequests;
+      if (recruiterMetaReqRaw && typeof recruiterMetaReqRaw === "object" && !Array.isArray(recruiterMetaReqRaw)) {
+        for (const [id, value] of Object.entries(recruiterMetaReqRaw as Record<string, unknown>)) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+          const row = value as Record<string, unknown>;
+          if (row.status !== "pending" && row.status !== "approved" && row.status !== "denied") continue;
+          const guildId = typeof row.guildId === "string" ? row.guildId : "";
+          const clanRoleId = typeof row.clanRoleId === "string" ? row.clanRoleId : "";
+          const clanRoleName = typeof row.clanRoleName === "string" ? row.clanRoleName : "";
+          const targetUserId = typeof row.targetUserId === "string" ? row.targetUserId : "";
+          const requesterUserId = typeof row.requesterUserId === "string" ? row.requesterUserId : "";
+          const threadId = typeof row.threadId === "string" ? row.threadId : "";
+          const channelId = typeof row.channelId === "string" ? row.channelId : "";
+          if (!guildId || !clanRoleId || !targetUserId || !threadId) continue;
+          clanRecruiterMetaRequests.set(id, {
+            id,
+            guildId,
+            clanRoleId,
+            clanRoleName,
+            targetUserId,
+            requesterUserId,
+            status: row.status,
+            threadId,
+            channelId,
+            pendingMessageId: typeof row.pendingMessageId === "string" ? row.pendingMessageId : undefined,
+            sourceMessageId: typeof row.sourceMessageId === "string" ? row.sourceMessageId : undefined,
             createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
             resolvedAt: typeof row.resolvedAt === "number" ? row.resolvedAt : undefined,
             resolvedBy: typeof row.resolvedBy === "string" ? row.resolvedBy : undefined,
@@ -755,6 +838,7 @@ export async function saveState(path: string): Promise<boolean> {
       discordModerationLastViolationAt: Object.fromEntries(discordModerationLastViolationAt),
       discordStaffSummaryCreatorLastAt: Object.fromEntries(discordStaffSummaryCreatorLastAt),
       discordModeratorDailyQuota: Object.fromEntries(discordModeratorDailyQuota),
+      discordClanReviewDailyQuota: Object.fromEntries(discordClanReviewDailyQuota),
       discordSpamFilterFingerprints: serializeSpamFilterFingerprintsForState(),
       tempVoiceRooms: Object.fromEntries(tempVoiceRooms),
       tempVoicePanel: Object.fromEntries(tempVoicePanel),
@@ -762,6 +846,7 @@ export async function saveState(path: string): Promise<boolean> {
       clanGrantRequests: Object.fromEntries(clanGrantRequests),
       clanCreateRequests: Object.fromEntries(clanCreateRequests),
       clanLeaderMetaRequests: Object.fromEntries(clanLeaderMetaRequests),
+      clanRecruiterMetaRequests: Object.fromEntries(clanRecruiterMetaRequests),
       clanRoleEnforcement: Object.fromEntries(clanRoleEnforcement),
       clanColorChangeCooldown: Object.fromEntries(clanColorChangeCooldown),
       clanEnforcementLastRunAtMs,

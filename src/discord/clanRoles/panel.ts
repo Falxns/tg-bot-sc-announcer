@@ -27,7 +27,9 @@ import {
   countClanLeaders,
   getMemberClanRoleCapConflict,
   isClanLeaderFor,
+  isClanStaffFor,
   listClanLeaderIds,
+  listClanRecruiterIds,
 } from "./resolver";
 import { clanTxt } from "./strings";
 
@@ -44,13 +46,15 @@ export async function postPendingGrantRequest(
   const requester = await guild.members.fetch(request.requesterUserId).catch(() => null);
 
   let pingContent: string | undefined;
-  let leaderIdsToPing: string[] = [];
+  let staffIdsToPing: string[] = [];
   if (request.type === "grant") {
-    leaderIdsToPing = (await listClanLeaderIds(guild, request.clanRoleId)).filter(
+    const leaderIds = await listClanLeaderIds(guild, request.clanRoleId);
+    const recruiterIds = await listClanRecruiterIds(guild, request.clanRoleId);
+    staffIdsToPing = [...new Set([...leaderIds, ...recruiterIds])].filter(
       (id) => id !== request.requesterUserId,
     );
-    if (leaderIdsToPing.length > 0) {
-      pingContent = clanTxt.pendingGrantLeaderPing(leaderIdsToPing.map((id) => `<@${id}>`).join(" "));
+    if (staffIdsToPing.length > 0) {
+      pingContent = clanTxt.pendingGrantStaffPing(staffIdsToPing.map((id) => `<@${id}>`).join(" "));
     }
   }
 
@@ -59,8 +63,7 @@ export async function postPendingGrantRequest(
     .setDescription(
       `**Клан:** ${request.clanRoleName}\n` +
         `**Участник:** ${target ?? `<@${request.targetUserId}>`}\n` +
-        `**Запросил:** ${requester ?? `<@${request.requesterUserId}>`}` +
-        (request.grantLeaderMeta ? `\n\n${clanTxt.pendingGrantLeaderNote}` : ""),
+        `**Запросил:** ${requester ?? `<@${request.requesterUserId}>`}`,
     )
     .setColor(0x57f287)
     .setTimestamp(request.createdAt);
@@ -82,7 +85,7 @@ export async function postPendingGrantRequest(
       ...(pingContent ? { content: pingContent } : {}),
       embeds: [embed],
       components: [row],
-      ...(leaderIdsToPing.length > 0 ? { allowedMentions: { users: leaderIdsToPing } } : {}),
+      ...(staffIdsToPing.length > 0 ? { allowedMentions: { users: staffIdsToPing } } : {}),
     },
     request.sourceMessageId,
   );
@@ -118,7 +121,7 @@ export async function submitGrantRequest(
     !grantLeaderMeta &&
     requester &&
     targetUserId !== requesterId &&
-    (isClanModerator(requester) || isClanLeaderFor(requester, clanRole.id))
+    (isClanModerator(requester) || isClanStaffFor(requester, clanRole.id))
   ) {
     const result = await grantClanRoleToMember(guild, target, clanRole, false);
     if (!result.ok) return result.error;

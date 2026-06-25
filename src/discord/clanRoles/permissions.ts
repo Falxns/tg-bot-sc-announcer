@@ -1,8 +1,8 @@
 import type { Guild, GuildMember } from "discord.js";
 import { DISCORD_ADMIN_ROLE_IDS } from "../../config";
-import { memberRoleIds } from "../guildPermissions";
-import type { ClanCreateRequest, ClanGrantRequest, ClanLeaderMetaRequest } from "../types";
-import { isClanLeaderFor } from "./resolver";
+import { isDiscordModerator, memberRoleIds } from "../guildPermissions";
+import type { ClanCreateRequest, ClanGrantRequest, ClanLeaderMetaRequest, ClanRecruiterMetaRequest } from "../types";
+import { isClanLeaderFor, isClanRecruiterFor, isClanStaffFor } from "./resolver";
 
 /** Clan staff (approvals, overrides) — `DISCORD_ADMIN_ROLE_IDS` only; moderators are treated as regular users. */
 export function isClanModerator(member: GuildMember | null): boolean {
@@ -12,11 +12,17 @@ export function isClanModerator(member: GuildMember | null): boolean {
 
 export function canApproveGrantRequest(member: GuildMember, request: ClanGrantRequest): boolean {
   if (isClanModerator(member)) return true;
+  return isClanStaffFor(member, request.clanRoleId);
+}
+
+export function canApproveRecruiterRequest(member: GuildMember, request: ClanRecruiterMetaRequest): boolean {
+  if (isClanModerator(member)) return true;
   return isClanLeaderFor(member, request.clanRoleId);
 }
 
+/** Clan creation review — admins and line moderators (`DISCORD_MODERATOR_ROLE_IDS`). */
 export function canApproveCreateRequest(member: GuildMember): boolean {
-  return isClanModerator(member);
+  return isClanModerator(member) || isDiscordModerator(member);
 }
 
 export function canResolveCreateRequest(
@@ -27,21 +33,26 @@ export function canResolveCreateRequest(
   return canApproveCreateRequest(member);
 }
 
-export function canApproveLeaderMetaClanStage(
-  member: GuildMember,
-  request: ClanLeaderMetaRequest,
-): boolean {
-  if (request.status !== "pending_clan_leader") return false;
-  if (member.id === request.targetUserId) return false;
-  return isClanLeaderFor(member, request.clanRoleId);
-}
-
 export function canResolveLeaderMetaModRequest(
   member: GuildMember,
   request: ClanLeaderMetaRequest,
 ): boolean {
   if (request.status !== "pending_mod") return false;
-  return canApproveCreateRequest(member);
+  return isClanModerator(member);
+}
+
+export function canGrantRecruiterDirect(member: GuildMember, clanRoleId: string): boolean {
+  return isClanModerator(member) || isClanLeaderFor(member, clanRoleId);
+}
+
+export function canRemoveRecruiterMeta(
+  member: GuildMember,
+  clanRoleId: string,
+  targetUserId: string,
+): boolean {
+  if (isClanModerator(member)) return true;
+  if (member.id === targetUserId) return isClanRecruiterFor(member, clanRoleId);
+  return isClanLeaderFor(member, clanRoleId);
 }
 
 /** Ping target on approval; ping requester too unless they approved their own request as clan leader. */
@@ -72,7 +83,7 @@ export async function clanGrantApprovalMentionIds(
   const requester = await guild.members.fetch(request.requesterUserId).catch(() => null);
   if (
     requester &&
-    (isClanLeaderFor(requester, request.clanRoleId) || isClanModerator(requester))
+    (isClanStaffFor(requester, request.clanRoleId) || isClanModerator(requester))
   ) {
     return [request.targetUserId];
   }

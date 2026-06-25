@@ -120,6 +120,7 @@ export type ClanCreateRequest = {
   colorLabel: string;
   memberIds: string[];
   leaderIds: string[];
+  recruiterIds: string[];
   status: "pending" | "approved" | "denied";
   reviewMessageId?: string;
   reviewChannelId?: string;
@@ -130,6 +131,23 @@ export type ClanCreateRequest = {
   resolvedAt?: number;
   resolvedBy?: string;
   denyReason?: string;
+};
+
+export type ClanRecruiterMetaRequest = {
+  id: string;
+  guildId: string;
+  clanRoleId: string;
+  clanRoleName: string;
+  targetUserId: string;
+  requesterUserId: string;
+  status: "pending" | "approved" | "denied";
+  threadId: string;
+  channelId: string;
+  pendingMessageId?: string;
+  sourceMessageId?: string;
+  createdAt: number;
+  resolvedAt?: number;
+  resolvedBy?: string;
 };
 
 /** Tracks understaffed / leaderless grace periods before auto-purge of a clan role. */

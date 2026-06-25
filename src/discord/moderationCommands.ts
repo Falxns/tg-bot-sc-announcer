@@ -22,6 +22,7 @@ import {
   isModeratorQuotaExempt,
   recordModeratorQuotaUse,
 } from "./moderatorQuota";
+import { getClanReviewQuotaStatus } from "./clanReviewQuota";
 import {
   applyManualMuteSanction,
   applyStrikeModerationSanction,
@@ -1045,6 +1046,10 @@ export async function handleModerationSlashCommand(interaction: ChatInputCommand
       if (quota.limit > 0) {
         lines.push("");
         lines.push(modTxt.modstatusDailyQuota(quota.used, quota.limit, quota.remaining));
+      }
+      const clanQuota = getClanReviewQuotaStatus(guildId, interaction.user.id, now);
+      if (clanQuota.limit > 0) {
+        lines.push(modTxt.modstatusClanReviewDailyQuota(clanQuota.used, clanQuota.limit, clanQuota.remaining));
       }
     }
 

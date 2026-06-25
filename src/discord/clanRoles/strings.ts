@@ -26,8 +26,9 @@ export const clanTxt = {
   cmdClanNotFound: (query: string) => `Клан не найден: **${query}**`,
   cmdClanAmbiguous: "Найдено несколько кланов — уточните полное название.",
   cmdLeaderMultipleClans: "Вы лидер нескольких кланов — укажите название клана.",
+  cmdStaffMultipleClans: "Вы лидер или рекрутер нескольких кланов — укажите название клана.",
   cmdTargetMultipleClans: "У участника несколько клановых ролей — укажите название клана.",
-  cmdTargetOnlyLeaderMod: "Указать @участника может только лидер клана или администратор.",
+  cmdTargetOnlyStaffMod: "Указать @участника может только лидер, рекрутер или администратор.",
   cmdLeaderRemoveLeaderSelfOnly:
     "Снять роль лидера у другого участника может только администратор. Лидер снимает только свою — командой `-лидер`.",
   cmdLeaderRemoveClanRoleFromLeader:
@@ -49,10 +50,10 @@ export const clanTxt = {
     "Неверный формат. Строки по порядку: `!создать`, название, тир, цвет и список участников.",
   cmdCreateInvalidColor: (label: string, colorOptions: string) =>
     `Неизвестный цвет: **${label}**. Укажите название из списка (${colorOptions}) или hex (#RRGGBB).`,
-  cmdRosterLeaderOnly: "Список состава доступен только лидерам клана.",
+  cmdRosterStaffOnly: "Список состава доступен только лидерам и рекрутерам клана.",
   cmdRosterModNeedsClan: "Администратор: укажите название клана (`!состав Название`).",
   cmdRosterNotYourClan: (clanName: string) =>
-    `Вы не лидер клана **${clanName}** — можно запросить состав только своего клана.`,
+    `Вы не лидер и не рекрутер клана **${clanName}** — можно запросить состав только своего клана.`,
   cmdRosterDmSent: "Список участников отправлен в личные сообщения.",
   cmdColorLeaderOnly: "Сменить цвет роли могут только лидеры клана.",
   cmdColorModNeedsClan: "Администратор: укажите клан и цвет (`!цвет Название Красный`).",
@@ -69,15 +70,19 @@ export const clanTxt = {
   rosterDmFailed:
     "Не удалось отправить ЛС. Откройте личные сообщения от участников сервера и повторите команду.",
   rosterDmTitle: (clanName: string) => `Состав клана ${clanName}`,
-  rosterDmCount: (members: number, leaders: number) =>
-    `Участников с клановой ролью: **${members}** · лидеров: **${leaders}**`,
-  rosterDmFooter: "Лидеры отмечены 👑",
+  rosterDmCount: (members: number, leaders: number, recruiters: number) =>
+    `Участников с клановой ролью: **${members}** · лидеров: **${leaders}** · рекрутеров: **${recruiters}**`,
+  rosterDmFooter: "Лидеры отмечены 👑, рекрутеры — ⭐",
   notifyRemoveClanRoleSelf: (role: string) => `С вас снята клановая роль **${role}**.`,
   notifyRemoveClanRoleTarget: (role: string) => `С вас снята клановая роль **${role}**.`,
   notifyRemoveLeaderSelf: (role: string) => `Вы сняли с себя роль лидера (клан **${role}**).`,
   notifyRemoveLeaderTarget: (role: string) => `С вас снята роль лидера (клан **${role}**).`,
+  notifyRemoveRecruiterSelf: (role: string) => `Вы сняли с себя роль рекрутера (клан **${role}**).`,
+  notifyRemoveRecruiterTarget: (role: string) => `С вас снята роль рекрутера (клан **${role}**).`,
+  notifyTransferLeader: (role: string, targetUserId: string) =>
+    `Лидерство в клане **${role}** передано <@${targetUserId}>.`,
   clanThreadOffTopicReason:
-    "В ветке разрешены только команды вида +клан, -клан, +лидер, -лидер, !состав, !цвет и блок !создать.",
+    "В ветке разрешены только команды вида +клан, -клан, +лидер, -лидер, +рекрутер, -рекрутер, !передать лидера, !состав, !цвет и блок !создать.",
 
   createNameInvalid: (min: number, max: number) =>
     `Некорректное название. Длина ${min}–${max} символов, без @ и #.`,
@@ -88,9 +93,13 @@ export const clanTxt = {
   createTierTooLow: "Роли создаются только для кланов тира **D** и выше.",
   createRosterInvalid: (min: number, max: number) =>
     `Нужно **${min}–${max}** уникальных участников на сервере.`,
-  createLeadersInvalid: "Укажите **1–2** лидеров среди участников.",
+  createLeadersInvalid: "Укажите ровно **1** лидера среди участников (👑) или оставьте без пометки — тогда лидером станет первый в списке.",
+  createRecruitersInvalid: "Укажите **0–2** рекрутеров среди участников (⭐).",
+  createLeaderRecruiterOverlap: "Один участник не может быть и лидером, и рекрутером.",
 
-  grantLeaderCap: (n: number) => `У этого клана уже ${n} лидер(ов) — максимум 2.`,
+  grantLeaderCap: (n: number) => `У этого клана уже ${n} лидер(ов) — максимум ${n}.`,
+  clanHasLeaderAlready: "У клана уже есть лидер — назначить второго нельзя.",
+  grantRecruiterCap: (n: number) => `У этого клана уже ${n} рекрутер(ов) — максимум ${n}.`,
   grantApprovedReply: (clanName: string, targetUserId: string, requesterUserId: string) =>
     requesterUserId === targetUserId
       ? `Вам выдана клановая роль **${clanName}**.`
@@ -100,12 +109,39 @@ export const clanTxt = {
   leaderMetaApprovalPostFailed:
     "Не удалось опубликовать запрос на подтверждение. Проверьте, что у бота есть право «Отправка сообщений в ветках» в канале правил.",
   leaderMetaSentToMod: (clanName: string) =>
-    `Клан **${clanName}** — лидер клана подтвердил запрос на получение роли лидера. Запрос передан администраторам.`,
-  leaderMetaClanDeniedReply: (clanName: string) =>
-    `Запрос на получение роли лидера в **${clanName}** отклонён лидером клана.`,
+    `Клан **${clanName}** — запрос на получение роли лидера передан администраторам.`,
+  alreadyClanRecruiter: "У участника уже есть роль рекрутера в этом клане.",
+  notClanRecruiter: "Участник не является рекрутером указанного клана.",
+  recruiterMetaNotConfigured:
+    "Роль рекрутера клана не настроена — задайте `DISCORD_CLAN_RECRUITER_ROLE_ID` и перезапустите бота.",
+  recruiterMetaRoleNotFound:
+    "Роль рекрутера не найдена на этом сервере — проверьте `DISCORD_CLAN_RECRUITER_ROLE_ID` и перезапустите бота.",
+  leaderCannotBeRecruiter: "Лидер клана не может быть рекрутером.",
+  recruiterMetaNeedsClanFirstSelf: (clanName: string) =>
+    `Роль рекрутера доступна только участникам клана. Сначала запросите роль командой: \`+клан ${clanName}\`.`,
+  recruiterMetaNeedsClanFirstTarget: (clanName: string) =>
+    `У участника нет клановой роли **${clanName}**. Сначала выдайте роль командой: \`+клан ${clanName} @участник\`.`,
+  recruiterMetaNeedsClanFirstAny:
+    "Роль рекрутера доступна только участникам клана. Сначала запросите роль командой `+клан Название`.",
+  recruiterMetaGrantedDirect: (clanName: string, targetUserId: string) =>
+    `Роль рекрутера в клане **${clanName}** выдана <@${targetUserId}>.`,
+  recruiterMetaDeniedReply: (clanName: string) =>
+    `Запрос на получение роли рекрутера в **${clanName}** отклонён.`,
+  recruiterMetaApprovedReply: (clanName: string, targetUserId: string, requesterUserId: string) =>
+    requesterUserId === targetUserId
+      ? `Вам выдана роль рекрутера в клане **${clanName}**.`
+      : `Запрос одобрен — роль рекрутера в клане **${clanName}** выдана.`,
+  cmdRecruiterRemoveLeaderOnly:
+    "Снять роль рекрутера у другого участника может только лидер клана или администратор.",
+  cmdRecruiterMultipleClans: "Вы рекрутер нескольких кланов — укажите название клана.",
+  cmdTransferLeaderNeedsMention: "Укажите участника: `!передать лидера @участник`.",
+  cmdTransferLeaderSelf: "Нельзя передать лидерство самому себе.",
+  cmdTransferLeaderOnly: "Передать лидерство может только текущий лидер клана.",
   alreadyClanLeader: "У участника уже есть роль лидера в этом клане.",
   notClanLeader: "Участник не является лидером указанного клана.",
   leaderMetaNotConfigured: "Роль лидера клана не настроена на сервере.",
+  leaderMetaRoleNotFound:
+    "Роль лидера не найдена на этом сервере — проверьте `DISCORD_CLAN_LEADER_ROLE_ID` и перезапустите бота.",
   leaderMetaNeedsClanFirstSelf: (clanName: string) =>
     `Роль лидера доступна только участникам клана. Сначала запросите роль командой: \`+клан ${clanName}\`.`,
   leaderMetaNeedsClanFirstTarget: (clanName: string) =>
@@ -116,14 +152,12 @@ export const clanTxt = {
   targetDoesNotHaveClanRole: "Участник больше не состоит в выбранном клане.",
 
   pendingGrantTitle: "Запрос: выдать клановую роль",
-  pendingGrantLeaderPing: (mentions: string) =>
-    `Лидеры клана, проверьте запрос: ${mentions}`,
-  pendingGrantLeaderNote: "Запрошена также роль «Лидер клана».",
-  pendingLeaderMetaTitle: "Запрос: назначить лидера клана",
-  pendingLeaderMetaClanPing: (mentions: string) =>
-    `Лидер клана, подтвердите назначение второго лидера: ${mentions}`,
-  pendingLeaderMetaClanNote:
-    "После вашего подтверждения запрос будет передан администраторам на финальное одобрение.",
+  pendingGrantStaffPing: (mentions: string) =>
+    `Лидеры и рекрутеры клана, проверьте запрос: ${mentions}`,
+  pendingRecruiterTitle: "Запрос: назначить рекрутера клана",
+  pendingRecruiterPing: (mentions: string) =>
+    `Лидер клана, подтвердите назначение рекрутера: ${mentions}`,
+  pendingRecruiterNote: "Лидер клана может одобрить или отклонить запрос.",
   approve: "Одобрить",
   deny: "Отклонить",
   alreadyResolved: "Этот запрос уже обработан.",
@@ -134,13 +168,18 @@ export const clanTxt = {
   modCreateTitle: "Запрос: создание клановой роли",
   modCreateReminder: "Проверьте тир клана в игре перед принятием.",
   modLeaderMetaTitle: "Запрос: получение роли лидера",
-  modLeaderMetaReminder: "Убедитесь, что у клана не больше двух лидеров.",
+  modLeaderMetaReminder: "Убедитесь, что у клана ещё нет лидера.",
   modAccept: "Принять",
   modDeny: "Отклонить",
   modDenied: "Запрос отклонен.",
   modDenyModalTitle: "Отклонить запрос",
   modDenyReasonLabel: "Причина (необязательно)",
   modAlreadyResolved: "Запрос уже обработан.",
+  modReviewApproved: (resolver: string) => `**✅ Принято** — ${resolver}`,
+  modReviewDenied: (resolver: string, reason?: string) =>
+    reason?.trim()
+      ? `**❌ Отклонено** — ${resolver}\n**Причина:** ${reason.trim()}`
+      : `**❌ Отклонено** — ${resolver}`,
   modReviewChannelMissing: "Не настроен канал модерации запросов (DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID).",
 
   createSuccess: (roleName: string) => `Клановая роль **${roleName}** создана, участникам выданы роли.`,
@@ -156,8 +195,23 @@ export const clanTxt = {
 
   clanslistTitle: "Клановые роли",
   clanslistEmpty: "Клановые роли не найдены.",
-  clanslistLine: (name: string, leaders: number, members: number) =>
-    `**${name}** — лидеров: ${leaders}, участников с ролью: ${members}`,
+  clanslistLine: (name: string, leaders: number, recruiters: number, members: number) =>
+    `**${name}** — 👑 ${leaders}, ⭐ ${recruiters}, участников: ${members}`,
+
+  clancheckLeadersWithoutClanTitle: "Лидеры без клановой роли",
+  clancheckRecruitersWithoutClanTitle: "Рекрутеры без клановой роли",
+  clancheckMultiClanTitle: "Участники с 2+ клановыми ролями",
+  clancheckMultiLeadersTitle: "Кланы с более чем 1 лидером",
+  clancheckMultiRecruitersTitle: "Кланы с более чем 2 рекрутерами",
+  clancheckLeaderRecruiterOverlapTitle: "Участники с ролью лидера и рекрутера в одном клане",
+  clancheckEmpty: "Нарушений не найдено.",
+  clancheckMultiClanLine: (member: string, roles: string[]) =>
+    `${member} — ${roles.join(", ")}`,
+  clancheckMultiLeadersLine: (roleName: string, count: number) => `**${roleName}** — лидеров: ${count}`,
+  clancheckMultiRecruitersLine: (roleName: string, count: number) =>
+    `**${roleName}** — рекрутеров: ${count}`,
+  clancheckLeaderRecruiterLine: (member: string, roleName: string) =>
+    `${member} — **${roleName}**`,
 
   auditGrant: (mod: string, target: string, role: string) =>
     `[Клан] ${mod} одобрил выдачу **${role}** → ${target}`,
@@ -172,6 +226,12 @@ export const clanTxt = {
     `[Клан] ${actor} снял роль лидера **${role}** у ${target}`,
   auditDenyLeaderMeta: (mod: string, role: string, targetUserId: string) =>
     `[Клан] ${mod} отклонил запрос на лидера **${role}** (<@${targetUserId}>)`,
+  auditRemoveRecruiterMeta: (actor: string, target: string, role: string) =>
+    `[Клан] ${actor} снял роль рекрутера **${role}** у ${target}`,
+  auditGrantRecruiterMeta: (mod: string, target: string, role: string) =>
+    `[Клан] ${mod} одобрил роль рекрутера **${role}** → ${target}`,
+  auditTransferLeader: (from: string, to: string, role: string) =>
+    `[Клан] ${from} передал лидерство **${role}** → ${to}`,
   auditEnforcementUnderstaffed: (role: string) =>
     `[Клан] Авто-удаление: **${role}** — меньше минимального состава ${DISCORD_CLAN_ACTIVE_MIN_MEMBERS} после ${DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS} дн.`,
   auditEnforcementLeaderless: (role: string) =>
@@ -200,6 +260,20 @@ export const clanTxt = {
       `Добавьте участников через \`+клан\` в ветке клановых ролей.\n\n` +
       `Если через **${graceDays}** дн. состав не восстановится (до **${deadline}**), ` +
       `бот снимет роль лидера и удалит клановую роль.`
+    );
+  },
+
+  enforcementLeaderlessDm: (clanName: string, graceDays: number, deadlineMs: number) => {
+    const deadline = new Date(deadlineMs).toLocaleDateString("ru-RU", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+    return (
+      `⚠️ Клан **${clanName}**: нет лидера.\n\n` +
+      `Назначьте лидера через \`+лидер\` (одобрят администраторы) или передайте лидерство.\n\n` +
+      `Если через **${graceDays}** дн. лидер не появится (до **${deadline}**), ` +
+      `бот удалит клановую роль.`
     );
   },
 
@@ -238,24 +312,33 @@ export function buildClanRulesHelpEmbeds(): EmbedBuilder[] {
     "### Команды участника\n" +
     "`+клан Название` — запросить клановую роль\n" +
     "`-клан` — снять клановую роль\n" +
+    "`+лидер` — запросить роль лидера (если у клана нет лидера)\n" +
+    "`+рекрутер` — запросить роль рекрутера\n" +
     "```\n" +
     "!создать\n" +
     "Название Клана (без тэга)\n" +
     "S/A/B/C/D/E (тир клана на момент запроса)\n" +
     "Красный (желаемый цвет роли)\n" +
     "👑 @лидер\n" +
+    "⭐ @рекрутер (необязательно, до 2)\n" +
     "@участник\n" +
     "...\n" +
     "```\n" +
-    "**Без указания лидеров с использованием 👑, лидером станет первый участник из списка**\n" +
+    "**Без 👑 лидером станет первый участник из списка; рекрутеры только с пометкой ⭐**\n" +
     "### Команды лидера\n" +
-    "`+клан @участник` — выдать роль своего клана участнику\n" +
+    "`+клан @участник` — выдать роль клана участнику\n" +
     "`-клан @участник` — снять клановую роль\n" +
-    "`+лидер` — запросить роль лидера в своём клане\n" +
-    "`+лидер @участник` — запросить роль лидера для участника\n" +
+    "`+рекрутер @участник` — назначить рекрутера\n" +
+    "`-рекрутер @участник` — снять роль рекрутера\n" +
+    "`!передать лидера @участник` — передать лидерство\n" +
     "`-лидер` — снять с себя роль лидера\n" +
     "`!состав` — получить список участников с клановой ролью\n" +
-    "`!цвет Красный/#RRGGBB` — сменить цвет роли своего клана";
+    "`!цвет Красный/#RRGGBB` — сменить цвет роли своего клана\n" +
+    "### Команды рекрутера\n" +
+    "`+клан @участник` — выдать роль клана участнику\n" +
+    "`-клан @участник` — снять клановую роль\n" +
+    "`!состав` — получить список участников с клановой ролью\n" +
+    "`-рекрутер` — снять с себя роль рекрутера";
 
   const main = new EmbedBuilder()
     .setColor(0x5865f2)

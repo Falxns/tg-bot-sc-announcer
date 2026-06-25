@@ -393,8 +393,12 @@ export const discordModerationCommands = {
     `Без новых нарушений сброс предупреждений и лестниц примерно через **${dur}**.`,
   moderatorQuotaExceeded: (used: number, limit: number) =>
     `Дневной лимит модерации: **${used}/${limit}** (/mute, /strike, /ban). Обновится в 00:00 UTC.`,
+  clanReviewQuotaExceeded: (used: number, limit: number) =>
+    `Дневной лимит заявок на клановые роли: **${used}/${limit}** (принять/отклонить). Обновится в 00:00 UTC.`,
   modstatusDailyQuota: (used: number, limit: number, remaining: number) =>
     `**Ваш лимит сегодня (UTC):** **${used}/${limit}** (/mute, /strike, /ban), осталось **${remaining}**.`,
+  modstatusClanReviewDailyQuota: (used: number, limit: number, remaining: number) =>
+    `**Лимит заявок на клановые роли (UTC):** **${used}/${limit}** (принять/отклонить), осталось **${remaining}**.`,
   modstatusDecayDue: "Порог бездействия для сброса уже пройден — сброс произойдёт при следующей проверке нарушения.",
   staffDmLabelReason: "Причина",
   staffDmLabelChannelViolation: "Нарушение в канале",
@@ -431,6 +435,21 @@ export const discordStaffModerationSummary = {
     `<@${staffUserId}> снял роль **${roleName.replace(/\*\*/g, "")}** — <@${firstTargetUserId}> (+${extraCount})`,
   lineCreatorPost: (authorUserId: string, channelId: string, messageUrl: string) =>
     `<@${authorUserId}> опубликовал пост в <#${channelId}> — ${messageUrl}`,
+  lineClanCreateApproved: (
+    staffUserId: string,
+    clanName: string,
+    memberCount: number,
+    reviewUrl?: string,
+  ) => {
+    const safeName = clanName.replace(/\*\*/g, "");
+    const tail = reviewUrl ? ` — ${reviewUrl}` : "";
+    return `<@${staffUserId}> принял заявку на клан **${safeName}** (${memberCount} уч.)${tail}`;
+  },
+  lineClanCreateDenied: (staffUserId: string, clanName: string, reviewUrl?: string) => {
+    const safeName = clanName.replace(/\*\*/g, "");
+    const tail = reviewUrl ? ` — ${reviewUrl}` : "";
+    return `<@${staffUserId}> отклонил заявку на клан **${safeName}**${tail}`;
+  },
 } as const;
 
 /** Self-deleted media/URL messages → `DISCORD_MESSAGE_REVIEW_CHANNEL_ID`. */
@@ -500,6 +519,7 @@ export const discordClanAdFormat = {
       ? "В сообщении не найдено объявление по шаблону (начните форму с 1. или 1) )"
       : `В сообщении более одной формы (найдено ${got}) — допускается только одна`,
   hintGeneric: "Проверьте формат объявления по закреплённому шаблону",
+  hintOuterText: "Удалите текст вне шаблона — допускается только нумерованный список 1–10 без вступлений и подписей",
   errorsTruncated: (n: number) => `…и ещё ${n} ошибок`,
 } as const;
 

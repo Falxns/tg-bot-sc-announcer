@@ -26,6 +26,7 @@ import {
   handleClanLeaderMetaClanButton,
   handleClanModButton,
   handleClanModModal,
+  handleClanRecruiterMetaButton,
   handleClanRulesMessage,
   initClanRolesModule,
   isClanRolesInteractionCustomId,
@@ -33,6 +34,7 @@ import {
   startClanThreadCleanupScheduler,
   stopClanEnforcementScheduler,
   stopClanThreadCleanupScheduler,
+  validateClanMetaRolesOnReady,
 } from "./clanRoles";
 import {
   handleStaffSummaryCreatorMessage,
@@ -66,6 +68,7 @@ async function runDiscordReadySetup(client: Client): Promise<void> {
     console.log(`Discord slash commands registered (${commandCount}).`);
   }
   if (clanRolesConfigured()) {
+    await validateClanMetaRolesOnReady(guild);
     startClanEnforcementScheduler(guild);
     startClanThreadCleanupScheduler(guild);
   }
@@ -136,6 +139,7 @@ export async function startDiscordBot(): Promise<void> {
           if (isClanRolesInteractionCustomId(interaction.customId)) {
             if (await handleClanModButton(interaction)) return;
             if (await handleClanLeaderMetaClanButton(interaction)) return;
+            if (await handleClanRecruiterMetaButton(interaction)) return;
             if (await handleClanGrantButton(interaction)) return;
           }
           await handleRoleButtonInteraction(interaction);

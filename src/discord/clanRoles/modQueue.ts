@@ -16,6 +16,8 @@ import {
 } from "discord.js";
 import {
   DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID,
+  DISCORD_CLAN_STAFF_LOG_CHANNEL_ID,
+  DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID,
   LAST_SEEN_STATE_FILE,
 } from "../../config";
 import { getClanCreateRequest, saveState, setClanCreateRequest } from "../../state";
@@ -25,9 +27,17 @@ import { CLAN_MOD_PREFIX } from "./constants";
 import { formatUserList, newClanRequestId, sendInClanChannel } from "./helpers";
 import { deleteClanThreadMessage, notifyClanRequestOutcome } from "./notifications";
 import { handleClanLeaderMetaModButton } from "./leaderMeta";
+import { markModReviewMessageResolved } from "./modReviewEmbed";
 import { canResolveCreateRequest } from "./permissions";
 import { clanTxt } from "./strings";
 import type { ParsedCreateCommand } from "./textCommands";
+import {
+  assertClanReviewQuotaInteraction,
+  recordClanReviewQuotaUse,
+} from "../clanReviewQuota";
+import { postStaffSummaryLine } from "../moderationLog";
+import { discordStaffModerationSummary as staffSumTxt } from "../userStrings";
+import { isModeratorQuotaExempt } from "../moderatorQuota";
 
 function modAcceptId(requestId: string): string {
   return `${CLAN_MOD_PREFIX}accept:${requestId}`;
@@ -41,6 +51,45 @@ function modDenyModalId(requestId: string): string {
   return `${CLAN_MOD_PREFIX}deny_modal:${requestId}`;
 }
 
+async function postClanCreateResolveStaffLogs(
+  guild: Guild,
+  staffUserId: string,
+  staffLabel: string,
+  request: ClanCreateRequest,
+  outcome: "approved" | "denied",
+): Promise<void> {
+  const summaryId = DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID;
+  const clanLogId = DISCORD_CLAN_STAFF_LOG_CHANNEL_ID;
+  const reviewUrl =
+    request.reviewChannelId && request.reviewMessageId
+      ? `https://discord.com/channels/${guild.id}/${request.reviewChannelId}/${request.reviewMessageId}`
+      : undefined;
+
+  if (summaryId) {
+    const summaryLine =
+      outcome === "approved"
+        ? staffSumTxt.lineClanCreateApproved(
+            staffUserId,
+            request.clanName,
+            request.memberIds.length,
+            reviewUrl,
+          )
+        : staffSumTxt.lineClanCreateDenied(staffUserId, request.clanName, reviewUrl);
+    await postStaffSummaryLine(guild, summaryLine);
+  }
+
+  const auditLine =
+    outcome === "approved"
+      ? clanTxt.auditCreate(staffLabel, request.clanName, request.memberIds.length)
+      : clanTxt.auditDenyCreate(staffLabel, request.clanName);
+
+  if (clanLogId) {
+    await postClanAuditLine(guild, auditLine);
+  } else if (!summaryId) {
+    await postClanAuditLine(guild, auditLine);
+  }
+}
+
 export function isClanModCustomId(customId: string): boolean {
   return customId.startsWith(CLAN_MOD_PREFIX);
 }
@@ -50,6 +99,7 @@ async function postCreateRequestToModQueue(
   request: ClanCreateRequest,
   memberIds: string[],
   leaderIds: string[],
+  recruiterIds: string[],
 ): Promise<string | null> {
   if (!DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID) return clanTxt.modReviewChannelMissing;
 
@@ -60,6 +110,7 @@ async function postCreateRequestToModQueue(
 
   const applicant = await guild.members.fetch(request.applicantId).catch(() => null);
   const leaderSet = new Set(leaderIds);
+  const recruiterSet = new Set(recruiterIds);
   const embed = new EmbedBuilder()
     .setTitle(clanTxt.modCreateTitle)
     .setColor(request.colorHex)
@@ -68,12 +119,12 @@ async function postCreateRequestToModQueue(
         `**Клан:** ${request.clanName}\n` +
         `**Ранг:** ${request.clanTier ?? "—"}\n` +
         `**Цвет:** ${request.colorLabel}\n` +
-        `**Состав:** ${memberIds.length} (лидеров: ${leaderIds.length})\n` +
+        `**Состав:** ${memberIds.length} (лидеров: ${leaderIds.length}, рекрутеров: ${recruiterIds.length})\n` +
         `**Источник:** <#${request.threadId}>`,
     )
     .addFields({
       name: "Участники",
-      value: formatUserList(guild, memberIds, leaderSet).slice(0, 1024),
+      value: formatUserList(guild, memberIds, leaderSet, recruiterSet).slice(0, 1024),
     })
     .setFooter({ text: clanTxt.modCreateReminder })
     .setTimestamp(request.createdAt);
@@ -135,11 +186,18 @@ export async function submitCreateRequestFromText(
     colorLabel: parsed.colorPreset.label,
     memberIds: parsed.memberIds,
     leaderIds: parsed.leaderIds,
+    recruiterIds: parsed.recruiterIds,
     status: "pending",
     createdAt: Date.now(),
   };
   setClanCreateRequest(request);
-  const err = await postCreateRequestToModQueue(guild, request, parsed.memberIds, parsed.leaderIds);
+  const err = await postCreateRequestToModQueue(
+    guild,
+    request,
+    parsed.memberIds,
+    parsed.leaderIds,
+    parsed.recruiterIds,
+  );
   if (err) return err;
   await postCreatePendingThreadNotice(guild, request);
   return null;
@@ -163,6 +221,7 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
       await interaction.reply({ content: clanTxt.cannotApprove, flags: MessageFlags.Ephemeral });
       return true;
     }
+    if (!(await assertClanReviewQuotaInteraction(interaction))) return true;
 
     const modal = new ModalBuilder().setCustomId(modDenyModalId(requestId)).setTitle(clanTxt.modDenyModalTitle);
     modal.addComponents(
@@ -195,6 +254,7 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
     await interaction.reply({ content: clanTxt.cannotApprove, flags: MessageFlags.Ephemeral });
     return true;
   }
+  if (!(await assertClanReviewQuotaInteraction(interaction))) return true;
 
   await interaction.deferUpdate();
 
@@ -209,7 +269,7 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
   request.resolvedAt = Date.now();
   request.resolvedBy = interaction.user.id;
   setClanCreateRequest(request);
-  await interaction.message.edit({ components: [] }).catch(() => undefined);
+  await markModReviewMessageResolved(interaction.message, "approved", interaction.user.id);
   await deleteClanThreadMessage(
     interaction.guild,
     request.threadId,
@@ -225,10 +285,17 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
     [request.applicantId],
   );
 
-  await postClanAuditLine(
+  await postClanCreateResolveStaffLogs(
     interaction.guild,
-    clanTxt.auditCreate(interaction.member?.toString() ?? interaction.user.tag, request.clanName, request.memberIds.length),
+    interaction.user.id,
+    interaction.member?.toString() ?? interaction.user.tag,
+    request,
+    "approved",
   );
+
+  if (!isModeratorQuotaExempt(interaction.member)) {
+    recordClanReviewQuotaUse(interaction.guild.id, interaction.user.id);
+  }
 
   return true;
 }
@@ -247,6 +314,7 @@ export async function handleClanModModal(interaction: ModalSubmitInteraction): P
     await interaction.reply({ content: clanTxt.cannotApprove, flags: MessageFlags.Ephemeral });
     return true;
   }
+  if (!(await assertClanReviewQuotaInteraction(interaction))) return true;
 
   const reason = interaction.fields.getTextInputValue("reason").trim();
   request.status = "denied";
@@ -270,9 +338,12 @@ export async function handleClanModModal(interaction: ModalSubmitInteraction): P
     [request.applicantId],
   );
 
-  await postClanAuditLine(
+  await postClanCreateResolveStaffLogs(
     interaction.guild,
-    clanTxt.auditDenyCreate(interaction.member?.toString() ?? interaction.user.tag, request.clanName),
+    interaction.user.id,
+    interaction.member?.toString() ?? interaction.user.tag,
+    request,
+    "denied",
   );
 
   await interaction.reply({ content: clanTxt.modDenied, flags: MessageFlags.Ephemeral });
@@ -281,8 +352,14 @@ export async function handleClanModModal(interaction: ModalSubmitInteraction): P
     const ch = await interaction.guild.channels.fetch(request.reviewChannelId).catch(() => null);
     if (ch?.isTextBased()) {
       const msg = await ch.messages.fetch(request.reviewMessageId).catch(() => null);
-      await msg?.edit({ components: [] }).catch(() => undefined);
+      if (msg) {
+        await markModReviewMessageResolved(msg, "denied", interaction.user.id, reason);
+      }
     }
+  }
+
+  if (!isModeratorQuotaExempt(interaction.member)) {
+    recordClanReviewQuotaUse(interaction.guild.id, interaction.user.id);
   }
 
   return true;

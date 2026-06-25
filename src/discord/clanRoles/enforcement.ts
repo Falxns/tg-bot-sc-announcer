@@ -25,6 +25,7 @@ import {
   countMembersWithRole,
   ensureGuildMembersCached,
   listClanLeaderIds,
+  listClanRecruiterIds,
   listClanRoles,
 } from "./resolver";
 import { clanTxt } from "./strings";
@@ -36,13 +37,15 @@ function graceDeadline(fromMs: number): number {
   return fromMs + DISCORD_CLAN_ENFORCEMENT_GRACE_MS;
 }
 
-async function notifyClanLeadersDm(
+async function notifyClanStaffDm(
   guild: Guild,
   clanRole: Role,
   content: string,
 ): Promise<void> {
   const leaderIds = await listClanLeaderIds(guild, clanRole.id);
-  for (const userId of leaderIds) {
+  const recruiterIds = await listClanRecruiterIds(guild, clanRole.id);
+  const userIds = [...new Set([...leaderIds, ...recruiterIds])];
+  for (const userId of userIds) {
     const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
     if (!member) continue;
     try {
@@ -140,8 +143,8 @@ async function evaluateClanRole(guild: Guild, clanRole: Role, nowMs: number): Pr
     return false;
   }
 
-  if (understaffed && leaderCount > 0 && enforcement.understaffedSinceMs !== undefined) {
-    await notifyClanLeadersDm(
+  if (understaffed && enforcement.understaffedSinceMs !== undefined) {
+    await notifyClanStaffDm(
       guild,
       clanRole,
       clanTxt.enforcementUnderstaffedDm(
@@ -150,6 +153,18 @@ async function evaluateClanRole(guild: Guild, clanRole: Role, nowMs: number): Pr
         DISCORD_CLAN_ACTIVE_MIN_MEMBERS,
         DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS,
         graceDeadline(enforcement.understaffedSinceMs),
+      ),
+    );
+  }
+
+  if (leaderless && enforcement.leaderlessSinceMs !== undefined && !leaderlessExpired) {
+    await notifyClanStaffDm(
+      guild,
+      clanRole,
+      clanTxt.enforcementLeaderlessDm(
+        clanRole.name,
+        DISCORD_CLAN_ENFORCEMENT_GRACE_DAYS,
+        graceDeadline(enforcement.leaderlessSinceMs),
       ),
     );
   }
