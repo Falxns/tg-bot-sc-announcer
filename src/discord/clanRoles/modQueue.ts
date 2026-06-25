@@ -16,6 +16,8 @@ import {
 } from "discord.js";
 import {
   DISCORD_CLAN_CREATE_REVIEW_CHANNEL_ID,
+  DISCORD_CLAN_STAFF_LOG_CHANNEL_ID,
+  DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID,
   LAST_SEEN_STATE_FILE,
 } from "../../config";
 import { getClanCreateRequest, saveState, setClanCreateRequest } from "../../state";
@@ -33,6 +35,8 @@ import {
   assertClanReviewQuotaInteraction,
   recordClanReviewQuotaUse,
 } from "../clanReviewQuota";
+import { postStaffSummaryLine } from "../moderationLog";
+import { discordStaffModerationSummary as staffSumTxt } from "../userStrings";
 import { isModeratorQuotaExempt } from "../moderatorQuota";
 
 function modAcceptId(requestId: string): string {
@@ -45,6 +49,45 @@ function modDenyId(requestId: string): string {
 
 function modDenyModalId(requestId: string): string {
   return `${CLAN_MOD_PREFIX}deny_modal:${requestId}`;
+}
+
+async function postClanCreateResolveStaffLogs(
+  guild: Guild,
+  staffUserId: string,
+  staffLabel: string,
+  request: ClanCreateRequest,
+  outcome: "approved" | "denied",
+): Promise<void> {
+  const summaryId = DISCORD_MODERATION_STAFF_SUMMARY_CHANNEL_ID;
+  const clanLogId = DISCORD_CLAN_STAFF_LOG_CHANNEL_ID;
+  const reviewUrl =
+    request.reviewChannelId && request.reviewMessageId
+      ? `https://discord.com/channels/${guild.id}/${request.reviewChannelId}/${request.reviewMessageId}`
+      : undefined;
+
+  if (summaryId) {
+    const summaryLine =
+      outcome === "approved"
+        ? staffSumTxt.lineClanCreateApproved(
+            staffUserId,
+            request.clanName,
+            request.memberIds.length,
+            reviewUrl,
+          )
+        : staffSumTxt.lineClanCreateDenied(staffUserId, request.clanName, reviewUrl);
+    await postStaffSummaryLine(guild, summaryLine);
+  }
+
+  const auditLine =
+    outcome === "approved"
+      ? clanTxt.auditCreate(staffLabel, request.clanName, request.memberIds.length)
+      : clanTxt.auditDenyCreate(staffLabel, request.clanName);
+
+  if (clanLogId) {
+    await postClanAuditLine(guild, auditLine);
+  } else if (!summaryId) {
+    await postClanAuditLine(guild, auditLine);
+  }
 }
 
 export function isClanModCustomId(customId: string): boolean {
@@ -242,9 +285,12 @@ export async function handleClanModButton(interaction: ButtonInteraction): Promi
     [request.applicantId],
   );
 
-  await postClanAuditLine(
+  await postClanCreateResolveStaffLogs(
     interaction.guild,
-    clanTxt.auditCreate(interaction.member?.toString() ?? interaction.user.tag, request.clanName, request.memberIds.length),
+    interaction.user.id,
+    interaction.member?.toString() ?? interaction.user.tag,
+    request,
+    "approved",
   );
 
   if (!isModeratorQuotaExempt(interaction.member)) {
@@ -292,9 +338,12 @@ export async function handleClanModModal(interaction: ModalSubmitInteraction): P
     [request.applicantId],
   );
 
-  await postClanAuditLine(
+  await postClanCreateResolveStaffLogs(
     interaction.guild,
-    clanTxt.auditDenyCreate(interaction.member?.toString() ?? interaction.user.tag, request.clanName),
+    interaction.user.id,
+    interaction.member?.toString() ?? interaction.user.tag,
+    request,
+    "denied",
   );
 
   await interaction.reply({ content: clanTxt.modDenied, flags: MessageFlags.Ephemeral });

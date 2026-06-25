@@ -435,6 +435,21 @@ export const discordStaffModerationSummary = {
     `<@${staffUserId}> снял роль **${roleName.replace(/\*\*/g, "")}** — <@${firstTargetUserId}> (+${extraCount})`,
   lineCreatorPost: (authorUserId: string, channelId: string, messageUrl: string) =>
     `<@${authorUserId}> опубликовал пост в <#${channelId}> — ${messageUrl}`,
+  lineClanCreateApproved: (
+    staffUserId: string,
+    clanName: string,
+    memberCount: number,
+    reviewUrl?: string,
+  ) => {
+    const safeName = clanName.replace(/\*\*/g, "");
+    const tail = reviewUrl ? ` — ${reviewUrl}` : "";
+    return `<@${staffUserId}> принял заявку на клан **${safeName}** (${memberCount} уч.)${tail}`;
+  },
+  lineClanCreateDenied: (staffUserId: string, clanName: string, reviewUrl?: string) => {
+    const safeName = clanName.replace(/\*\*/g, "");
+    const tail = reviewUrl ? ` — ${reviewUrl}` : "";
+    return `<@${staffUserId}> отклонил заявку на клан **${safeName}**${tail}`;
+  },
 } as const;
 
 /** Self-deleted media/URL messages → `DISCORD_MESSAGE_REVIEW_CHANNEL_ID`. */
