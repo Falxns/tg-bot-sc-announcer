@@ -1,5 +1,13 @@
 import { randomUUID } from "crypto";
-import { ChannelType, type Guild, type GuildTextBasedChannel, type Message, type MessageCreateOptions, type ThreadChannel } from "discord.js";
+import {
+  ChannelType,
+  type Guild,
+  type GuildTextBasedChannel,
+  type Message,
+  type MessageCreateOptions,
+  type MessageMentions,
+  type ThreadChannel,
+} from "discord.js";
 import { DISCORD_CLAN_RULES_MESSAGE_ID } from "../../config";
 import type { ClanTier } from "./constants";
 
@@ -88,6 +96,19 @@ function hasMarkerBeforeMention(content: string, marker: string, userId: string)
   const mention = `<@!?${userId}>`;
   const re = new RegExp(`${escaped}[ \\t]*${mention}`);
   return re.test(content);
+}
+
+/** User mentions from message body in left-to-right order (deduped). */
+export function mentionIdsInOrder(body: string, mentions: MessageMentions): string[] {
+  const mentionSet = new Set(mentions.users.keys());
+  const ordered: string[] = [];
+  for (const id of parseMentionIdsInOrder(body)) {
+    if (mentionSet.has(id)) ordered.push(id);
+  }
+  for (const id of mentionSet) {
+    if (!ordered.includes(id)) ordered.push(id);
+  }
+  return ordered;
 }
 
 /** Mention snowflakes in left-to-right order (deduped). */
