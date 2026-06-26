@@ -1,5 +1,5 @@
 import type { Message } from "discord.js";
-import { clanRolesConfigured } from "../../config";
+import { clanRolesConfigured, DISCORD_CLAN_ROSTER_MAX } from "../../config";
 import { isClanModerator } from "./permissions";
 import { replyInChannelAutoDelete } from "../moderation";
 import { isClanRulesThread } from "./helpers";
@@ -16,10 +16,11 @@ import { performDirectRemove, submitGrantRequest } from "./panel";
 import { sendClanRosterDm } from "./roster";
 import { changeClanRoleColor } from "./colorChange";
 import { transferClanLeadership, postClanAuditLine } from "./actions";
-import { ensureGuildMembersCached } from "./resolver";
+import { ensureGuildMembersCached, countClanRecruiters, countMembersWithRole } from "./resolver";
 import { isClanCommandMessage, parseClanTextCommand } from "./textCommands";
 import { notifyClanRequestOutcome } from "./notifications";
 import { clanTxt } from "./strings";
+import { MAX_CLAN_RECRUITERS } from "./constants";
 
 async function replyClanCommandError(message: Message, content: string): Promise<void> {
   await replyInChannelAutoDelete(message, content, { deleteUserMessage: true });
@@ -53,23 +54,31 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
   }
 
   if (parsed.kind === "grant") {
-    const target = await message.guild.members.fetch(parsed.targetUserId).catch(() => null);
-    if (!target) {
-      await replyClanCommandError(message, clanTxt.targetMissing);
+    const clanRole = parsed.clanRole;
+    const newTargets = parsed.targetUserIds.filter((id) => {
+      const m = message.guild!.members.cache.get(id);
+      return !m?.roles.cache.has(clanRole.id);
+    });
+    const currentMembers = countMembersWithRole(message.guild!, clanRole.id);
+    if (currentMembers + newTargets.length > DISCORD_CLAN_ROSTER_MAX) {
+      await replyClanCommandError(message, clanTxt.grantRosterCap(DISCORD_CLAN_ROSTER_MAX));
       return true;
     }
-    const err = await submitGrantRequest(
-      message.guild,
-      message.channel,
-      message.author.id,
-      parsed.clanRole,
-      parsed.targetUserId,
-      false,
-      message.id,
-    );
-    if (err) {
-      await replyClanCommandError(message, err);
-      return true;
+
+    for (const targetUserId of parsed.targetUserIds) {
+      const err = await submitGrantRequest(
+        message.guild,
+        message.channel,
+        message.author.id,
+        clanRole,
+        targetUserId,
+        false,
+        message.id,
+      );
+      if (err) {
+        await replyClanCommandError(message, err);
+        return true;
+      }
     }
     return true;
   }
@@ -154,17 +163,26 @@ export async function handleClanRulesMessage(message: Message): Promise<boolean>
   }
 
   if (parsed.kind === "grant_recruiter") {
-    const err = await submitRecruiterMetaGrantRequest(
-      message.guild,
-      message.channel,
-      message.author.id,
-      parsed.clanRole,
-      parsed.targetUserId,
-      message.id,
-    );
-    if (err) {
-      await replyClanCommandError(message, err);
+    const recruiterCount = await countClanRecruiters(message.guild, parsed.clanRole.id);
+    const slotsLeft = MAX_CLAN_RECRUITERS - recruiterCount;
+    if (parsed.targetUserIds.length > slotsLeft) {
+      await replyClanCommandError(message, clanTxt.grantRecruiterCap(MAX_CLAN_RECRUITERS));
       return true;
+    }
+
+    for (const targetUserId of parsed.targetUserIds) {
+      const err = await submitRecruiterMetaGrantRequest(
+        message.guild,
+        message.channel,
+        message.author.id,
+        parsed.clanRole,
+        targetUserId,
+        message.id,
+      );
+      if (err) {
+        await replyClanCommandError(message, err);
+        return true;
+      }
     }
     return true;
   }

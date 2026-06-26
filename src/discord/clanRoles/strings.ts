@@ -23,6 +23,7 @@ export const clanTxt = {
     `Клан **${clanName}** · кандидат <@${targetUserId}> — запрос ожидает одобрения администраторов.`,
 
   cmdInvalidFormat: (example: string) => `Неверный формат. Пример: ${example}`,
+  cmdOneCommandPerMessage: "В одном сообщении — только **одна** команда. Отправьте каждую команду отдельным сообщением.",
   cmdClanNotFound: (query: string) => `Клан не найден: **${query}**`,
   cmdClanAmbiguous: "Найдено несколько кланов — уточните полное название.",
   cmdLeaderMultipleClans: "Вы лидер нескольких кланов — укажите название клана.",
@@ -100,6 +101,8 @@ export const clanTxt = {
   grantLeaderCap: (n: number) => `У этого клана уже ${n} лидер(ов) — максимум ${n}.`,
   clanHasLeaderAlready: "У клана уже есть лидер — назначить второго нельзя.",
   grantRecruiterCap: (n: number) => `У этого клана уже ${n} рекрутер(ов) — максимум ${n}.`,
+  grantRosterCap: (max: number) =>
+    `В клане не больше **${max}** участников. Сначала снимите лишних или разделите добавление на несколько сообщений.`,
   grantApprovedReply: (clanName: string, targetUserId: string, requesterUserId: string) =>
     requesterUserId === targetUserId
       ? `Вам выдана клановая роль **${clanName}**.`
@@ -123,8 +126,7 @@ export const clanTxt = {
     `У участника нет клановой роли **${clanName}**. Сначала выдайте роль командой: \`+клан ${clanName} @участник\`.`,
   recruiterMetaNeedsClanFirstAny:
     "Роль рекрутера доступна только участникам клана. Сначала запросите роль командой `+клан Название`.",
-  recruiterMetaGrantedDirect: (clanName: string, targetUserId: string) =>
-    `Роль рекрутера в клане **${clanName}** выдана <@${targetUserId}>.`,
+  recruiterMetaGrantedDirect: (clanName: string) => `Вам выдана роль рекрутера в клане **${clanName}**.`,
   recruiterMetaDeniedReply: (clanName: string) =>
     `Запрос на получение роли рекрутера в **${clanName}** отклонён.`,
   recruiterMetaApprovedReply: (clanName: string, targetUserId: string, requesterUserId: string) =>

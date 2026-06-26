@@ -131,11 +131,8 @@ export async function submitRecruiterMetaGrantRequest(
       guild,
       dest.id,
       sourceMessageId,
-      clanTxt.recruiterMetaGrantedDirect(clanRole.name, targetUserId),
-      clanApprovalOutcomeMentionIds(
-        { requesterUserId: requesterId, targetUserId },
-        requester,
-      ),
+      clanTxt.recruiterMetaGrantedDirect(clanRole.name),
+      [targetUserId],
     );
     await postClanAuditLine(
       guild,

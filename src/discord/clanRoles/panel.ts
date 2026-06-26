@@ -10,7 +10,7 @@ import {
   type GuildTextBasedChannel,
   type Role,
 } from "discord.js";
-import { LAST_SEEN_STATE_FILE } from "../../config";
+import { DISCORD_CLAN_ROSTER_MAX, LAST_SEEN_STATE_FILE } from "../../config";
 import {
   deleteClanGrantRequest,
   getClanGrantRequest,
@@ -25,6 +25,7 @@ import { clearClanPendingEmbed, notifyClanRequestOutcome } from "./notifications
 import { canApproveGrantRequest, clanGrantApprovalMentionIds, isClanModerator } from "./permissions";
 import {
   countClanLeaders,
+  countMembersWithRole,
   getMemberClanRoleCapConflict,
   isClanLeaderFor,
   isClanStaffFor,
@@ -114,6 +115,12 @@ export async function submitGrantRequest(
     return requesterId === targetUserId
       ? clanTxt.clanRoleCapSelf(capConflict.name)
       : clanTxt.clanRoleCapTarget(capConflict.name);
+  }
+  if (!target.roles.cache.has(clanRole.id)) {
+    const currentMembers = countMembersWithRole(guild, clanRole.id);
+    if (currentMembers >= DISCORD_CLAN_ROSTER_MAX) {
+      return clanTxt.grantRosterCap(DISCORD_CLAN_ROSTER_MAX);
+    }
   }
 
   const requester = await guild.members.fetch(requesterId).catch(() => null);
@@ -234,6 +241,17 @@ export async function handleClanGrantButton(interaction: ButtonInteraction): Pro
   if (!clanRole || !target) {
     await interaction.followUp({ content: clanTxt.targetMissing, flags: MessageFlags.Ephemeral });
     return true;
+  }
+
+  if (!target.roles.cache.has(clanRole.id)) {
+    const currentMembers = countMembersWithRole(interaction.guild, clanRole.id);
+    if (currentMembers >= DISCORD_CLAN_ROSTER_MAX) {
+      await interaction.followUp({
+        content: clanTxt.grantRosterCap(DISCORD_CLAN_ROSTER_MAX),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
   }
 
   if (request.grantLeaderMeta && (await countClanLeaders(interaction.guild, request.clanRoleId)) >= MAX_CLAN_LEADERS) {
